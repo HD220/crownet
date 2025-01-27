@@ -57,5 +57,24 @@ Cada neurônio mantém um registro do último ciclo em que disparou, e esse cont
 ### 11. **Disparo dos Neurônios**
 Os neurônios disparam quando a soma dos pulsos recebidos excede o **limiar de disparo**. Quando não recebem pulsos, a soma dos pulsos diminui gradativamente, voltando ao estado basal.
 
+```go
+loop {
+  for(pulse of pulses){
+    # Processamento da propagação dos pulsos
+    1) Obter distancia do neuronio para os 17 referenciais e o raio
+    2) Subtrair o raio das 17 distancias com o referencial
+    3) Filtrar por neuronios onde a distancia com cada referencial é maior que a distancia calculada no passo anterior, exceto o proprio neuronio emissor
+    4) Calcular o vetor 16D da posição dos neuronios baseado na distancia com os referenciais
+       4.1) resolução da equação quadratica
+    5) Calcular a distancia do neuronio emissor para os neuronios
+    6) range de distancia de propagação do pulso para a iteração
+       6.1) inicio = (int8(raio/0.6)*0.6) * iteração-1
+       6.2) fim = (int8(raio/0.6)*0.6) * iteração
+    7) Verificar se a faixa fim é maior que o raio, se for retorna
+    8) Filtrar os neuronios que a distancia é maior ou igual ao inicio e menor que fim
+    9) Se for soma soma 0.3 ao valor do neurono, se for inibição subitrai 0.3 do valor do neuronio se for dopamina soma a quanidade de dopamina do neuronio
+    10) Verificar se o neuronio atingiu o limiar, se sim, criar novo pulso na fila para o neuronio
+ }
 
-
+}
+```
