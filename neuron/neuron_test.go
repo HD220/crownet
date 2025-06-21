@@ -1,145 +1,206 @@
-package neuron
+package neuron_test
 
 import (
-	"math"
+	"crownet/common"
+	"crownet/config"
+	"crownet/neuron"
 	"testing"
 )
 
 func TestNewNeuron(t *testing.T) {
-	pos := Point{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-	n := NewNeuron(1, pos, ExcitatoryNeuron, 1.0)
-	if n.ID != 1 || n.Type != ExcitatoryNeuron || n.BaseFiringThreshold != 1.0 {
-		t.Errorf("NewNeuron() failed to initialize fields correctly. Got ID %d, Type %d, Threshold %.2f", n.ID, n.Type, n.BaseFiringThreshold)
+	simParams := config.DefaultSimulationParameters()
+	id := common.NeuronID(1)
+	pos := common.Point{1, 2, 3} // Apenas 3D para simplificar o teste, mas é 16D
+	n := neuron.New(id, neuron.Excitatory, pos, &simParams)
+
+	if n.ID != id {
+		t.Errorf("Esperado ID %d, obteve %d", id, n.ID)
 	}
-	if n.State != RestingState {
-		t.Errorf("NewNeuron() initial state incorrect. Expected RestingState, got %d", n.State)
+	if n.Type != neuron.Excitatory {
+		t.Errorf("Esperado tipo Excitatory, obteve %s", n.Type)
 	}
-	if n.AccumulatedPulse != 0.0 {
-		t.Errorf("NewNeuron() initial accumulated pulse incorrect. Expected 0.0, got %.2f", n.AccumulatedPulse)
+	if n.Position != pos {
+		t.Errorf("Esperado Posição %v, obteve %v", pos, n.Position)
+	}
+	if n.CurrentState != neuron.Resting {
+		t.Errorf("Esperado estado Resting, obteve %s", n.CurrentState)
+	}
+	if n.AccumulatedPotential != 0.0 {
+		t.Errorf("Esperado Potencial Acumulado 0.0, obteve %f", n.AccumulatedPotential)
+	}
+	if n.BaseFiringThreshold != common.Threshold(simParams.BaseFiringThreshold) {
+		t.Errorf("Esperado Limiar Base %f, obteve %f", simParams.BaseFiringThreshold, n.BaseFiringThreshold)
+	}
+	if n.LastFiredCycle != -1 {
+		t.Errorf("Esperado Último Ciclo de Disparo -1, obteve %d", n.LastFiredCycle)
 	}
 }
 
-func TestNeuronStateTransitions(t *testing.T) {
-	n := NewNeuron(1, Point{}, ExcitatoryNeuron, 1.0)
-	currentCycle := 0
+func TestNeuronIntegrateIncomingPotential(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
 
-	// Fire the neuron
-	n.State = FiringState
-	n.UpdateState(currentCycle) // Cycle 0: Firing -> Absolute Refractory
-	if n.State != AbsoluteRefractoryState {
-		t.Errorf("State should be AbsoluteRefractory after firing, got %d", n.State)
-	}
-	if n.LastFiredCycle != currentCycle {
-		t.Errorf("LastFiredCycle not updated. Expected %d, got %d", currentCycle, n.LastFiredCycle)
-	}
-	if n.AccumulatedPulse != 0.0 { // Assuming reset after firing
-		t.Errorf("AccumulatedPulse should reset after firing. Got %.2f", n.AccumulatedPulse)
-	}
-
-	// Go through Absolute Refractory
-	for i := 0; i < AbsoluteRefractoryCycles; i++ {
-		currentCycle++
-		n.UpdateState(currentCycle)
-		if i < AbsoluteRefractoryCycles-1 && n.State != AbsoluteRefractoryState {
-			t.Errorf("Should remain in AbsoluteRefractory. Cycle %d, State %d", currentCycle, n.State)
-		}
-	}
-	if n.State != RelativeRefractoryState {
-		t.Errorf("State should be RelativeRefractory after Absolute. Got %d", n.State)
-	}
-
-	// Go through Relative Refractory
-	// n.CurrentFiringThreshold = n.BaseFiringThreshold // Reset for this test part
-	for i := 0; i < RelativeRefractoryCycles; i++ {
-		currentCycle++
-		n.UpdateState(currentCycle)
-		if i < RelativeRefractoryCycles-1 && n.State != RelativeRefractoryState {
-			t.Errorf("Should remain in RelativeRefractory. Cycle %d, State %d", currentCycle, n.State)
-		}
-	}
-	if n.State != RestingState {
-		t.Errorf("State should be Resting after Relative. Got %d", n.State)
-	}
-	if n.CurrentFiringThreshold != n.BaseFiringThreshold {
-		t.Errorf("Firing threshold should reset to base after refractory period. Got %.2f, Base %.2f", n.CurrentFiringThreshold, n.BaseFiringThreshold)
-	}
-}
-
-func TestPulseAccumulationAndDecay(t *testing.T) {
-	n := NewNeuron(1, Point{}, ExcitatoryNeuron, 1.0)
-
-	// Receive some pulses
-	n.ReceivePulse(0.3, 0) // acc = 0.3
-	n.ReceivePulse(0.3, 0) // acc = 0.6
-	if math.Abs(n.AccumulatedPulse-0.6) > 1e-9 {
-		t.Errorf("AccumulatedPulse incorrect. Expected 0.6, got %.2f", n.AccumulatedPulse)
-	}
-
-	// Decay
-	n.DecayPulseAccumulation() // 0.6 - 0.06 = 0.54
-	if math.Abs(n.AccumulatedPulse-0.54) > 1e-9 {
-		t.Errorf("Decay incorrect. Expected 0.54, got %.2f", n.AccumulatedPulse)
-	}
-
-	n.DecayPulseAccumulation() // 0.54 - 0.054 = 0.486
-	if math.Abs(n.AccumulatedPulse-0.486) > 1e-9 {
-		t.Errorf("Decay incorrect. Expected 0.486, got %.2f", n.AccumulatedPulse)
-	}
-}
-
-func TestNeuronFiring(t *testing.T) {
-	n := NewNeuron(1, Point{}, ExcitatoryNeuron, 1.0)
-	fired := n.ReceivePulse(0.5, 0) // acc = 0.5, not enough to fire
+	// Teste: Não dispara se abaixo do limiar
+	fired := n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold-0.1), 0)
 	if fired {
-		t.Errorf("Neuron fired prematurely.")
+		t.Errorf("Neurônio disparou com potencial abaixo do limiar")
 	}
-	if n.State == FiringState {
-		t.Errorf("Neuron state changed to Firing prematurely.")
+	if n.AccumulatedPotential != common.PulseValue(simParams.BaseFiringThreshold-0.1) {
+		t.Errorf("Potencial acumulado incorreto: esperado %f, obteve %f", simParams.BaseFiringThreshold-0.1, n.AccumulatedPotential)
+	}
+	if n.CurrentState != neuron.Resting { // Deve permanecer Resting
+		t.Errorf("Estado incorreto após potencial abaixo do limiar: esperado Resting, obteve %s", n.CurrentState)
 	}
 
-	fired = n.ReceivePulse(0.5, 0) // acc = 1.0, should fire
+	// Teste: Dispara se igual ou acima do limiar
+	n.AccumulatedPotential = 0 // Reset
+	fired = n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold), 1)
 	if !fired {
-		t.Errorf("Neuron did not fire when threshold was met.")
+		t.Errorf("Neurônio não disparou com potencial no limiar")
 	}
-	if n.State != FiringState {
-		t.Errorf("Neuron state did not change to FiringState upon firing.")
+	if n.CurrentState != neuron.Firing { // Deve mudar para Firing
+		t.Errorf("Estado incorreto após disparo: esperado Firing, obteve %s", n.CurrentState)
 	}
+	// LastFiredCycle é atualizado em AdvanceState
 }
 
-func TestGetBasePulseSign(t *testing.T) {
-	excitatory := NewNeuron(1, Point{}, ExcitatoryNeuron, 1.0)
-	inhibitory := NewNeuron(2, Point{}, InhibitoryNeuron, 1.0)
-	dopaminergic := NewNeuron(3, Point{}, DopaminergicNeuron, 1.0)
-	inputN := NewNeuron(4, Point{}, InputNeuron, 1.0)
-	outputN := NewNeuron(5, Point{}, OutputNeuron, 1.0)
+func TestNeuronAdvanceState(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
 
-	if excitatory.GetBasePulseSign() != 1.0 {
-		t.Errorf("Excitatory base signal incorrect. Expected 1.0, got %.2f", excitatory.GetBasePulseSign())
-	}
-	if inhibitory.GetBasePulseSign() != -1.0 {
-		t.Errorf("Inhibitory base signal incorrect. Expected -1.0, got %.2f", inhibitory.GetBasePulseSign())
-	}
-	if dopaminergic.GetBasePulseSign() != 0.0 {
-		t.Errorf("Dopaminergic base signal incorrect. Expected 0.0, got %.2f", dopaminergic.GetBasePulseSign())
-	}
-	if inputN.GetBasePulseSign() != 1.0 {
-		t.Errorf("InputNeuron base signal incorrect. Expected 1.0, got %.2f", inputN.GetBasePulseSign())
-	}
-	if outputN.GetBasePulseSign() != 1.0 {
-		t.Errorf("OutputNeuron base signal incorrect. Expected 1.0, got %.2f", outputN.GetBasePulseSign())
-	}
-}
-
-func TestFiringInAbsoluteRefractory(t *testing.T) {
-	n := NewNeuron(1, Point{}, ExcitatoryNeuron, 1.0)
-	n.State = AbsoluteRefractoryState
+	// Cenário 1: Firing -> AbsoluteRefractory
+	n.CurrentState = neuron.Firing
 	n.CyclesInCurrentState = 0
+	n.AccumulatedPotential = common.PulseValue(simParams.BaseFiringThreshold + 0.1) // Simula que acabou de disparar
 
-	fired := n.ReceivePulse(2.0, 0) // Stimulus well above threshold
-	if fired {
-		t.Errorf("Neuron fired while in AbsoluteRefractoryState.")
+	n.AdvanceState(0, &simParams) // Avança para ciclo 0 (o disparo ocorreu "antes" do ciclo 0)
+
+	if n.CurrentState != neuron.AbsoluteRefractory {
+		t.Errorf("Esperado estado AbsoluteRefractory após Firing, obteve %s", n.CurrentState)
 	}
-	if n.State == FiringState {
-		t.Errorf("Neuron state changed to FiringState while in AbsoluteRefractoryState.")
+	if n.LastFiredCycle != 0 {
+		t.Errorf("Esperado LastFiredCycle 0, obteve %d", n.LastFiredCycle)
 	}
+	if n.AccumulatedPotential != 0.0 { // Potencial deve ser resetado após disparo
+		t.Errorf("Esperado Potencial Acumulado 0.0 após Firing, obteve %f", n.AccumulatedPotential)
+	}
+	if n.CyclesInCurrentState != 0 {
+		t.Errorf("Esperado CyclesInCurrentState 0 para novo estado AbsoluteRefractory, obteve %d", n.CyclesInCurrentState)
+	}
+
+	// Cenário 2: AbsoluteRefractory -> RelativeRefractory
+	n.CurrentState = neuron.AbsoluteRefractory
+	n.LastFiredCycle = 0
+	n.CyclesInCurrentState = common.CycleCount(simParams.AbsoluteRefractoryCycles - 1) // No último ciclo de Absolute
+
+	n.AdvanceState(common.CycleCount(simParams.AbsoluteRefractoryCycles), &simParams) // Avança para o ciclo onde a transição ocorre
+
+	if n.CurrentState != neuron.RelativeRefractory {
+		t.Errorf("Esperado estado RelativeRefractory após AbsoluteRefractory, obteve %s", n.CurrentState)
+	}
+	if n.CyclesInCurrentState != 0 {
+		t.Errorf("Esperado CyclesInCurrentState 0 para novo estado RelativeRefractory, obteve %d", n.CyclesInCurrentState)
+	}
+
+	// Cenário 3: RelativeRefractory -> Resting
+	n.CurrentState = neuron.RelativeRefractory
+	n.LastFiredCycle = 0
+	n.CyclesInCurrentState = common.CycleCount(simParams.RelativeRefractoryCycles -1) // No último ciclo de Relative
+
+	n.AdvanceState(common.CycleCount(simParams.AbsoluteRefractoryCycles + simParams.RelativeRefractoryCycles), &simParams)
+
+	if n.CurrentState != neuron.Resting {
+		t.Errorf("Esperado estado Resting após RelativeRefractory, obteve %s", n.CurrentState)
+	}
+	if n.CyclesInCurrentState != 0 {
+		t.Errorf("Esperado CyclesInCurrentState 0 para novo estado Resting, obteve %d", n.CyclesInCurrentState)
+	}
+}
+
+func TestNeuronDecayPotential(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
+
+	// Teste com potencial positivo
+	n.AccumulatedPotential = 1.0
+	expectedPotential := 1.0 * (1.0 - simParams.AccumulatedPulseDecayRate)
+	n.DecayPotential(&simParams)
+	if n.AccumulatedPotential != common.PulseValue(expectedPotential) {
+		t.Errorf("Decaimento positivo incorreto: esperado %f, obteve %f", expectedPotential, n.AccumulatedPotential)
+	}
+
+	// Teste com potencial negativo
+	n.AccumulatedPotential = -1.0
+	expectedPotentialNegative := -1.0 * (1.0 - simParams.AccumulatedPulseDecayRate)
+	n.DecayPotential(&simParams)
+	if n.AccumulatedPotential != common.PulseValue(expectedPotentialNegative) {
+		t.Errorf("Decaimento negativo incorreto: esperado %f, obteve %f", expectedPotentialNegative, n.AccumulatedPotential)
+	}
+
+	// Teste decaimento para zero
+	n.AccumulatedPotential = 0.000001
+	n.DecayPotential(&simParams)
+	if n.AccumulatedPotential != 0.0 {
+		t.Errorf("Decaimento para zero (positivo) falhou: esperado 0.0, obteve %f", n.AccumulatedPotential)
+	}
+
+	n.AccumulatedPotential = -0.000001
+	n.DecayPotential(&simParams)
+	if n.AccumulatedPotential != 0.0 {
+		t.Errorf("Decaimento para zero (negativo) falhou: esperado 0.0, obteve %f", n.AccumulatedPotential)
+	}
+}
+
+func TestEmittedPulseSign(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+
+	testCases := []struct {
+		name         string
+		neuronType   neuron.Type
+		expectedSign common.PulseValue
+	}{
+		{"Excitatory", neuron.Excitatory, 1.0},
+		{"Inhibitory", neuron.Inhibitory, -1.0},
+		{"Input", neuron.Input, 1.0},
+		{"Output", neuron.Output, 1.0},
+		{"Dopaminergic", neuron.Dopaminergic, 0.0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := neuron.New(1, tc.neuronType, common.Point{}, &simParams)
+			sign := n.EmittedPulseSign()
+			if sign != tc.expectedSign {
+				t.Errorf("Para tipo %s, esperado sinal %f, obteve %f", tc.neuronType, tc.expectedSign, sign)
+			}
+		})
+	}
+}
+
+// Teste para não disparar em AbsoluteRefractory
+func TestNeuronNoFireInAbsoluteRefractory(t *testing.T) {
+    simParams := config.DefaultSimulationParameters()
+    n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
+
+    // Colocar neurônio em AbsoluteRefractory
+    n.CurrentState = neuron.Firing // Dispara
+    n.AdvanceState(0, &simParams) // Avança para AbsoluteRefractory (LastFiredCycle = 0)
+
+    if n.CurrentState != neuron.AbsoluteRefractory {
+        t.Fatalf("Falha ao colocar neurônio em AbsoluteRefractory para o teste.")
+    }
+
+    // Tentar disparar com potencial alto
+    n.AccumulatedPotential = 0 // Resetar para garantir
+    fired := n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold*2), 1) // Ciclo 1
+
+    if fired {
+        t.Errorf("Neurônio disparou enquanto em AbsoluteRefractory state.")
+    }
+    if n.CurrentState != neuron.AbsoluteRefractory { // Deve permanecer em AbsoluteRefractory
+        t.Errorf("Estado do neurônio mudou de AbsoluteRefractory indevidamente.")
+    }
+    if n.LastFiredCycle != 0 { // Não deve ter disparado novamente
+	t.Errorf("LastFiredCycle mudou, indicando novo disparo em AbsoluteRefractory. Esperado 0, obteve %d", n.LastFiredCycle)
+    }
 }

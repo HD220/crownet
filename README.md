@@ -1,89 +1,75 @@
-# CrowNet: A Biologically Inspired Neural Network Simulator
+# CrowNet: Simulador de Rede Neural Bio-inspirada (MVP)
 
-**CrowNet** is a command-line application written in Go that simulates a computational neural network model. It draws inspiration from biological processes, featuring neurons interacting in a 16-dimensional vector space, synaptogenesis (activity-dependent neuron movement), and neuromodulation by simulated cortisol and dopamine.
+**CrowNet** é uma aplicação de linha de comando escrita em Go que simula um modelo computacional de rede neural. Inspirada em processos biológicos, a simulação apresenta neurônios interagindo em um espaço vetorial de 16 dimensões, sinaptogênese (movimento de neurônios dependente da atividade) e neuromodulação por cortisol e dopamina simulados.
 
-The current Minimum Viable Product (MVP) focuses on demonstrating **neuromodulated Hebbian self-learning**. The network is exposed to simple digit patterns (0-9) and aims to self-organize its synaptic weights to form distinct internal representations (activity patterns across designated output neurons) for these different inputs. The learning process (plasticity) itself is influenced by the simulated chemical environment.
+O **Minimum Viable Product (MVP)** atual foca em demonstrar a **autoaprendizagem Hebbiana neuromodulada**. A rede é exposta a padrões simples de dígitos (0-9) e visa auto-organizar seus pesos sinápticos para formar representações internas distintas para esses diferentes inputs. O processo de aprendizado (plasticidade) é influenciado pelo ambiente químico simulado.
 
-## Core Concepts Implemented
+## Visão Geral do MVP
 
-*   **16-Dimensional Space:** Neurons exist and move within a 16D vector space.
-*   **Neuron Types:** The network consists of Excitatory, Inhibitory, Dopaminergic, Input, and Output neurons, each with specific roles and distribution patterns.
-*   **Pulse Propagation:** A simplified spherical expansion model where pulses travel at a fixed speed (0.6 units/cycle). The original, more complex 10-step propagation model described below is currently deferred.
-*   **Synaptic Weights:** Explicit synaptic weights between neurons are implemented and initialized randomly. These weights determine the strength of influence when a pulse travels from one neuron to another.
-*   **Neuromodulated Hebbian Learning:**
-    *   **Hebbian Plasticity:** Synaptic weights are adjusted based on the principle of "neurons that fire together, wire together." Co-activation of pre- and post-synaptic neurons (within a defined time window) leads to strengthening of their connection.
-    *   **Neuromodulation:** The base learning rate for Hebbian updates is modulated by global levels of:
-        *   **Dopamine:** Produced by firing dopaminergic neurons. Higher dopamine levels enhance the learning rate, promoting plasticity.
-        *   **Cortisol:** Produced by excitatory pulses near a central "gland." High cortisol levels suppress the learning rate, reducing plasticity.
-    *   Firing thresholds of neurons are also modulated by these chemicals.
-*   **Synaptogenesis:** Neurons can move in the 16D space. Their movement is influenced by the activity of nearby neurons (attraction to active, repulsion from resting) and modulated by chemical levels (high cortisol reduces movement). This dynamic spatial arrangement can influence connectivity over time.
-*   **Input Encoding:** Simple 5x7 binary patterns for digits 0-9 are used as input. These patterns activate a designated set of 35 input neurons.
-*   **Output Representation:** The network has 10 designated output neurons. The goal of the self-learning process is for these neurons to develop distinct and consistent patterns of activity in response to different input digits. The MVP focuses on observing these patterns rather than achieving perfect classification to digit labels.
+*   **Objetivo Principal:** Demonstrar que o modelo CrowNet pode exibir comportamento de auto-organização através de plasticidade Hebbiana neuromodulada, onde a rede aprende a formar representações internas distintas para diferentes padrões de entrada (dígitos 0-9).
+*   **Interface:** Linha de Comando (CLI).
+*   **Linguagem:** Go.
 
-## Modes of Operation (Command Line)
+## Principais Conceitos Implementados no MVP
 
-The application supports three main modes:
+*   **Espaço 16D:** Neurônios existem e se movem em um espaço vetorial de 16 dimensões.
+*   **Tipos de Neurônios:** Excitatórios, Inibitórios, Dopaminérgicos, Input e Output.
+*   **Propagação de Pulso:** Modelo simplificado de expansão esférica.
+*   **Pesos Sinápticos:** Conexões explícitas com pesos que determinam a força da influência entre neurônios.
+*   **Aprendizado Hebbiano Neuromodulado:**
+    *   **Plasticidade Hebbiana:** Pesos ajustados com base na co-ativação de neurônios.
+    *   **Neuromodulação:** Taxa de aprendizado e limiares de disparo modulados por níveis de Dopamina (aumenta plasticidade) e Cortisol (altos níveis suprimem plasticidade).
+*   **Sinaptogênese:** Movimento de neurônios influenciado pela atividade da rede e modulado por químicos.
+*   **Codificação de Entrada:** Padrões binários 5x7 para dígitos 0-9.
+*   **Representação de Saída:** Padrões de ativação distintos nos 10 neurônios de output.
 
-1.  **`expose` Mode (`-mode expose`):**
-    *   Presents the predefined digit patterns (0-9) to the network repeatedly over a specified number of epochs.
-    *   During this phase, all dynamics are active: Hebbian learning updates weights, chemical levels modulate learning rates and thresholds, and synaptogenesis allows neurons to move.
-    *   This mode is for allowing the network to self-organize based on input experience.
-    *   Learned synaptic weights can be saved to a file.
-    *   Key flags: `-epochs`, `-lrBase` (base learning rate), `-cyclesPerPattern`, `-weightsFile`.
+## Modos de Operação (CLI)
 
-2.  **`observe` Mode (`-mode observe`):**
-    *   Loads a previously saved set of synaptic weights.
-    *   Presents a specified digit pattern to the network.
-    *   Runs the network for a few "settling" cycles (with Hebbian learning, synaptogenesis, and dynamic chemical changes temporarily disabled for a clean feed-forward pass).
-    *   Outputs the activation pattern (e.g., `AccumulatedPulse` values) of the 10 output neurons, allowing the user to see how the trained network represents the input digit.
-    *   Key flags: `-digit <0-9>`, `-weightsFile`, `-cyclesToSettle`.
+A aplicação suporta três modos principais, controlados pelo flag `-mode`:
 
-3.  **`sim` Mode (`-mode sim`):**
-    *   Runs a general simulation with all dynamics (synaptogenesis, chemical modulation, Hebbian learning if weights are present) enabled.
-    *   Allows for continuous input stimulus to a specified input neuron at a given frequency.
-    *   Can log full network snapshots to an SQLite database for detailed analysis.
-    *   Useful for observing the original CrowNet dynamic behaviors over longer periods without the specific constraints of the digit exposure/observation tasks.
-    *   Key flags: `-cycles`, `-stimInputID`, `-stimInputFreqHz`, `-monitorOutputID`, `-dbPath`, `-saveInterval`, `-debugChem`.
+1.  **`expose`**: Para treinar a rede, apresentando padrões de dígitos repetidamente, permitindo que o aprendizado Hebbiano ocorra.
+    *   Flags chave: `-epochs`, `-lrBase`, `-cyclesPerPattern`, `-weightsFile`.
+2.  **`observe`**: Para testar uma rede treinada, carregando pesos salvos e observando o padrão de saída da rede para um dígito específico.
+    *   Flags chave: `-digit <0-9>`, `-weightsFile`, `-cyclesToSettle`.
+3.  **`sim`**: Para rodar uma simulação geral com todas as dinâmicas ativas, útil para observação de comportamento ou logging detalhado.
+    *   Flags chave: `-cycles`, `-stimInputID`, `-stimInputFreqHz`, `-dbPath`, `-saveInterval`.
 
-## Technologies Utilized (MVP)
+## Tecnologias Utilizadas (MVP)
 
-*   **Go:** Implementation language.
-*   **SQLite:** For saving detailed simulation snapshots (primarily in "sim" mode or for detailed analysis of "expose" mode).
-*   **JSON:** For saving and loading learned synaptic weights.
+*   **Go:** Linguagem de implementação.
+*   **JSON:** Para salvar e carregar os pesos sinápticos aprendidos.
+*   **SQLite:** (Opcional) Para salvar snapshots detalhados do estado da simulação para análise.
 
-### Deferred/Future Technologies (from original README)
-*   **ArrayFire (GPU Acceleration):** Not implemented in MVP due to environmental constraints.
-*   **Robotgo (Visualization):** Not implemented in MVP.
-*   **OpenNoise (Procedural Generation):** Neuron placement currently uses random distribution within radial constraints; a sophisticated noise generator is deferred.
+## Documentação Detalhada
 
-## Further Documentation
+Para uma compreensão completa das funcionalidades, arquitetura técnica, requisitos e casos de uso do CrowNet MVP, por favor, consulte os documentos localizados no diretório `/docs`:
 
-For more detailed information, please refer to:
-*   `PROJECT_REQUIREMENTS.md`: Goals, scope, and features of the current MVP.
-*   `USE_CASES.md`: Scenarios for using the different modes of the application.
-*   `TECHNICAL_DESIGN.md`: Overview of the architecture, data structures, and core algorithms.
+*   **`/docs/funcional/`**: Descrições detalhadas de cada funcionalidade do sistema.
+    *   `01-inicializacao-rede.md`
+    *   `02-ciclo-simulacao-aprendizado.md`
+    *   `03-entrada-saida-dados.md`
+    *   `04-modos-operacao.md`
+    *   `05-persistencia-dados.md`
+*   **`/docs/tecnico/`**: Documentação técnica, de estilo e arquitetural.
+    *   `guia_interface_linha_comando.md`: Detalhes sobre a CLI, flags e formatos de saída.
+    *   `arquitetura.md`: Visão geral da arquitetura de software, pacotes e algoritmos.
+    *   `requisitos.md`: Requisitos Funcionais e Não Funcionais do MVP.
+    *   `casos-de-uso/`: Descrições detalhadas dos cenários de uso para cada modo de operação.
 
-## Original README Concepts (Preserved for Context)
+## Como Construir e Executar (Exemplo)
 
-(The following sections are largely from the original README, providing context on the initial biological inspirations. Some aspects, like the detailed 10-step pulse propagation, are simplified in the current MVP.)
+1.  **Construir:**
+    ```bash
+    go build .
+    ```
+2.  **Executar (exemplo modo expose):**
+    ```bash
+    ./crownet -mode expose -neurons 150 -epochs 20 -lrBase 0.005 -cyclesPerPattern 5 -weightsFile my_digit_weights.json
+    ```
+3.  **Executar (exemplo modo observe):**
+    ```bash
+    ./crownet -mode observe -digit 7 -weightsFile my_digit_weights.json -cyclesToSettle 5
+    ```
 
-### Neuron Cycles & Firing
-(Original section 4, 10, 11 from README can be kept as they generally apply)
-O comportamento dos neurônios é modelado em 4 ciclos principais: Repouso, Disparo, Refratário Absoluto, Refratário. Cada neurônio mantém um registro do último ciclo em que disparou. Os neurônios disparam quando a soma dos pulsos recebidos (modulated by weights) excede o limiar de disparo. Quando não recebem pulsos, a soma diminui gradativamente.
-
-### Pulse Propagation (Original Specification Detail)
-(Original section 5, 6, and the 10-step pseudocode from README can be kept here, with a note that the MVP uses a simplified spherical expansion model currently.)
-A propagação de pulso entre os neurônios é baseada na distância percorrida (velocidade: 0.6 unidades/ciclo). A distância é Euclidiana em 16D.
-*Original 10-step pulse processing pseudocode can be included here, marked as 'deferred in current MVP implementation'.*
-
-### Synaptogenesis (Neuron Movement - As Implemented)
-A sinapogênese é a taxa de movimentação dos neurônios no espaço, ajustada após a propagação de pulsos e modulada por químicos:
-- Neurônios se aproximam daqueles que dispararam ou estavam em período refratário.
-- Neurônios se afastam daqueles que estavam em repouso.
-
-### Cortisol e Dopamina (Effects on Thresholds & Plasticity - As Implemented)
-- **Cortisol**: Produção afetada por pulsos excitatórios na glândula central. Modula limiar de disparo (U-shaped) e sinapogênese/taxa de aprendizado (supressão em níveis altos). Decai com o tempo.
-- **Dopamina**: Gerada por neurônios dopaminérgicos. Aumenta limiar de disparo. Aumenta sinapogênese/taxa de aprendizado. Decai mais rapidamente que o cortisol.
-
----
-This updated README should provide a good overview of the current project state.
+Consulte o `guia_interface_linha_comando.md` para mais detalhes sobre os flags.
+```

@@ -1,179 +1,140 @@
 package neuron
 
-import "math"
-
-// Point represents a point in 16-dimensional space.
-type Point [16]float64
-
-// NeuronType defines the type of a neuron.
-type NeuronType int
-
-const (
-	ExcitatoryNeuron NeuronType = iota
-	InhibitoryNeuron
-	DopaminergicNeuron
-	InputNeuron  // Typically excitatory, but with a distinct role
-	OutputNeuron // Typically excitatory, but with a distinct role
+import (
+	"crownet/common"
+	"crownet/config"
 )
 
-// NeuronState defines the current state of a neuron.
-type NeuronState int
-
-const (
-	RestingState            NeuronState = iota // Can receive pulses and fire
-	FiringState                                // Neuron has just fired in the current cycle
-	AbsoluteRefractoryState                    // Cannot fire, regardless of stimulus
-	RelativeRefractoryState                    // Can fire, but requires stronger stimulus (higher threshold)
-)
-
-// Neuron represents a single neuron in the CrowNet model.
+// Neuron representa uma unidade computacional individual na rede neural.
 type Neuron struct {
-	ID                     int
-	Position               Point
-	Type                   NeuronType
-	State                  NeuronState
-	AccumulatedPulse       float64 // Current sum of received pulse values
-	BaseFiringThreshold    float64 // Base threshold, can be modulated
-	CurrentFiringThreshold float64 // Actual threshold for firing in current state
-	LastFiredCycle         int
-	CyclesInCurrentState   int   // Tracks cycles spent in refractory states
-	Velocity               Point // Current velocity vector for movement (synaptogenesis)
-	// Connections are implicit via proximity and pulse propagation
+	ID                     common.NeuronID
+	Type                   Type // Excitatory, Inhibitory, Dopaminergic, Input, Output
+	Position               common.Point
+	CurrentState           State // Resting, Firing, AbsoluteRefractory, RelativeRefractory
+	AccumulatedPotential   common.PulseValue
+	BaseFiringThreshold    common.Threshold
+	CurrentFiringThreshold common.Threshold // Pode ser modulado por neuroquímicos
+	LastFiredCycle         common.CycleCount
+	CyclesInCurrentState   common.CycleCount
+	Velocity               common.Vector // Para sinaptogênese (movimento)
 }
 
-// NewNeuron creates a new neuron.
-func NewNeuron(id int, pos Point, nType NeuronType, baseThreshold float64) *Neuron {
-	return &Neuron{
+// New cria e inicializa um novo Neurônio.
+// O ID é fornecido externamente para garantir unicidade na rede.
+func New(id common.NeuronID, neuronType Type, initialPosition common.Point, simParams *config.SimulationParameters) *Neuron {
+	n := &Neuron{
 		ID:                     id,
-		Position:               pos,
-		Type:                   nType,
-		State:                  RestingState,
-		AccumulatedPulse:       0.0,
-		BaseFiringThreshold:    baseThreshold,
-		CurrentFiringThreshold: baseThreshold, // Initially same as base
-		LastFiredCycle:         -1,            // -1 indicates never fired
+		Type:                   neuronType,
+		Position:               initialPosition,
+		CurrentState:           Resting,
+		AccumulatedPotential:   0.0,
+		BaseFiringThreshold:    common.Threshold(simParams.BaseFiringThreshold),
+		CurrentFiringThreshold: common.Threshold(simParams.BaseFiringThreshold), // Inicialmente igual ao base
+		LastFiredCycle:         -1, // -1 indica que nunca disparou
 		CyclesInCurrentState:   0,
-		Velocity:               Point{}, // Initialize velocity to zero vector
+		Velocity:               common.Vector{}, // Velocidade inicial zero
 	}
+	return n
 }
 
-// UpdateState progresses the neuron's state machine based on its current state and refractory periods.
-// This should be called once per cycle for each neuron.
-func (n *Neuron) UpdateState(currentCycle int) {
+// IntegrateIncomingPotential processa um potencial sináptico recebido.
+// Retorna true se o neurônio disparou como resultado desta integração.
+// O cicloAtual é passado para registrar quando ocorreu o disparo.
+func (n *Neuron) IntegrateIncomingPotential(potential common.PulseValue, currentCycle common.CycleCount) (fired bool) {
+	if n.CurrentState == AbsoluteRefractory {
+		return false // Não pode integrar nem disparar em estado refratário absoluto
+	}
+
+	n.AccumulatedPotential += potential
+
+	if n.AccumulatedPotential < n.CurrentFiringThreshold {
+		return false // Não atingiu o limiar
+	}
+	// Atingiu o limiar e não está em AbsoluteRefractory
+	n.CurrentState = Firing // Transição imediata para o estado de disparo
+	n.CyclesInCurrentState = 0
+	// n.LastFiredCycle é atualizado em AdvanceState após o estado Firing.
+	return true
+}
+
+// AdvanceState progride o estado do neurônio para o próximo ciclo.
+// Deve ser chamado uma vez por ciclo para cada neurônio, após todos os inputs terem sido integrados.
+// O cicloAtual é usado para registrar o LastFiredCycle corretamente.
+func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.SimulationParameters) {
 	n.CyclesInCurrentState++
 
-	switch n.State {
-	case FiringState:
-		// After firing, neuron enters absolute refractory state.
-		n.State = AbsoluteRefractoryState
+	// Transições de estado baseadas no estado atual e no tempo decorrido nele
+	if n.CurrentState == Firing {
+		n.CurrentState = AbsoluteRefractory
 		n.CyclesInCurrentState = 0
 		n.LastFiredCycle = currentCycle
-		// AccumulatedPulse is typically reset after firing, or it quickly decays.
-		// The problem states "Quando não recebem pulsos, a soma dos pulsos diminui gradativamente".
-		// This implies it doesn't necessarily reset to 0 immediately after firing, but will decay.
-		// Let's assume it does reset or significantly reduce to prevent immediate re-firing from its own high value.
-		// For now, let's reset it. This can be tuned.
-		n.AccumulatedPulse = 0 // Reset after firing to prevent re-triggering from the same sum.
+		n.AccumulatedPotential = 0.0 // Reset do potencial após o disparo
+		return                       // Transição feita
+	}
 
-	case AbsoluteRefractoryState:
-		if n.CyclesInCurrentState >= AbsoluteRefractoryCycles {
-			n.State = RelativeRefractoryState
+	if n.CurrentState == AbsoluteRefractory {
+		if n.CyclesInCurrentState >= common.CycleCount(simParams.AbsoluteRefractoryCycles) {
+			n.CurrentState = RelativeRefractory
 			n.CyclesInCurrentState = 0
-			// During relative refractory, threshold might be higher.
-			// This is not explicitly in README, but common. For now, keep threshold same.
-			// n.CurrentFiringThreshold = n.BaseFiringThreshold * 1.5 // Example
+			// O limiar em RelativeRefractory pode ser maior; por enquanto, CurrentFiringThreshold é
+			// modificado externamente por neuroquímicos. Se não houver modulação,
+			// poderia-se aumentar o BaseFiringThreshold temporariamente aqui.
 		}
+		return // Transição (ou não) feita
+	}
 
-	case RelativeRefractoryState:
-		if n.CyclesInCurrentState >= RelativeRefractoryCycles {
-			n.State = RestingState
+	if n.CurrentState == RelativeRefractory {
+		if n.CyclesInCurrentState >= common.CycleCount(simParams.RelativeRefractoryCycles) {
+			n.CurrentState = Resting
 			n.CyclesInCurrentState = 0
-			n.CurrentFiringThreshold = n.BaseFiringThreshold // Reset threshold
+			// Restaura o limiar para o valor base (se não estiver sendo modulado por químicos)
+			// n.CurrentFiringThreshold = n.BaseFiringThreshold; // Essa lógica é mais complexa devido à modulação externa
 		}
+		return // Transição (ou não) feita
+	}
+	// Se Resting, permanece Resting a menos que um disparo ocorra via IntegrateIncomingPotential.
+}
 
-	case RestingState:
-		// Stays in resting state unless it fires.
-		// If it fires, its state will be changed to FiringState by the firing logic.
-		// Decay accumulated pulse if no new pulses are received (or even with them).
-		// This decay should ideally happen *before* checking for firing.
-		break // Decay is handled separately for now.
+// DecayPotential aplica o decaimento ao potencial acumulado do neurônio.
+// Deve ser chamado uma vez por ciclo.
+func (n *Neuron) DecayPotential(simParams *config.SimulationParameters) {
+	decayRate := common.Rate(simParams.AccumulatedPulseDecayRate)
+	if n.AccumulatedPotential > 0 {
+		n.AccumulatedPotential -= common.PulseValue(float64(n.AccumulatedPotential) * float64(decayRate))
+		if n.AccumulatedPotential < 0.00001 { // Evitar underflow ou valores insignificantes
+			n.AccumulatedPotential = 0
+		}
+		return // Decaimento aplicado
+	}
+	// Se o potencial for negativo (devido a inputs inibitórios), também decai em direção a zero.
+	if n.AccumulatedPotential < 0 {
+		n.AccumulatedPotential += common.PulseValue(float64(n.AccumulatedPotential) * float64(decayRate) * -1.0) // decayRate é positivo
+		if n.AccumulatedPotential > -0.00001 {
+			n.AccumulatedPotential = 0
+		}
 	}
 }
 
-// DecayPulseAccumulation handles the gradual decrease of accumulated pulses.
-// This should be called each cycle, likely before processing new incoming pulses.
-func (n *Neuron) DecayPulseAccumulation() {
-	if n.AccumulatedPulse > 0 {
-		n.AccumulatedPulse -= AccumulatedPulseDecayRate * n.AccumulatedPulse
-		if n.AccumulatedPulse < 0.001 { // Threshold to prevent tiny values
-			n.AccumulatedPulse = 0
-		}
-	} else if n.AccumulatedPulse < 0 { // For inhibitory accumulation, decay towards 0
-		n.AccumulatedPulse += AccumulatedPulseDecayRate * math.Abs(n.AccumulatedPulse)
-		if math.Abs(n.AccumulatedPulse) < 0.001 {
-			n.AccumulatedPulse = 0
-		}
-	}
-}
-
-// ReceivePulse adjusts the neuron's accumulated pulse value.
-// Returns true if the neuron fires as a result.
-func (n *Neuron) ReceivePulse(value float64, currentCycle int) (fired bool) {
-	if n.State == AbsoluteRefractoryState {
-		return false // Cannot respond to pulses
-	}
-
-	n.AccumulatedPulse += value
-
-	// Check for firing
-	if n.State != FiringState && n.AccumulatedPulse >= n.CurrentFiringThreshold {
-		// Dopaminergic neurons generate dopamine, they don't "fire" in the same way to propagate typical pulses.
-		// Their "firing" is effectively releasing dopamine.
-		// Input neurons also fire to signal external input.
-		// Output neurons fire to signal network output.
-		if n.Type == DopaminergicNeuron {
-			// Handle dopamine release separately, not as a standard "fire" for pulse propagation.
-			// This might involve setting a flag or directly influencing dopamine levels.
-			// For now, let's assume they also go through a "firing" cycle for state management,
-			// but their effect (dopamine release) is handled elsewhere.
-		}
-
-		n.State = FiringState      // Transition to firing state
-		n.CyclesInCurrentState = 0 // Reset counter for the new state
-		// n.LastFiredCycle = currentCycle // This is set in UpdateState after FiringState
-		return true
-	}
-	return false
-}
-
-// GetBasePulseSign returns the base sign/type of pulse this neuron would emit if it fires.
-// This will be modulated by synaptic weights.
-// Dopaminergic neurons have a special role and don't emit standard weighted pulses.
-func (n *Neuron) GetBasePulseSign() float64 {
-	switch n.Type {
-	case ExcitatoryNeuron, InputNeuron, OutputNeuron: // Standard excitatory effect
+// EmittedPulseSign retorna o sinal base do pulso que este neurônio emite ao disparar.
+// +1.0 para excitatório, -1.0 para inibitório.
+// Neurônios dopaminérgicos não emitem pulsos ponderados desta forma; seu efeito é químico.
+func (n *Neuron) EmittedPulseSign() common.PulseValue {
+	if n.Type == Excitatory || n.Type == Input || n.Type == Output {
 		return 1.0
-	case InhibitoryNeuron:
-		return -1.0 // Standard inhibitory effect
-	case DopaminergicNeuron:
-		return 0.0 // Dopaminergic neurons' "pulse" is dopamine release, not a weighted signal in this context.
-	default:
-		return 0.0
 	}
+	if n.Type == Inhibitory {
+		return -1.0
+	}
+	return 0.0 // Dopaminergic ou tipo desconhecido não emite pulso padrão
 }
 
-// GetEffectivePulseValue is now DEPRECATED for weighted connections.
-// Use GetBasePulseSign and multiply by synaptic weight in network logic.
-// Keeping it here for now to avoid breaking older test code immediately, but it should be removed.
-func (n *Neuron) GetEffectivePulseValue() float64 {
-	switch n.Type {
-	case ExcitatoryNeuron, InputNeuron, OutputNeuron:
-		return PulseExcitatoryValue
-	case InhibitoryNeuron:
-		return -PulseInhibitoryValue
-	case DopaminergicNeuron:
-		return 0
-	default:
-		return 0
+// UpdatePosition atualiza a posição do neurônio com base em sua velocidade.
+// dx = v * dt. Como dt = 1 ciclo, dx = v.
+func (n *Neuron) UpdatePosition() {
+	for i := 0; i < 16; i++ {
+		n.Position[i] += common.Coordinate(n.Velocity[i])
+		// Condições de contorno (clamping ao espaço) serão tratadas no pacote `network` ou `space`
+		// que tem conhecimento das dimensões do espaço.
 	}
 }
+```

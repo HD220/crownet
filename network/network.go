@@ -1,297 +1,678 @@
 package network
 
 import (
-	"crownet/datagen" // For PatternSize
+	"crownet/common"
+	"crownet/config"
+	"crownet/datagen"
 	"crownet/neuron"
-	"crownet/utils" // Will be needed for EuclideanDistance
-	"log"           // For Fatalf
-	"math"
+	"crownet/neurochemical"
+	"crownet/pulse"
+	"crownet/space"
+	"crownet/synaptic"
+	"fmt"
 	"math/rand"
-	// "fmt" // No longer needed after removing debug prints
+	"sort"
 )
 
-// CortisolGlandPosition is at the center of the space.
-var CortisolGlandPosition = neuron.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-
-// CrowNet represents the entire neural network.
+// CrowNet é o orquestrador principal da simulação da rede neural.
 type CrowNet struct {
-	Neurons                []*neuron.Neuron
-	ActivePulses           []*Pulse // List of currently traveling pulses
-	InputNeuronIDs         []int
-	OutputNeuronIDs        []int
-	CortisolLevel          float64
-	DopamineLevel          float64
-	CycleCount             int
-	neuronIDCounter        int
-	SpaceRadius            float64 // Max radius of the entire space from center (e.g. 4.0)
-	PulseMaxTravelDistance float64 // Max distance a pulse can travel (e.g. 8.0, diameter of space)
-	DopaminergicMaxRadius  float64
-	InhibitoryMaxRadius    float64
-	ExcitatoryMaxRadius    float64
-	// Chemical modulation state
-	currentSynaptogenesisModulationFactor float64
-	// Input/Output state
-	inputTargetFrequencies map[int]float64 // neuronID (must be an InputNeuron) -> target frequency in Hz
-	timeToNextInputFire    map[int]int     // neuronID -> cycles remaining until it should fire
-	outputFiringHistory    map[int][]int   // neuronID (must be an OutputNeuron) -> list of cycle counts when it fired
-	// Synaptic weights: map[from_neuron_id]map[to_neuron_id]weight
-	SynapticWeights map[int]map[int]float64
-	// Flags to control complex dynamics for different modes
-	EnableSynaptogenesis     bool
-	EnableChemicalModulation bool
-	// Learning parameter
-	BaseLearningRate float64
-	// ReferencePoints for advanced pulse propagation (TODO)
+	Config *config.AppConfig // Configurações da simulação e CLI
+
+	Neurons            []*neuron.Neuron
+	InputNeuronIDs     []common.NeuronID
+	OutputNeuronIDs    []common.NeuronID
+	neuronIDCounter    common.NeuronID
+	CortisolGlandPosition common.Point // Posição da glândula de cortisol
+
+	ActivePulses   []*pulse.Pulse
+	SynapticWeights synaptic.NetworkWeights
+	ChemicalEnv    *neurochemical.Environment
+
+	CycleCount common.CycleCount
+
+	// Campos para I/O de frequência (modo 'sim')
+	inputTargetFrequencies map[common.NeuronID]float64
+	timeToNextInputFire    map[common.NeuronID]common.CycleCount
+	outputFiringHistory    map[common.NeuronID][]common.CycleCount
+
+	// Controle de dinâmicas para modos específicos (ex: 'observe')
+	isLearningEnabled      bool
+	isSynaptogenesisEnabled bool
+	isChemicalModulationEnabled bool
 }
 
-// NewCrowNet initializes a new CrowNet instance with neurons distributed.
-func NewCrowNet(totalNeurons int) *CrowNet {
+// NewCrowNet cria e inicializa uma nova instância de CrowNet.
+func NewCrowNet(appCfg *config.AppConfig) *CrowNet {
 	net := &CrowNet{
-		Neurons:                make([]*neuron.Neuron, 0, totalNeurons),
-		ActivePulses:           make([]*Pulse, 0),
-		InputNeuronIDs:         make([]int, 0), // Will be populated by initializeNeurons
-		OutputNeuronIDs:        make([]int, 0), // Will be populated by initializeNeurons
-		CortisolLevel:          0.0,
-		DopamineLevel:          0.0,
-		CycleCount:             0,
+		Config:                 appCfg,
+		Neurons:                make([]*neuron.Neuron, 0, appCfg.Cli.TotalNeurons),
+		InputNeuronIDs:         make([]common.NeuronID, 0, appCfg.SimParams.MinInputNeurons),
+		OutputNeuronIDs:        make([]common.NeuronID, 0, appCfg.SimParams.MinOutputNeurons),
 		neuronIDCounter:        0,
-		SpaceRadius:            SpaceMaxDimension,
-		PulseMaxTravelDistance: SpaceMaxDimension * 2.0, // Diameter
-		DopaminergicMaxRadius:  SpaceMaxDimension * DopaminergicRadiusFactor,
-		InhibitoryMaxRadius:    SpaceMaxDimension * InhibitoryRadiusFactor,
-		ExcitatoryMaxRadius:    SpaceMaxDimension * ExcitatoryRadiusFactor,
-		// I/O
-		inputTargetFrequencies:   make(map[int]float64),
-		timeToNextInputFire:      make(map[int]int),
-		outputFiringHistory:      make(map[int][]int),
-		SynapticWeights:          make(map[int]map[int]float64),
-		EnableSynaptogenesis:     true,             // Default to on
-		EnableChemicalModulation: true,             // Default to on
-		BaseLearningRate:         BaseLearningRate, // From config.go
+		CortisolGlandPosition: common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // Centro
+		ActivePulses:           make([]*pulse.Pulse, 0),
+		SynapticWeights:        synaptic.NewNetworkWeights(),
+		ChemicalEnv:            neurochemical.NewEnvironment(),
+		CycleCount:             0,
+		inputTargetFrequencies: make(map[common.NeuronID]float64),
+		timeToNextInputFire:    make(map[common.NeuronID]common.CycleCount),
+		outputFiringHistory:    make(map[common.NeuronID][]common.CycleCount),
+		isLearningEnabled:      true, // Habilitado por padrão
+		isSynaptogenesisEnabled: true, // Habilitado por padrão
+		isChemicalModulationEnabled: true, // Habilitado por padrão
 	}
 
-	net.initializeNeurons(totalNeurons)         // Populates InputNeuronIDs and OutputNeuronIDs
-	net.initializeSynapticWeights(totalNeurons) // Initialize weights after neurons are created
-	net.initializeChemicalModulation()          // Initialize factors
-	net.finalizeInitialization()                // Initialize IO related structures and sort IDs
+	net.initializeNeurons()
+	allNeuronIDs := make([]common.NeuronID, len(net.Neurons))
+	for i, n := range net.Neurons {
+		allNeuronIDs[i] = n.ID
+	}
+	net.SynapticWeights.InitializeAllToAllWeights(allNeuronIDs, &net.Config.SimParams)
+	net.finalizeInitialization()
+
 	return net
 }
 
-func (cn *CrowNet) getNextID() int {
+func (cn *CrowNet) getNextNeuronID() common.NeuronID {
 	id := cn.neuronIDCounter
 	cn.neuronIDCounter++
 	return id
 }
 
-// initializeNeurons creates and distributes neurons in the network.
-func (cn *CrowNet) initializeNeurons(totalNeurons int) {
-	// For digit recognition MVP, ensure at least datagen.PatternSize input neurons and 10 output neurons.
-	numRequiredInput := datagen.PatternSize // 35
-	numRequiredOutput := 10
+// initializeNeurons cria e distribui os neurônios na rede.
+func (cn *CrowNet) initializeNeurons() {
+	totalCLINeurons := cn.Config.Cli.TotalNeurons
+	simParams := &cn.Config.SimParams
 
-	numInput := numRequiredInput
-	if totalNeurons < numInput+numRequiredOutput { // Basic sanity for very small totalNeurons
-		log.Fatalf("Total neurons (%d) too small for required input (%d) and output (%d) neurons.", totalNeurons, numInput, numRequiredOutput)
+	numInput := simParams.MinInputNeurons
+	numOutput := simParams.MinOutputNeurons
+
+	if totalCLINeurons < numInput+numOutput {
+		// Em caso de poucos neurônios, priorizar Input/Output e ajustar o restante.
+		// Ou lançar erro. Por enquanto, vamos ajustar.
+		fmt.Printf("Aviso: Total de neurônios (%d) é menor que o mínimo para Input (%d) e Output (%d). Ajustando para o mínimo necessário.\n",
+			totalCLINeurons, numInput, numOutput)
+		totalCLINeurons = numInput + numOutput
 	}
 
-	// Ensure enough input neurons are designated if user requests fewer via percentages
-	// The percentage calculation will be for the *remaining* neurons after I/O are set.
-	// For MVP, we prioritize fixed numbers for I/O for classification.
-
-	numOutput := numRequiredOutput
-
-	remainingNeurons := totalNeurons - numInput - numOutput
-	if remainingNeurons < 0 {
-		remainingNeurons = 0
-	}
-
-	numDopaminergic := int(math.Round(float64(remainingNeurons) * DopaminergicPercent))
-	numInhibitory := int(math.Round(float64(remainingNeurons) * InhibitoryPercent))
-	numExcitatory := remainingNeurons - numDopaminergic - numInhibitory
-
-	if numExcitatory < 0 {
-		numExcitatory = 0
-	}
-
-	currentTotal := numInput + numOutput + numDopaminergic + numInhibitory + numExcitatory
-	if currentTotal != totalNeurons {
-		// fmt.Printf("Warning: Neuron count mismatch. Target: %d, Calculated: %d. Adjusting Excitatory.\n", totalNeurons, currentTotal)
-		numExcitatory += (totalNeurons - currentTotal)
-		if numExcitatory < 0 {
-			numExcitatory = 0
-		}
-	}
-
-	// Create Input neurons
+	// Neurônios de Input
 	for i := 0; i < numInput; i++ {
-		pos := cn.generatePositionInRadius(cn.ExcitatoryMaxRadius) // Placed like excitatory
-		id := cn.getNextID()
-		n := neuron.NewNeuron(id, pos, neuron.InputNeuron, neuron.DefaultFiringThreshold)
+		id := cn.getNextNeuronID()
+		// Posição: ExcitatoryMaxRadius é um bom proxy para uma área geral.
+		pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
+		n := neuron.New(id, neuron.Input, pos, simParams)
 		cn.Neurons = append(cn.Neurons, n)
 		cn.InputNeuronIDs = append(cn.InputNeuronIDs, id)
 	}
-	// ... (rest of neuron type creation as before) ...
-	// Create Output neurons
+
+	// Neurônios de Output
 	for i := 0; i < numOutput; i++ {
-		pos := cn.generatePositionInRadius(cn.ExcitatoryMaxRadius) // Placed like excitatory
-		id := cn.getNextID()
-		n := neuron.NewNeuron(id, pos, neuron.OutputNeuron, neuron.DefaultFiringThreshold)
+		id := cn.getNextNeuronID()
+		pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
+		n := neuron.New(id, neuron.Output, pos, simParams)
 		cn.Neurons = append(cn.Neurons, n)
 		cn.OutputNeuronIDs = append(cn.OutputNeuronIDs, id)
 	}
 
-	// Create Dopaminergic neurons
+	remainingNeuronsForDistribution := totalCLINeurons - numInput - numOutput
+
+	numDopaminergic := int(float64(remainingNeuronsForDistribution) * simParams.DopaminergicPercent)
+	numInhibitory := int(float64(remainingNeuronsForDistribution) * simParams.InhibitoryPercent)
+	// Excitatory pega o que sobrar para garantir o total de neurônios.
+	numExcitatory := remainingNeuronsForDistribution - numDopaminergic - numInhibitory
+
+	if numExcitatory < 0 { // Pode acontecer se as porcentagens somarem > 1 ou com arredondamentos.
+	    fmt.Printf("Aviso: contagem de neurônios excitatórios negativa (%d) após distribuição. Ajustando para 0 e redistribuindo ligeiramente.\n", numExcitatory)
+		// Simplificação: apenas zera e aceita um total menor se as porcentagens forem problemáticas.
+		// Uma lógica mais robusta normalizaria as porcentagens ou ajustaria outras contagens.
+		numExcitatory = 0
+		// Recalcular dopa e inhib para preencher o que falta, se possível, ou aceitar menos neurônios.
+		// Esta parte pode ser mais sofisticada. Por ora, a simplicidade prevalece.
+	}
+
+
 	for i := 0; i < numDopaminergic; i++ {
-		pos := cn.generatePositionInRadius(cn.DopaminergicMaxRadius)
-		n := neuron.NewNeuron(cn.getNextID(), pos, neuron.DopaminergicNeuron, neuron.DefaultFiringThreshold)
+		id := cn.getNextNeuronID()
+		pos := space.GenerateRandomPositionInHyperSphere(simParams.DopaminergicRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
+		n := neuron.New(id, neuron.Dopaminergic, pos, simParams)
 		cn.Neurons = append(cn.Neurons, n)
 	}
 
-	// Create Inhibitory neurons
 	for i := 0; i < numInhibitory; i++ {
-		pos := cn.generatePositionInRadius(cn.InhibitoryMaxRadius)
-		n := neuron.NewNeuron(cn.getNextID(), pos, neuron.InhibitoryNeuron, neuron.DefaultFiringThreshold)
+		id := cn.getNextNeuronID()
+		pos := space.GenerateRandomPositionInHyperSphere(simParams.InhibitoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
+		n := neuron.New(id, neuron.Inhibitory, pos, simParams)
 		cn.Neurons = append(cn.Neurons, n)
 	}
 
-	// Create Excitatory neurons
 	for i := 0; i < numExcitatory; i++ {
-		pos := cn.generatePositionInRadius(cn.ExcitatoryMaxRadius)
-		n := neuron.NewNeuron(cn.getNextID(), pos, neuron.ExcitatoryNeuron, neuron.DefaultFiringThreshold)
+		id := cn.getNextNeuronID()
+		pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
+		n := neuron.New(id, neuron.Excitatory, pos, simParams)
 		cn.Neurons = append(cn.Neurons, n)
 	}
-	// fmt.Printf("Successfully initialized %d neurons.\n", len(cn.Neurons)) // Moved to main
+
+	// Se o número total de neurônios criados não bate com totalCLINeurons devido a arredondamentos/ajustes:
+	currentCreatedCount := len(cn.Neurons)
+	if currentCreatedCount < totalCLINeurons {
+	    // Adiciona neurônios excitatórios faltantes
+	    fmt.Printf("Aviso: Criados %d neurônios, esperado %d. Adicionando %d neurônios excitatórios extras.\n", currentCreatedCount, totalCLINeurons, totalCLINeurons - currentCreatedCount)
+	    for i := 0; i < (totalCLINeurons - currentCreatedCount); i++ {
+	        id := cn.getNextNeuronID()
+		    pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
+		    n := neuron.New(id, neuron.Excitatory, pos, simParams)
+		    cn.Neurons = append(cn.Neurons, n)
+	    }
+	} else if currentCreatedCount > totalCLINeurons {
+	    // Remove neurônios excitatórios extras (ou do último tipo adicionado)
+	     fmt.Printf("Aviso: Criados %d neurônios, esperado %d. Removendo %d neurônios extras.\n", currentCreatedCount, totalCLINeurons, currentCreatedCount - totalCLINeurons)
+	    cn.Neurons = cn.Neurons[:totalCLINeurons]
+	    // Nota: Isso pode bagunçar InputNeuronIDs/OutputNeuronIDs se eles forem os últimos a serem removidos.
+	    // A lógica de criação de I/O primeiro mitiga isso.
+	}
+
 }
 
-func (cn *CrowNet) generatePositionInRadius(maxRadius float64) neuron.Point {
-	for {
-		var p neuron.Point
-		for i := 0; i < 16; i++ {
-			p[i] = (rand.Float64()*2*maxRadius - maxRadius)
-		}
-		var distSq float64
-		for i := 0; i < 16; i++ {
-			distSq += p[i] * p[i]
-		}
-		if distSq <= maxRadius*maxRadius {
-			return p
-		}
+// finalizeInitialization realiza tarefas de configuração final após a criação dos neurônios.
+func (cn *CrowNet) finalizeInitialization() {
+	sort.Slice(cn.InputNeuronIDs, func(i, j int) bool { return cn.InputNeuronIDs[i] < cn.InputNeuronIDs[j] })
+	sort.Slice(cn.OutputNeuronIDs, func(i, j int) bool { return cn.OutputNeuronIDs[i] < cn.OutputNeuronIDs[j] })
+
+	// Inicializa o histórico de disparos para neurônios de output
+	for _, outID := range cn.OutputNeuronIDs {
+		cn.outputFiringHistory[outID] = make([]common.CycleCount, 0)
 	}
 }
 
-// RunCycle simulates one cycle of the network.
+// SetDynamicState permite ligar/desligar as principais dinâmicas da rede.
+// Útil para o modo 'observe' ou para depuração.
+func (cn *CrowNet) SetDynamicState(learning, synaptogenesis, chemicalModulation bool) {
+	cn.isLearningEnabled = learning
+	cn.isSynaptogenesisEnabled = synaptogenesis
+	cn.isChemicalModulationEnabled = chemicalModulation
+}
+
+// RunCycle executa um único ciclo de simulação da rede.
 func (cn *CrowNet) RunCycle() {
-	// fmt.Printf("Cycle %d starting. Cortisol: %.2f, Dopamine: %.2f. Active pulses: %d\n", cn.CycleCount, cn.CortisolLevel, cn.DopamineLevel, len(cn.ActivePulses))
-	newlyFiredPulses := make([]*Pulse, 0)
+	// 0. Processar inputs baseados em frequência (para modo 'sim')
+	cn.processFrequencyInputs()
 
-	// 0. Process Inputs (fire input neurons based on frequency)
-	cn.processInputs()
-
-	// 1. Update neuron states and decay accumulated pulses
+	// 1. Atualizar estados dos neurônios e decair potencial acumulado
 	for _, n := range cn.Neurons {
-		n.DecayPulseAccumulation()   // Decay first
-		n.UpdateState(cn.CycleCount) // Then update refractory state, etc.
+		n.DecayPotential(&cn.Config.SimParams)
+		n.AdvanceState(cn.CycleCount, &cn.Config.SimParams) // Avança estados refratários, etc.
 	}
 
-	// 2. Process active pulses
-	remainingActivePulses := make([]*Pulse, 0, len(cn.ActivePulses))
-	for _, p := range cn.ActivePulses {
-		if !p.Propagate() { // Advance pulse, check if it's still active
-			//  fmt.Printf("Pulse from %d (orig cycle %d) dissipated at dist %.2f.\n", p.EmittingNeuronID, p.CreationCycle, p.CurrentDistance)
-			continue // Pulse dissipated or out of range
-		}
-		remainingActivePulses = append(remainingActivePulses, p)
+	// 2. Propagar pulsos ativos e processar seus efeitos
+	newlyCreatedPulses := cn.processActivePulses()
+	cn.ActivePulses = append(cn.ActivePulses, newlyCreatedPulses...)
 
-		pulseEffectStartDist, pulseEffectEndDist := p.GetEffectRangeForCycle()
-		// fmt.Printf("Pulse from %d (val %.2f) effect range: [%.2f, %.2f)\n", p.EmittingNeuronID, p.Value, pulseEffectStartDist, pulseEffectEndDist)
-
-		// Find neurons in the pulse's effect shell for this cycle
-		for _, targetNeuron := range cn.Neurons {
-			if targetNeuron.ID == p.EmittingNeuronID {
-				continue // Neuron cannot stimulate itself with its own pulse this way
-			}
-			if targetNeuron.State == neuron.AbsoluteRefractoryState {
-				continue // Cannot be affected by pulses in absolute refractory state
-			}
-
-			distanceToTarget := utils.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
-
-			if distanceToTarget >= pulseEffectStartDist && distanceToTarget < pulseEffectEndDist {
-				// This neuron is hit by the pulse in this cycle
-				// fmt.Printf("Neuron %d (state %d, acc %.2f) hit by pulse from %d (value: %.2f). Dist: %.2f. Range: [%.2f, %.2f)\n", targetNeuron.ID, targetNeuron.State, targetNeuron.AccumulatedPulse, p.EmittingNeuronID, p.Value, distanceToTarget, pulseEffectStartDist, pulseEffectEndDist)
-
-				// Special handling for dopamine if this were a dopamine "pulse"
-				// For now, dopaminergic neurons' "firing" will be handled in chemical modulation step.
-				// Here we only process standard excitatory/inhibitory pulses.
-				// p.Value is the base signal sign (+1.0 or -1.0) from the emitting neuron
-				if p.Value == 0 {
-					continue
-				}
-
-				weight := cn.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
-				effectiveValue := p.Value * weight
-
-				if math.Abs(effectiveValue) < 1e-6 { // If weight is effectively zero, no effect
-					continue
-				}
-
-				if targetNeuron.ReceivePulse(effectiveValue, cn.CycleCount) {
-					// Target neuron fired!
-					// fmt.Printf("Neuron %d Fired! (type %d, threshold: %.2f, accumulated: %.2f)\n", targetNeuron.ID, targetNeuron.Type, targetNeuron.CurrentFiringThreshold, targetNeuron.AccumulatedPulse)
-
-					if targetNeuron.Type == neuron.OutputNeuron {
-						cn.recordOutputFiring(targetNeuron.ID, cn.CycleCount)
-					}
-
-					baseSignalForNewPulse := targetNeuron.GetBasePulseSign()
-					if baseSignalForNewPulse != 0 { // Only create pulses that have a non-zero base signal type
-						newP := NewPulse(targetNeuron.ID, targetNeuron.Position, baseSignalForNewPulse, cn.CycleCount, cn.PulseMaxTravelDistance)
-						newlyFiredPulses = append(newlyFiredPulses, newP)
-						// fmt.Printf("New pulse created from neuron %d (base signal: %.2f) at cycle %d\n", newP.EmittingNeuronID, newP.Value, cn.CycleCount)
-					}
-				}
-			}
-		}
-	}
-	cn.ActivePulses = remainingActivePulses
-	cn.ActivePulses = append(cn.ActivePulses, newlyFiredPulses...) // Append all newly created pulses
-
-	// TODO: Implement the README's 10-step pulse propagation if the current model is too simple.
-
-	if cn.EnableChemicalModulation {
-		// 3. Update Chemical Levels (Cortisol, Dopamine)
-		cn.updateCortisolLevel()
-		cn.updateDopamineLevel()
-		cn.applyCortisolEffects()
-		cn.applyDopamineEffects()
+	// 3. Atualizar ambiente neuroquímico e aplicar seus efeitos
+	if cn.isChemicalModulationEnabled {
+		cn.ChemicalEnv.UpdateLevels(cn.Neurons, cn.ActivePulses, cn.CortisolGlandPosition, &cn.Config.SimParams)
+		cn.ChemicalEnv.ApplyEffectsToNeurons(cn.Neurons, &cn.Config.SimParams)
 	} else {
-		// Ensure synaptogenesis factor is reset if chemicals are off
-		cn.currentSynaptogenesisModulationFactor = 1.0
-		// Ensure neuron thresholds are at base if chemicals are off
+		// Se químicos estão desligados, garantir que fatores de modulação sejam neutros
+		// e limiares dos neurônios estejam no valor base.
+		cn.ChemicalEnv.LearningRateModulationFactor = 1.0
+		cn.ChemicalEnv.SynaptogenesisModulationFactor = 1.0
 		for _, n := range cn.Neurons {
 			n.CurrentFiringThreshold = n.BaseFiringThreshold
 		}
 	}
 
-	// 6. Apply Hebbian Plasticity (neuromodulated)
-	// This should happen after neuron states (like LastFiredCycle) and chemical levels for the current cycle are determined.
-	cn.ApplyHebbianPlasticity() // Assumes this method exists and uses current net.CortisolLevel, net.DopamineLevel
-
-	if cn.EnableSynaptogenesis {
-		// 7. Apply Synaptogenesis (now modulated by chemicals if they are enabled)
-		cn.applySynaptogenesis()
+	// 4. Aplicar aprendizado Hebbiano (se habilitado)
+	if cn.isLearningEnabled {
+		cn.applyHebbianLearning()
 	}
 
-	// 8. Handle Input/Output (already handled: input by processInputs, output by recordOutputFiring)
-	//    The GetOutputFrequency method is for external querying.
-
-	// Removed temporary firing of input neuron 0, now handled by processInputs via SetInputFrequency.
+	// 5. Aplicar sinaptogênese (movimento de neurônios, se habilitado)
+	if cn.isSynaptogenesisEnabled {
+		cn.applySynaptogenesis()
+	}
 
 	cn.CycleCount++
 }
 
-// GetSynaptogenesisModulationFactor returns the combined modulation factor for synaptogenesis
-// based on current chemical levels (cortisol, dopamine, etc.).
-func (cn *CrowNet) GetSynaptogenesisModulationFactor() float64 {
-	return cn.currentSynaptogenesisModulationFactor
+// processActivePulses propaga todos os pulsos ativos, processa seus efeitos nos neurônios
+// e retorna uma lista de novos pulsos gerados por neurônios que dispararam.
+// Também remove os pulsos que se dissiparam.
+func (cn *CrowNet) processActivePulses() []*pulse.Pulse {
+	remainingActivePulses := make([]*pulse.Pulse, 0, len(cn.ActivePulses))
+	newlyFiredPulses := make([]*pulse.Pulse, 0)
+
+	for _, p := range cn.ActivePulses {
+		if !p.Propagate(&cn.Config.SimParams) {
+			continue // Pulso dissipou (excedeu MaxTravelRadius)
+		}
+		remainingActivePulses = append(remainingActivePulses, p)
+
+		shellStartRadius, shellEndRadius := p.GetEffectShellForCycle(&cn.Config.SimParams)
+
+		for _, targetNeuron := range cn.Neurons {
+			if targetNeuron.ID == p.EmittingNeuronID {
+				continue // Um pulso não afeta o neurônio que o emitiu desta forma
+			}
+
+			// Verifica se o targetNeuron está dentro da casca de efeito do pulso
+			distanceToTarget := space.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
+
+			if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
+				// Neurônio atingido pelo pulso
+				weight := cn.SynapticWeights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
+				effectivePotential := p.BaseSignalValue * weight // BaseSignalValue é +/-1.0 ou 0.0
+
+				if effectivePotential == 0 { // Se peso for zero ou BaseSignalValue for zero
+					continue
+				}
+
+				if targetNeuron.IntegrateIncomingPotential(effectivePotential, cn.CycleCount) {
+					// Neurônio disparou!
+					// O estado do targetNeuron já foi mudado para Firing por IntegrateIncomingPotential.
+					// Ele será avançado para AbsoluteRefractory em AdvanceState no início do *próximo* ciclo.
+					// Ou, se AdvanceState for chamado após processPulses no mesmo ciclo, ele já terá sido atualizado.
+					// A ordem atual é: Decay, AdvanceState (para refratários), ProcessPulses (que pode causar Firing).
+					// Então, o LastFiredCycle será registrado corretamente no próximo AdvanceState.
+
+					if targetNeuron.Type == neuron.Output {
+						cn.recordOutputFiring(targetNeuron.ID)
+					}
+
+					// Gerar novo pulso a partir do neurônio que disparou
+					emittedSignal := targetNeuron.EmittedPulseSign()
+					if emittedSignal != 0 { // Apenas se o tipo de neurônio emite pulsos padrão
+						newP := pulse.New(
+							targetNeuron.ID,
+							targetNeuron.Position,
+							emittedSignal,
+							cn.CycleCount,
+							cn.Config.SimParams.SpaceMaxDimension*2.0, // MaxTravelRadius pode ser o diâmetro do espaço
+						)
+						newlyFiredPulses = append(newlyFiredPulses, newP)
+					}
+				}
+			}
+		}
+	}
+	cn.ActivePulses = remainingActivePulses // Atualiza a lista de pulsos ativos da rede
+	return newlyFiredPulses
 }
+
+// applyHebbianLearning itera sobre as conexões e aplica a regra de aprendizado.
+func (cn *CrowNet) applyHebbianLearning() {
+	// A taxa de aprendizado efetiva já considera a modulação química (via ChemicalEnv)
+	effectiveLR := common.Rate(float64(cn.Config.Cli.BaseLearningRate) * float64(cn.ChemicalEnv.LearningRateModulationFactor))
+
+	if effectiveLR < 1e-9 { // Praticamente zero, não fazer nada
+		return
+	}
+
+	coincidenceWindow := common.CycleCount(cn.Config.SimParams.HebbianCoincidenceWindow)
+
+	// Iterar sobre todos os neurônios como possíveis pré-sinápticos
+	for _, preSynapticNeuron := range cn.Neurons {
+		// Verificar atividade pré-sináptica
+		// Disparou no ciclo atual ou na janela de coincidência?
+		// LastFiredCycle é o ciclo em que o neurônio *completou* seu disparo e entrou em refratário.
+		// Se CycleCount é o ciclo atual, e LastFiredCycle == CycleCount, significa que disparou no ciclo anterior
+		// e está sendo processado neste ciclo.
+		// Se LastFiredCycle == CycleCount-1, disparou há 1 ciclo.
+		// Se LastFiredCycle == CycleCount, e estamos no meio do ProcessPulses, ele acabou de disparar.
+		// A lógica precisa ser consistente: cn.CycleCount é o ciclo *prestes a ser concluído*.
+		// Neuron.LastFiredCycle é o ciclo em que o estado Firing foi processado em AbsoluteRefractory.
+
+		preActivity := 0.0
+		// Se o neurônio disparou neste ciclo (seu estado é Firing e ainda não foi para AdvanceState),
+		// ou se disparou recentemente dentro da janela.
+		// Simples: se LastFiredCycle está dentro de [CycleCount - window, CycleCount]
+		// (Considerando que LastFiredCycle é atualizado quando o neurônio *termina* de disparar)
+		// Se CycleCount é o ciclo atual N, e o neurônio disparou no ciclo N-1, LastFiredCycle = N-1.
+		// (cn.CycleCount - preSynapticNeuron.LastFiredCycle) <= coincidenceWindow
+
+		// Para Hebbian, a atividade é geralmente se o neurônio disparou *neste* ciclo de processamento de inputs
+		// ou no ciclo imediatamente anterior.
+		// Se preSynapticNeuron.CurrentState == neuron.Firing, ele disparou neste ciclo.
+		// Se preSynapticNeuron.LastFiredCycle == cn.CycleCount (após AdvanceState), ele disparou no ciclo que acabou de passar.
+		// A forma mais robusta é olhar o LastFiredCycle.
+		if preSynapticNeuron.LastFiredCycle != -1 && (cn.CycleCount - preSynapticNeuron.LastFiredCycle <= coincidenceWindow) {
+		    preActivity = 1.0
+		}
+
+
+		if preActivity == 0.0 {
+			continue // Neurônio pré-sináptico não esteve ativo recentemente
+		}
+
+		// Iterar sobre todos os neurônios como possíveis pós-sinápticos
+		for _, postSynapticNeuron := range cn.Neurons {
+			if preSynapticNeuron.ID == postSynapticNeuron.ID {
+				continue // Sem auto-aprendizado direto na mesma sinapse
+			}
+
+			postActivity := 0.0
+			if postSynapticNeuron.LastFiredCycle != -1 && (cn.CycleCount - postSynapticNeuron.LastFiredCycle <= coincidenceWindow) {
+			    postActivity = 1.0
+			}
+
+			if postActivity > 0 { // Apenas atualizar se ambos estiverem ativos
+				cn.SynapticWeights.ApplyHebbianUpdate(
+					preSynapticNeuron.ID,
+					postSynapticNeuron.ID,
+					preActivity,
+					postActivity,
+					effectiveLR,
+					&cn.Config.SimParams,
+				)
+			}
+		}
+	}
+}
+
+// applySynaptogenesis move os neurônios com base na atividade da rede e modulação química.
+func (cn *CrowNet) applySynaptogenesis() {
+	modulationFactor := float64(cn.ChemicalEnv.SynaptogenesisModulationFactor)
+	if modulationFactor < 1e-6 { // Movimento efetivamente desligado
+		return
+	}
+
+	tempNewPositions := make(map[common.NeuronID]common.Point)
+	tempNewVelocities := make(map[common.NeuronID]common.Vector)
+
+	simParams := &cn.Config.SimParams
+
+	for _, n1 := range cn.Neurons {
+		netForce := common.Vector{} // Acumulador para a força líquida em n1
+
+		for _, n2 := range cn.Neurons {
+			if n1.ID == n2.ID {
+				continue
+			}
+
+			distance := space.EuclideanDistance(n1.Position, n2.Position)
+			if distance == 0 || (simParams.SynaptogenesisInfluenceRadius > 0 && distance > simParams.SynaptogenesisInfluenceRadius) {
+				continue // Muito longe ou sobreposto (não deveria acontecer com IDs diferentes)
+			}
+
+			// Vetor unitário de n1 para n2
+			directionUnitVector := common.Vector{}
+			for i := 0; i < 16; i++ {
+				directionUnitVector[i] = float64(n2.Position[i]-n1.Position[i]) / distance
+			}
+
+			forceMagnitude := 0.0
+			// Neurônios são atraídos por neurônios ativos (Firing, Refractory)
+			// e repelidos por neurônios em repouso (Resting).
+			if n2.CurrentState == neuron.Firing || n2.CurrentState == neuron.AbsoluteRefractory || n2.CurrentState == neuron.RelativeRefractory {
+				forceMagnitude = simParams.AttractionForceFactor * modulationFactor // Atração
+			} else if n2.CurrentState == neuron.Resting {
+				forceMagnitude = -simParams.RepulsionForceFactor * modulationFactor // Repulsão (força negativa na direção de n2)
+			}
+
+			for i := 0; i < 16; i++ {
+				netForce[i] += directionUnitVector[i] * forceMagnitude
+			}
+		}
+
+		// Atualizar velocidade: v_new = v_old * damping + netForce (dt = 1)
+		newVelocity := common.Vector{}
+		currentVelocityMagnitudeSq := 0.0
+		for i := 0; i < 16; i++ {
+			newVelocity[i] = n1.Velocity[i]*simParams.DampeningFactor + netForce[i]
+			currentVelocityMagnitudeSq += newVelocity[i] * newVelocity[i]
+		}
+
+		// Limitar velocidade máxima
+		currentVelocityMagnitude := math.Sqrt(currentVelocityMagnitudeSq)
+		if currentVelocityMagnitude > simParams.MaxMovementPerCycle {
+		    scale := simParams.MaxMovementPerCycle / currentVelocityMagnitude
+		    for i := 0; i < 16; i++ {
+		        newVelocity[i] *= scale
+		    }
+		}
+		tempNewVelocities[n1.ID] = newVelocity
+
+		// Atualizar posição: p_new = p_old + v_new (dt = 1)
+		newPosition := n1.Position
+		for i := 0; i < 16; i++ {
+			newPosition[i] += common.Coordinate(newVelocity[i])
+		}
+
+		// Manter dentro dos limites do espaço (hiperesfera)
+		clampedPosition, _ := space.ClampToHyperSphere(newPosition, simParams.SpaceMaxDimension)
+		tempNewPositions[n1.ID] = clampedPosition
+	}
+
+	// Aplicar todas as novas posições e velocidades calculadas
+	for _, n := range cn.Neurons {
+		n.Position = tempNewPositions[n.ID]
+		n.Velocity = tempNewVelocities[n.ID]
+	}
+}
+
+// --- Métodos de I/O e Controle de Modo ---
+
+// processFrequencyInputs lida com disparos de neurônios de input baseados em frequência.
+func (cn *CrowNet) processFrequencyInputs() {
+    for neuronID, timeLeft := range cn.timeToNextInputFire {
+        newTimeLeft := timeLeft - 1
+        cn.timeToNextInputFire[neuronID] = newTimeLeft
+
+        if newTimeLeft <= 0 {
+            var inputNeuron *neuron.Neuron
+            // Encontrar o neurônio de input correspondente
+            for _, n := range cn.Neurons {
+                if n.ID == neuronID && n.Type == neuron.Input {
+                    inputNeuron = n
+                    break
+                }
+            }
+
+            if inputNeuron != nil {
+                // Forçar o disparo do neurônio de input
+                inputNeuron.CurrentState = neuron.Firing
+                // O LastFiredCycle será atualizado em AdvanceState
+                // (Não precisa chamar IntegrateIncomingPotential pois é um disparo forçado)
+
+                emittedSignal := inputNeuron.EmittedPulseSign()
+                if emittedSignal != 0 {
+                    newP := pulse.New(
+                        inputNeuron.ID,
+                        inputNeuron.Position,
+                        emittedSignal,
+                        cn.CycleCount,
+                        cn.Config.SimParams.SpaceMaxDimension*2.0,
+                    )
+                    cn.ActivePulses = append(cn.ActivePulses, newP)
+                }
+            }
+            // Resetar o timer para o próximo disparo
+            targetHz := cn.inputTargetFrequencies[neuronID]
+            if targetHz > 0 {
+                cyclesPerFiring := cn.Config.SimParams.CyclesPerSecond / targetHz
+                cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cyclesPerFiring)))
+            } else {
+                delete(cn.timeToNextInputFire, neuronID) // Frequência zero ou negativa, remover da programação
+            }
+        }
+    }
+}
+
+// recordOutputFiring registra o disparo de um neurônio de output.
+func (cn *CrowNet) recordOutputFiring(neuronID common.NeuronID) {
+    isOutput := false
+    for _, id := range cn.OutputNeuronIDs {
+        if id == neuronID {
+            isOutput = true
+            break
+        }
+    }
+    if !isOutput {
+        return
+    }
+
+    history, exists := cn.outputFiringHistory[neuronID]
+    if !exists {
+        history = make([]common.CycleCount, 0)
+    }
+    history = append(history, cn.CycleCount)
+
+    // Manter o histórico dentro da janela de frequência
+    cutoffCycle := cn.CycleCount - common.CycleCount(cn.Config.SimParams.OutputFrequencyWindowCycles)
+    prunedHistory := make([]common.CycleCount, 0, len(history))
+    for _, fireCycle := range history {
+        if fireCycle >= cutoffCycle {
+            prunedHistory = append(prunedHistory, fireCycle)
+        }
+    }
+    cn.outputFiringHistory[neuronID] = prunedHistory
+}
+
+
+// --- Funções para os modos de operação (`expose`, `observe`) ---
+
+// PresentPattern ativa os neurônios de input com base no padrão fornecido.
+func (cn *CrowNet) PresentPattern(patternData []float64) error {
+	if len(patternData) != cn.Config.SimParams.PatternSize {
+		return fmt.Errorf("tamanho do padrão (%d) diferente do esperado (%d)", len(patternData), cn.Config.SimParams.PatternSize)
+	}
+	if len(cn.InputNeuronIDs) < cn.Config.SimParams.PatternSize {
+		return fmt.Errorf("não há neurônios de input suficientes (%d) para o tamanho do padrão (%d)", len(cn.InputNeuronIDs), cn.Config.SimParams.PatternSize)
+	}
+
+	for i := 0; i < cn.Config.SimParams.PatternSize; i++ {
+		if patternData[i] > 0.5 { // Considerar "ativo"
+			inputNeuronID := cn.InputNeuronIDs[i] // Assume que os IDs estão ordenados e os primeiros são usados
+			var targetNeuron *neuron.Neuron
+			for _, n := range cn.Neurons {
+				if n.ID == inputNeuronID {
+					targetNeuron = n
+					break
+				}
+			}
+			if targetNeuron != nil && targetNeuron.Type == neuron.Input {
+				targetNeuron.CurrentState = neuron.Firing // Força o disparo
+				// targetNeuron.LastFiredCycle = cn.CycleCount; // Será atualizado em AdvanceState
+
+				emittedSignal := targetNeuron.EmittedPulseSign()
+                if emittedSignal != 0 {
+                    newP := pulse.New(
+                        targetNeuron.ID,
+                        targetNeuron.Position,
+                        emittedSignal,
+                        cn.CycleCount, // Pulso criado no ciclo atual
+                        cn.Config.SimParams.SpaceMaxDimension*2.0,
+                    )
+                    cn.ActivePulses = append(cn.ActivePulses, newP)
+                }
+			} else {
+				return fmt.Errorf("neurônio de input ID %d não encontrado ou não é do tipo Input", inputNeuronID)
+			}
+		}
+	}
+	return nil
+}
+
+// ResetNetworkState limpa potenciais acumulados, pulsos ativos e reseta estados de neurônios.
+// Usado antes de apresentar um novo padrão no modo 'expose'.
+func (cn *CrowNet) ResetNetworkStateForNewPattern() {
+    for _, n := range cn.Neurons {
+        n.AccumulatedPotential = 0.0
+        // Não resetar LastFiredCycle aqui, pois é histórico para aprendizado.
+        // Resetar o estado para Resting se não for Input (Input pode ser forçado a Firing).
+        // A lógica de `AdvanceState` já lida com transições de Firing/Refractory.
+        // A preocupação é se um neurônio ficou "preso" em um estado de um padrão anterior.
+        // Para `expose`, queremos um "fresh start" para cada padrão, mas não apagar o histórico de disparo recente
+        // que pode ser usado pelo Hebbian learning (que olha para trás alguns ciclos).
+        // A forma mais simples é deixar AdvanceState e DecayPotential limparem naturalmente,
+        // e PresentPattern força os inputs a disparar.
+        // Se um neurônio não input estiver em Firing/Refractory de um ciclo anterior de *outro* padrão,
+        // isso pode ser um problema.
+        // Para o MVP, vamos apenas resetar o potencial. O estado evoluirá.
+    }
+    cn.ActivePulses = make([]*pulse.Pulse, 0) // Limpar pulsos antigos
+}
+
+
+// GetOutputActivation retorna a ativação (potencial acumulado) dos neurônios de output.
+func (cn *CrowNet) GetOutputActivation() ([]float64, error) {
+	if len(cn.OutputNeuronIDs) < cn.Config.SimParams.MinOutputNeurons {
+		return nil, fmt.Errorf("número de neurônios de output (%d) é menor que o esperado (%d)", len(cn.OutputNeuronIDs), cn.Config.SimParams.MinOutputNeurons)
+	}
+
+	outputActivations := make([]float64, cn.Config.SimParams.MinOutputNeurons)
+	for i := 0; i < cn.Config.SimParams.MinOutputNeurons; i++ {
+		outputNeuronID := cn.OutputNeuronIDs[i] // Assume que os IDs estão ordenados
+		var targetNeuron *neuron.Neuron
+		for _, n := range cn.Neurons {
+			if n.ID == outputNeuronID {
+				targetNeuron = n
+				break
+			}
+		}
+		if targetNeuron != nil && targetNeuron.Type == neuron.Output {
+			outputActivations[i] = float64(targetNeuron.AccumulatedPotential)
+		} else {
+			// Isso não deveria acontecer se OutputNeuronIDs estiver correto
+			return nil, fmt.Errorf("neurônio de output ID %d (esperado na posição %d da lista de outputs) não encontrado ou não é do tipo Output", outputNeuronID, i)
+		}
+	}
+	return outputActivations, nil
+}
+
+// ConfigureFrequencyInput define a frequência de disparo para um neurônio de input específico.
+func (cn *CrowNet) ConfigureFrequencyInput(neuronID common.NeuronID, hz float64) error {
+	isInput := false
+	for _, id := range cn.InputNeuronIDs {
+		if id == neuronID {
+			isInput = true
+			break
+		}
+	}
+	if !isInput {
+		return fmt.Errorf("neurônio ID %d não é um neurônio de input válido", neuronID)
+	}
+
+	if hz <= 0 {
+		delete(cn.inputTargetFrequencies, neuronID)
+		delete(cn.timeToNextInputFire, neuronID)
+	} else {
+		cn.inputTargetFrequencies[neuronID] = hz
+		cyclesPerFiring := cn.Config.SimParams.CyclesPerSecond / hz
+		// Iniciar disparo no próximo ciclo ou distribuir aleatoriamente o primeiro disparo
+		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(rand.Float64()*cyclesPerFiring)+1))
+	}
+	return nil
+}
+
+// GetOutputFrequency calcula a frequência de disparo de um neurônio de output nos últimos N ciclos.
+func (cn *CrowNet) GetOutputFrequency(neuronID common.NeuronID) (float64, error) {
+	isOutput := false
+	for _, id := range cn.OutputNeuronIDs {
+		if id == neuronID {
+			isOutput = true
+			break
+		}
+	}
+	if !isOutput {
+		return 0, fmt.Errorf("neurônio ID %d não é um neurônio de output válido", neuronID)
+	}
+
+	history, exists := cn.outputFiringHistory[neuronID]
+	if !exists || len(history) == 0 {
+		return 0.0, nil // Sem histórico de disparos
+	}
+
+	// A janela de cálculo é definida por OutputFrequencyWindowCycles
+	// O histórico já é podado em recordOutputFiring para manter apenas essa janela.
+	// Então, o número de disparos em `history` é o número de disparos na janela.
+	firingsInWindow := len(history)
+	windowDurationSeconds := cn.Config.SimParams.OutputFrequencyWindowCycles / cn.Config.SimParams.CyclesPerSecond
+
+	if windowDurationSeconds == 0 {
+		return 0, fmt.Errorf("OutputFrequencyWindowCycles ou CyclesPerSecond é zero, não é possível calcular frequência")
+	}
+
+	frequencyHz := float64(firingsInWindow) / windowDurationSeconds
+	return frequencyHz, nil
+}
+```
