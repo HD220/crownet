@@ -1,9 +1,44 @@
-.idea/
+# Binários compilados
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+crownet-mvp
+crownet-mvp-test
+
+# Arquivos de banco de dados SQLite
 *.db
 *.db-journal
-crownet-mvp
-data/mnist/
-/vendor/
-*.test
+
+# Cobertura e logs
 *.out
+*.log
+
+# Diretório de dependências (se não estiver usando módulos Go ou para ferramentas específicas)
+# vendor/
+
+# Arquivos de configuração de IDE
+.idea/
+.vscode/
+*.iml
+
+# Arquivos de sistema operacional
 .DS_Store
+Thumbs.db
+
+# Dados do MNIST (geralmente grandes demais para o repo)
+data/mnist_data/
+**/data/mnist_data/
+# Adicionando também os arquivos específicos do dataset MNIST baixado
+# Estes são os nomes dos arquivos que o loader.go baixa.
+train-images-idx3-ubyte.gz
+train-labels-idx1-ubyte.gz
+t10k-images-idx3-ubyte.gz
+t10k-labels-idx1-ubyte.gz
+
+# Arquivos temporários que eu possa ter criado e esquecido
+*_temp.go
+*_temp.txt
+*_temp.md
