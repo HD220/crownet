@@ -1,229 +1,311 @@
 package core
 
 import (
-	"log"
+	"fmt"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-// SimulateCycle executa um único ciclo de simulação da rede neural.
-func (nn *NeuralNetwork) SimulateCycle() {
-	nn.CurrentCycle++
-	log.Printf("--- Iniciando Ciclo %d ---", nn.CurrentCycle)
+// NetworkConfig contém os parâmetros de configuração para a rede neural.
+type NetworkConfig struct {
+	NumNeurons            int
+	SpaceSize             float64
+	PulsePropagationSpeed float64
+	MaxCycles             int
 
-	// 1. Propagar pulsos existentes, aplicar seus efeitos aos neurônios alvo
-	// e identificar quais neurônios são atingidos.
-	// Esta função também lida com a geração de dopamina por pulsos dopaminérgicos
-	// e estímulo à glândula de cortisol por pulsos excitatórios.
-	// A função `UpdatePulsesAndProcessTargets` foi redesenhada para incorporar isso.
-	// Ela também coleta novos pulsos gerados por disparos de neurônios.
-	nn.UpdatePulsesAndProcessTargets() // Esta função agora retorna void e modifica nn.Pulses diretamente
+	NeuronDistribution map[NeuronType]float64
 
-	// 2. Atualizar o estado de cada neurônio (disparo, refratário, etc.)
-	// Esta etapa foi integrada em UpdatePulsesAndProcessTargets, que chama neuron.UpdateNeuronState.
-	// Os novos pulsos gerados já foram adicionados a nn.Pulses.
+	CortisolProductionRate    float64
+	CortisolDecayRate         float64
+	CortisolEffectOnThreshold float64
+	CortisolEffectOnSynapto   float64
 
-	// 3. Aplicar decaimento de substâncias químicas (Cortisol, Dopamina)
-	nn.decayChemicals()
+	DopamineProductionByNeuron float64
+	DopamineDecayRate          float64
+	DopamineEffectOnThreshold  float64
+	DopamineEffectOnSynapto    float64
 
-	// 4. Calcular o fator de modulação global do limiar de disparo
-	// Este fator é usado por neuron.UpdateNeuronState.
-	// Idealmente, este cálculo deveria preceder a atualização do estado do neurônio.
-	// Vamos ajustar a ordem:
-	//    a. Calcular modulações (cortisol, dopamina) e seus efeitos nos limiares.
-	//    b. Propagar pulsos e aplicar seus efeitos (potencial).
-	//    c. Atualizar estado dos neurônios (disparar se limiar atingido).
-	//    d. Decair químicas.
-	// A estrutura atual em `pulse.go` e `neuron.go` já segue uma lógica similar:
-	// `UpdatePulsesAndProcessTargets` em `pulse.go`:
-	//    - Propaga pulsos.
-	//    - Aplica pulsos aos alvos (mudando potencial ou dopamina local).
-	//    - Estimula glândula de cortisol.
-	//    - Chama `neuron.UpdateNeuronState` para cada neurônio, que:
-	//        - Usa o `globalFiringThresholdFactor` (que precisa ser calculado *antes* desta chamada).
-	//        - Verifica disparo, gera novo pulso.
-	//        - Atualiza estado (refratário, etc.).
-	//    - Adiciona novos pulsos à lista da rede.
-	// `decayChemicals` é chamado depois.
+	SynaptoMovementRateAttract float64
+	SynaptoMovementRateRepel   float64
 
-	// Para corrigir a ordem, o `globalFiringThresholdFactor` deve ser calculado ANTES
-	// de `neuron.UpdateNeuronState` ser chamado dentro de `UpdatePulsesAndProcessTargets`.
-	// Vamos passar o fator calculado para `UpdatePulsesAndProcessTargets`.
+	NeuronBaseFiringThreshold      float64
+	NeuronRefractoryPeriodAbsolute int
+	NeuronRefractoryPeriodRelative int
+	NeuronPotentialDecayRate       float64
 
-	// Recalculando a ordem correta das operações dentro de SimulateCycle:
-	// nn.CurrentCycle++
-	// log.Printf("--- Iniciando Ciclo %d ---", nn.CurrentCycle)
-
-	// ETAPA A: Calcular o fator de modulação do limiar de disparo com base nos níveis atuais
-	// de cortisol e dopamina (que são do final do ciclo anterior).
-	globalFactor := nn.calculateGlobalFiringThresholdFactor() // Esta função está em pulse.go
-
-	// ETAPA B & C: Propagar pulsos, aplicar efeitos, atualizar neurônios e gerar novos pulsos.
-	// Esta função interna agora precisa do globalFactor.
-	// A função `UpdatePulsesAndProcessTargets` em `pulse.go` precisa ser ajustada para aceitar `globalFactor`
-	// e passá-lo para `neuron.UpdateNeuronState`.
-	nn.propagateAndUpdateNetworkStates(globalFactor) // Nova função wrapper em network.go
-
-	// ETAPA D: Aplicar decaimento de substâncias químicas para o próximo ciclo.
-	nn.decayChemicals() // Esta função está em pulse.go
-
-	// ETAPA E: Sinaptogênese (movimentação dos neurônios)
-	nn.ApplySynaptogenesis()
-
-	log.Printf("--- Fim do Ciclo %d ---", nn.CurrentCycle)
-	log.Printf("Nível de Cortisol: %.4f", nn.CortisolGland.CortisolLevel)
-	// Poderia logar média de dopamina ou outros status da rede.
+	RandomSeed int64
 }
 
+// DefaultNetworkConfig retorna uma configuração padrão para a rede.
+func DefaultNetworkConfig() NetworkConfig {
+	dist := make(map[NeuronType]float64)
+	dist[InputNeuron] = 0.05
+	dist[OutputNeuron] = 0.05
+	dist[DopaminergicNeuron] = 0.01
+	// Ajuste para garantir que as proporções somem 1.0
+	// (0.05+0.05+0.01 = 0.11. Restantes 0.89 para Excitatório e Inibitório)
+	// Proporção Inib/Excit = 30/69
+	totalRemainingPct := 1.0 - (dist[InputNeuron] + dist[OutputNeuron] + dist[DopaminergicNeuron])
+	propInhib := 30.0 / (30.0 + 69.0) // 30/99
+	propExcit := 69.0 / (30.0 + 69.0) // 69/99
+	dist[InhibitoryNeuron] = totalRemainingPct * propInhib
+	dist[ExcitatoryNeuron] = totalRemainingPct * propExcit
 
-// propagateAndUpdateNetworkStates é uma função interna para encapsular a lógica de atualização de pulsos e neurônios.
-// Ela utiliza o globalFiringThresholdFactor calculado no início do ciclo.
-func (nn *NeuralNetwork) propagateAndUpdateNetworkStates(globalFiringThresholdFactor float64) {
-    // Lista para armazenar pulsos que ainda estão em trânsito após este ciclo
-    stillActivePulses := make([]*Pulse, 0, len(nn.Pulses))
-    // Mapa para agregar pulsos que chegam ao mesmo neurônio alvo neste ciclo
-    pulsesArrivingAtTarget := make(map[int][]*Pulse) // neuronID -> lista de pulsos
+	// Recalcular a soma para verificar se precisa de ajuste fino devido a float precision
+	currentSum := dist[InputNeuron] + dist[OutputNeuron] + dist[DopaminergicNeuron] + dist[InhibitoryNeuron] + dist[ExcitatoryNeuron]
+	if currentSum != 1.0 {
+	    dist[ExcitatoryNeuron] += (1.0 - currentSum) // Ajusta no mais numeroso
+	}
 
-    // 1. Propagar pulsos existentes e identificar chegadas
-    for _, p := range nn.Pulses {
-        if p.Processed { continue }
+	return NetworkConfig{
+		NumNeurons:            1000,
+		SpaceSize:             100.0,
+		PulsePropagationSpeed: 0.6,
+		MaxCycles:             200,
+		NeuronDistribution:    dist,
+		CortisolProductionRate:    0.05,
+		CortisolDecayRate:         0.01,
+		CortisolEffectOnThreshold: 0.1,
+		CortisolEffectOnSynapto:   0.1,
+		DopamineProductionByNeuron: 0.1,
+		DopamineDecayRate:          0.05,
+		DopamineEffectOnThreshold:  0.1,
+		DopamineEffectOnSynapto:    0.2,
+		SynaptoMovementRateAttract: 0.05,
+		SynaptoMovementRateRepel:   0.03,
+		NeuronBaseFiringThreshold:      1.0,
+		NeuronRefractoryPeriodAbsolute: 2,
+		NeuronRefractoryPeriodRelative: 3,
+		NeuronPotentialDecayRate:       0.1, // Este não é usado diretamente se o decaimento está em Neuron.UpdateState
+		RandomSeed:                     time.Now().UnixNano(),
+	}
+}
 
-        // Lógica de propagação baseada em "casca esférica"
-        cyclesSinceEmission := nn.CurrentCycle - p.EmittedCycle
-        distCoveredEnd := float64(cyclesSinceEmission) * nn.PulsePropagationSpeed
-        distCoveredStart := float64(cyclesSinceEmission-1) * nn.PulsePropagationSpeed
-        if cyclesSinceEmission == 0 { // Primeiro ciclo de propagação (ou ciclo de emissão)
-            distCoveredStart = 0
-			// Se um pulso é emitido e processado no mesmo ciclo, cyclesSinceEmission pode ser 0.
-			// Se o pulso foi emitido no ciclo C, e estamos no ciclo C, cyclesSinceEmission = 0.
-			// Se ele propaga a partir do ciclo C+1, então no ciclo C+1, cyclesSinceEmission = 1.
-			// Assumimos que um pulso emitido no ciclo C começa a propagar no ciclo C.
-			// Efeitos em distCoveredStart=0 a distCoveredEnd=PulsePropagationSpeed.
-        }
+// Network representa a rede neural completa.
+type Network struct {
+	Config    NetworkConfig
+	Neurons   []*Neuron
+	Gland     *Gland
+	Pulses    []*Pulse
+	rng       *rand.Rand
+	CurrentCycle int
+	CortisolLevel float64
+	DopamineLevel float64
+	mu sync.RWMutex
+}
 
+// NewNetwork cria uma nova rede neural com base na configuração.
+func NewNetwork(config NetworkConfig) *Network {
+	rng := rand.New(rand.NewSource(config.RandomSeed))
+	var glandPos [SpaceDimensions]float64
+	for i := range glandPos {
+		glandPos[i] = config.SpaceSize / 2.0
+	}
+	gland := &Gland{Position: glandPos}
 
-        sourceNeuron, ok := nn.Neurons[p.SourceNeuronID]
-        if !ok {
-            p.Processed = true
-            continue
-        }
+	net := &Network{
+		Config:    config,
+		Gland:     gland,
+		rng:       rng,
+		CurrentCycle: 0,
+		CortisolLevel: 0.0,
+		DopamineLevel: 0.0,
+	}
 
-        // Verificar quais neurônios são afetados por este pulso neste ciclo
-        for targetID, targetNeuron := range nn.Neurons {
-            if targetID == p.SourceNeuronID { continue }
-            distance := EuclideanDistance(sourceNeuron.Position, targetNeuron.Position)
-            if distance >= distCoveredStart && distance < distCoveredEnd {
-                pulsesArrivingAtTarget[targetID] = append(pulsesArrivingAtTarget[targetID], p)
+	net.Neurons = make([]*Neuron, 0, config.NumNeurons)
+	neuronCounts := make(map[NeuronType]int)
+	totalAllocated := 0
+	for nType, percentage := range config.NeuronDistribution {
+		count := int(float64(config.NumNeurons) * percentage)
+		neuronCounts[nType] = count
+		totalAllocated +=count
+	}
+    // Ajustar a contagem do tipo mais numeroso (Excitatory) se a soma não bater NumNeurons
+    // devido a arredondamentos de float para int.
+    if totalAllocated != config.NumNeurons {
+        if diff := config.NumNeurons - totalAllocated; diff != 0 {
+            // Tenta adicionar/remover do excitatório, se existir. Senão, do primeiro tipo que encontrar.
+            targetType := ExcitatoryNeuron
+            _, hasExcitatory := neuronCounts[ExcitatoryNeuron]
+            if !hasExcitatory && len(neuronCounts) > 0 { // Fallback se não houver excitatórios
+                for t := range neuronCounts { targetType = t; break }
             }
-        }
-
-		// Estimular glândula de cortisol se estiver na área de efeito de um pulso excitatório
-		// A glândula de cortisol é um "ponto", não um neurônio.
-		// Verificamos se a posição da glândula está na casca de propagação do pulso excitatório.
-		if sourceNeuron.Type == Excitatory {
-			distanceToGland := EuclideanDistance(sourceNeuron.Position, nn.CortisolGland.Position)
-			if distanceToGland >= distCoveredStart && distanceToGland < distCoveredEnd {
-				nn.CortisolGland.CortisolLevel += 0.1 // Aumento arbitrário
-				if nn.CortisolGland.CortisolLevel > 2.0 { nn.CortisolGland.CortisolLevel = 2.0 }
-				log.Printf("Ciclo %d: Glândula de Cortisol estimulada por pulso de %d. Nível: %.2f", nn.CurrentCycle, p.SourceNeuronID, nn.CortisolGland.CortisolLevel)
-			}
-		}
-
-
-        if distCoveredEnd >= nn.MaxSpaceDistance {
-            p.Processed = true
-        } else {
-            stillActivePulses = append(stillActivePulses, p)
+            neuronCounts[targetType] += diff
         }
     }
 
-    currentPulses := stillActivePulses // nn.Pulses será atualizado no final com novos pulsos
+	currentID := 0
+	for nType, count := range neuronCounts {
+		for i := 0; i < count; i++ {
+			if currentID >= config.NumNeurons { break } // Segurança extra
+			var pos [SpaceDimensions]float64
+			for d := 0; d < SpaceDimensions; d++ {
+				pos[d] = net.rng.Float64() * config.SpaceSize
+			}
+			neuron := NewNeuron(currentID, nType, pos)
+			neuron.BaseFiringThreshold = config.NeuronBaseFiringThreshold
+			neuron.FiringThreshold = config.NeuronBaseFiringThreshold
+			neuron.RefractoryPeriodAbsolute = config.NeuronRefractoryPeriodAbsolute
+			neuron.RefractoryPeriodRelative = config.NeuronRefractoryPeriodRelative
+			net.Neurons = append(net.Neurons, neuron)
+			currentID++
+		}
+	}
+	if len(net.Neurons) != config.NumNeurons {
+		fmt.Printf("Warning: Initialized %d neurons, expected %d\n", len(net.Neurons), config.NumNeurons)
+	}
+	return net
+}
 
-    // 2. Aplicar pulsos que chegaram aos seus alvos
-    for targetNeuronID, arrivingPulsesList := range pulsesArrivingAtTarget {
-        targetNeuron, ok := nn.Neurons[targetNeuronID]
-        if !ok { continue }
-        for _, arrivedPulse := range arrivingPulsesList {
-            sourceOfPulse, exists := nn.Neurons[arrivedPulse.SourceNeuronID]
-            if !exists { continue }
+// GetNeuronsByType retorna uma lista de neurônios de um tipo específico.
+func (n *Network) GetNeuronsByType(neuronType NeuronType) []*Neuron {
+	var result []*Neuron
+	for _, neuron := range n.Neurons {
+		if neuron.Type == neuronType {
+			result = append(result, neuron)
+		}
+	}
+	return result
+}
 
-            if sourceOfPulse.Type == Dopaminergic {
-                if _, ok := nn.DopamineLevels[targetNeuronID]; !ok {
-                    nn.DopamineLevels[targetNeuronID] = 0.0
-                }
-                nn.DopamineLevels[targetNeuronID] += arrivedPulse.Strength
-				if nn.DopamineLevels[targetNeuronID] > 1.0 { // Limitar dopamina local
-					nn.DopamineLevels[targetNeuronID] = 1.0
+// SimulateCycle executa um ciclo completo de simulação da rede.
+func (n *Network) SimulateCycle() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.CurrentCycle++
+	var newPulses []*Pulse
+
+	// 1. Propagação de Pulsos e Efeitos nos Neurônios
+	activePulses := make([]*Pulse, 0, len(n.Pulses))
+	for _, pulse := range n.Pulses {
+		oldPulseRadius := pulse.CurrentRadius
+		pulseStillActiveAfterUpdate := pulse.UpdatePropagation(n.Config.PulsePropagationSpeed)
+		newPulseRadius := pulse.CurrentRadius
+
+		for _, neuron := range n.Neurons {
+			if neuron.ID == pulse.OriginNeuronID { continue }
+			dist := DistanceEuclidean(pulse.OriginPosition, neuron.Position)
+			if dist > oldPulseRadius && dist <= newPulseRadius { // Neurônio na nova casca esférica
+				if pulse.IsDopaminePulse() {
+					n.DopamineLevel += n.Config.DopamineProductionByNeuron
+					neuron.AddPotential(pulse.GetStrength())
+				} else {
+					neuron.AddPotential(pulse.GetStrength())
 				}
-                log.Printf("Ciclo %d: Neurônio %d recebeu dopamina de %d. Nível local: %.2f", nn.CurrentCycle, targetNeuronID, arrivedPulse.SourceNeuronID, nn.DopamineLevels[targetNeuronID])
-            } else {
-                targetNeuron.ApplyPulse(arrivedPulse, nn)
-            }
-        }
-    }
-
-    // 3. Atualizar estados dos neurônios e coletar novos pulsos
-    newlyGeneratedPulses := make([]*Pulse, 0)
-    for _, neuron := range nn.Neurons {
-		// O fator de limiar específico para este neurônio pode incluir efeitos locais de dopamina.
-		neuronSpecificThresholdFactor := globalFiringThresholdFactor
-		if localDopamine, ok := nn.DopamineLevels[neuron.ID]; ok {
-			// Exemplo: dopamina local aumenta o limiar.
-			// O README diz: "Dopamina ... serve para aumentar o limiar de disparo dos neurônios"
-			neuronSpecificThresholdFactor += localDopamine * 0.5 // Ajustar este multiplicador
-		}
-
-
-        fired, newPulse := neuron.UpdateNeuronState(nn.CurrentCycle, neuronSpecificThresholdFactor)
-        if fired {
-			log.Printf("Ciclo %d: Neurônio %d (Tipo: %d, Pot: %.2f, Thr: %.2f) disparou!", nn.CurrentCycle, neuron.ID, neuron.Type, neuron.CurrentPotential, neuron.FiringThreshold * neuronSpecificThresholdFactor)
-			if newPulse != nil {
-				newPulse.EmittedCycle = nn.CurrentCycle // Garantir que o ciclo de emissão está correto
-				// ArrivalTime será tratado na próxima iteração de propagação.
-				// Para simplificar, um pulso emitido no ciclo C pode começar a afetar alvos no mesmo ciclo C se estiverem próximos.
-				newPulse.ArrivalTime = nn.CurrentCycle
-				newlyGeneratedPulses = append(newlyGeneratedPulses, newPulse)
 			}
 		}
-    }
-    nn.Pulses = append(currentPulses, newlyGeneratedPulses...) // Adiciona novos pulsos aos que ainda estão ativos
-	log.Printf("Ciclo %d: %d pulsos ativos. %d novos pulsos gerados.", nn.CurrentCycle, len(nn.Pulses), len(newlyGeneratedPulses))
-}
-
-
-// AddExternalInput simula um input externo para um neurônio específico.
-// Isso pode ser feito aumentando diretamente o potencial do neurônio de input.
-func (nn *NeuralNetwork) AddExternalInput(neuronID int, strength float64) {
-	neuron, ok := nn.Neurons[neuronID]
-	if !ok {
-		log.Printf("Tentativa de adicionar input ao neurônio inexistente ID %d", neuronID)
-		return
-	}
-
-	// Garantir que é um neurônio de Input, embora qualquer um possa ser estimulado.
-	// if neuron.Type != Input {
-	// 	log.Printf("Aviso: Adicionando input externo a um neurônio que não é do tipo Input (ID %d, Tipo %d)", neuronID, neuron.Type)
-	// }
-
-	neuron.CurrentPotential += strength
-	// Limitar o potencial, se necessário (já feito em ApplyPulse e UpdateNeuronState)
-	log.Printf("Input externo de %.2f adicionado ao neurônio %d. Novo potencial: %.2f", strength, neuronID, neuron.CurrentPotential)
-}
-
-// GetOutputActivity retorna a atividade (frequência de disparo) dos neurônios de output.
-// Para o MVP, podemos simplesmente retornar se eles dispararam no último ciclo ou seus potenciais.
-// Uma medida de frequência real exigiria observar ao longo de vários ciclos.
-func (nn *NeuralNetwork) GetOutputActivity() map[int]float64 {
-	activity := make(map[int]float64)
-	for id, neuron := range nn.Neurons {
-		if neuron.Type == Output {
-			// Para o MVP, vamos retornar o potencial atual como uma proxy da atividade.
-			// Ou, se disparou no ciclo atual.
-			// if neuron.LastFiringCycle == nn.CurrentCycle {
-			// 	activity[id] = 1.0 // Disparou
-			// } else {
-			// 	activity[id] = 0.0 // Não disparou
-			// }
-			activity[id] = neuron.CurrentPotential
+		if pulseStillActiveAfterUpdate {
+			activePulses = append(activePulses, pulse)
 		}
 	}
-	return activity
+	n.Pulses = activePulses
+
+	// Checagem de pulsos excitatórios atingindo a glândula de cortisol
+	for _, pulse := range n.Pulses {
+		if pulse.Strength > 0 {
+			distOriginToGland := DistanceEuclidean(pulse.OriginPosition, n.Gland.Position)
+			oldRadiusForGlandCheck := pulse.CurrentRadius - n.Config.PulsePropagationSpeed
+			if oldRadiusForGlandCheck < 0 { oldRadiusForGlandCheck = 0 }
+			if distOriginToGland > oldRadiusForGlandCheck && distOriginToGland <= pulse.CurrentRadius {
+				n.CortisolLevel += n.Config.CortisolProductionRate
+			}
+		}
+	}
+
+	// 2. Atualização do Estado dos Neurônios e Geração de Novos Pulsos
+	for _, neuron := range n.Neurons {
+		fired := neuron.UpdateState(n.CurrentCycle)
+		if fired {
+			var strength float64
+			switch neuron.Type {
+			case ExcitatoryNeuron, InputNeuron, OutputNeuron:
+				strength = 0.3
+			case InhibitoryNeuron:
+				strength = -0.3
+			case DopaminergicNeuron:
+				strength = 0.1
+			}
+			newPulses = append(newPulses, NewPulse(neuron.ID, neuron.Position, strength, n.CurrentCycle, neuron.Type))
+			if neuron.Type == DopaminergicNeuron {
+				n.DopamineLevel += n.Config.DopamineProductionByNeuron
+			}
+		}
+	}
+	n.Pulses = append(n.Pulses, newPulses...)
+
+	// 3. Atualização dos Níveis de Neuroquímicos (Decaimento)
+	n.CortisolLevel *= (1.0 - n.Config.CortisolDecayRate)
+	if n.CortisolLevel < 0 { n.CortisolLevel = 0 }
+	n.DopamineLevel *= (1.0 - n.Config.DopamineDecayRate)
+	if n.DopamineLevel < 0 { n.DopamineLevel = 0 }
+
+	// 4. Efeitos dos Neuroquímicos nos Neurônios
+	for _, neuron := range n.Neurons {
+		thresholdAdjustment := 0.0
+		thresholdAdjustment += n.DopamineLevel * n.Config.DopamineEffectOnThreshold
+		if n.CortisolLevel > 1.0 {
+			thresholdAdjustment += (n.CortisolLevel - 1.0) * n.Config.CortisolEffectOnThreshold
+		} else if n.CortisolLevel > 0.1 {
+			thresholdAdjustment -= (n.CortisolLevel) * n.Config.CortisolEffectOnThreshold * 0.5
+		}
+		neuron.AdjustFiringThreshold(thresholdAdjustment)
+	}
+
+	// 5. Sinaptogênese
+	n.applySynaptogenesis()
+}
+
+// SetInput ativa neurônios de input.
+func (n *Network) SetInput(inputPattern []float64) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	inputNeurons := n.GetNeuronsByType(InputNeuron)
+	if len(inputNeurons) == 0 { return }
+	for i, val := range inputPattern {
+		if i < len(inputNeurons) {
+			inputNeurons[i].AddPotential(val)
+		}
+	}
+}
+
+// GetOutput lê neurônios de output.
+func (n *Network) GetOutput() []float64 {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	outputNeurons := n.GetNeuronsByType(OutputNeuron)
+	outputValues := make([]float64, len(outputNeurons))
+	for i, neuron := range outputNeurons {
+		outputValues[i] = neuron.CurrentPotential
+	}
+	return outputValues
+}
+
+// ResetNetworkState reseta o estado volátil da rede.
+func (n *Network) ResetNetworkState() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.Pulses = nil
+	n.CurrentCycle = 0
+	for _, neuron := range n.Neurons {
+		neuron.CurrentPotential = 0
+		neuron.State = RestingState
+		neuron.RefractoryCycles = 0
+		neuron.LastFiringCycle = -1
+		neuron.FiringThreshold = neuron.BaseFiringThreshold
+	}
+}
+
+// applySynaptogenesis (chamada placeholder)
+func (n *Network) applySynaptogenesis() {
+	 ApplySynaptogenesis(n)
+}
+
+// GetNeuronByID retorna um neurônio pelo seu ID.
+func (n *Network) GetNeuronByID(id int) *Neuron {
+    if id < 0 || id >= len(n.Neurons) {
+        return nil
+    }
+    return n.Neurons[id]
 }

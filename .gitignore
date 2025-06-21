@@ -1,25 +1,44 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Binários compilados
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
+crownet-mvp
+crownet-mvp-test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Arquivos de banco de dados SQLite
+*.db
+*.db-journal
+
+# Cobertura e logs
 *.out
+*.log
 
-# Dependency directories (remove the comment below to include it)
+# Diretório de dependências (se não estiver usando módulos Go ou para ferramentas específicas)
 # vendor/
 
-# Go workspace file
-go.work
-go.work.sum
+# Arquivos de configuração de IDE
+.idea/
+.vscode/
+*.iml
 
-# env file
-.env
+# Arquivos de sistema operacional
+.DS_Store
+Thumbs.db
+
+# Dados do MNIST (geralmente grandes demais para o repo)
+data/mnist_data/
+**/data/mnist_data/
+# Adicionando também os arquivos específicos do dataset MNIST baixado
+# Estes são os nomes dos arquivos que o loader.go baixa.
+train-images-idx3-ubyte.gz
+train-labels-idx1-ubyte.gz
+t10k-images-idx3-ubyte.gz
+t10k-labels-idx1-ubyte.gz
+
+# Arquivos temporários que eu possa ter criado e esquecido
+*_temp.go
+*_temp.txt
+*_temp.md
