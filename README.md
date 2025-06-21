@@ -1,80 +1,89 @@
-# CrowNet
+# CrowNet: A Biologically Inspired Neural Network Simulator
 
-**CrowNet** é um modelo computacional de rede neural inspirado em processos biológicos, simula a interação de neurônios em um espaço vetorial de 16 dimensões. Através de dinâmicas como sinapogênese, propagação de pulso, e interação de substâncias químicas como **cortisol** e **dopamina**, o modelo visa replicar aspectos de redes neurais biológicas de forma procedural e otimizada para uso computacional.
+**CrowNet** is a command-line application written in Go that simulates a computational neural network model. It draws inspiration from biological processes, featuring neurons interacting in a 16-dimensional vector space, synaptogenesis (activity-dependent neuron movement), and neuromodulation by simulated cortisol and dopamine.
 
-## Estrutura do Modelo
+The current Minimum Viable Product (MVP) focuses on demonstrating **neuromodulated Hebbian self-learning**. The network is exposed to simple digit patterns (0-9) and aims to self-organize its synaptic weights to form distinct internal representations (activity patterns across designated output neurons) for these different inputs. The learning process (plasticity) itself is influenced by the simulated chemical environment.
 
-### 1. **Localização dos Neurônios em 16 Dimensões**
-- O modelo representa a rede de neurônios em um espaço vetorial de 16 dimensões.
-- A posição dos neurônios é gerada proceduralmente, com base em um gerador de ruído como **OpenNoise** ou uma solução personalizada, para garantir que a rede inicializada não seja aleatória, mas tenha uma estrutura organizada.
-  
-### 2. **Distribuição dos Neurônios**
-- **1% Dopaminérgicos** (Raio Maior: 60% do espaço)
-- **30% Inibitórios** (Raio Menor: 10% do espaço)
-- **69% Excitatórios** (Raio Médio: 30% do espaço)
-- **5% Input**
-- **5% Output**
-  
-A **glândula de cortisol** fica localizada no centro do espaço vetorial e serve como ponto de referência importante para a dinâmica da rede.
+## Core Concepts Implemented
 
-### 3. **Tecnologias Utilizadas**
-- **ArrayFire**: Utilizado para aceleração de cálculos com uso de GPU, visando otimizar o processamento da rede neural.
-- **SQLite**: Banco de dados para armazenar o estado do modelo e facilitar a análise e monitoramento da evolução da rede neural.
-- **Robotgo**: Usado para visualizar o modelo na tela e controlar o teclado/mouse para interações em tempo real.
-- **OpenNoise** (ou desenvolvimento próprio): Utilizado para a geração procedural da distribuição inicial dos neurônios, para encontrar as melhores configurações iniciais sem a necessidade de treinar do zero.
+*   **16-Dimensional Space:** Neurons exist and move within a 16D vector space.
+*   **Neuron Types:** The network consists of Excitatory, Inhibitory, Dopaminergic, Input, and Output neurons, each with specific roles and distribution patterns.
+*   **Pulse Propagation:** A simplified spherical expansion model where pulses travel at a fixed speed (0.6 units/cycle). The original, more complex 10-step propagation model described below is currently deferred.
+*   **Synaptic Weights:** Explicit synaptic weights between neurons are implemented and initialized randomly. These weights determine the strength of influence when a pulse travels from one neuron to another.
+*   **Neuromodulated Hebbian Learning:**
+    *   **Hebbian Plasticity:** Synaptic weights are adjusted based on the principle of "neurons that fire together, wire together." Co-activation of pre- and post-synaptic neurons (within a defined time window) leads to strengthening of their connection.
+    *   **Neuromodulation:** The base learning rate for Hebbian updates is modulated by global levels of:
+        *   **Dopamine:** Produced by firing dopaminergic neurons. Higher dopamine levels enhance the learning rate, promoting plasticity.
+        *   **Cortisol:** Produced by excitatory pulses near a central "gland." High cortisol levels suppress the learning rate, reducing plasticity.
+    *   Firing thresholds of neurons are also modulated by these chemicals.
+*   **Synaptogenesis:** Neurons can move in the 16D space. Their movement is influenced by the activity of nearby neurons (attraction to active, repulsion from resting) and modulated by chemical levels (high cortisol reduces movement). This dynamic spatial arrangement can influence connectivity over time.
+*   **Input Encoding:** Simple 5x7 binary patterns for digits 0-9 are used as input. These patterns activate a designated set of 35 input neurons.
+*   **Output Representation:** The network has 10 designated output neurons. The goal of the self-learning process is for these neurons to develop distinct and consistent patterns of activity in response to different input digits. The MVP focuses on observing these patterns rather than achieving perfect classification to digit labels.
 
-### 4. **Ciclos dos Neurônios**
-O comportamento dos neurônios é modelado em 4 ciclos principais:
-1. **Repouso**: O neurônio não está disparando.
-2. **Disparo**: O neurônio dispara um pulso.
-3. **Refratário Absoluto**: O neurônio não pode disparar, independente do estímulo.
-4. **Refratário**: O neurônio está temporariamente inativo, mas pode ser estimulado novamente.
+## Modes of Operation (Command Line)
 
-### 5. **Propagação de Pulso**
-A propagação de pulso entre os neurônios é baseada na distância percorrida:
-- **Velocidade de propagação**: 0.6 unidades por ciclo.
-- **Distância máxima do espaço**: 8 unidades, o que leva cerca de 13,33 ciclos para o pulso percorrer o espaço de ponta a ponta.
+The application supports three main modes:
 
-### 6. **Cálculo de Distância**
-- A distância entre os neurônios é calculada com base na **distância Euclidiana** em 16 dimensões.
-- Busca de vizinhos feita usando a distancia do neuronio com os pontos referenciais descontando o raio, os que tiverem as distancias todas maiores que a distancia do neuronio emissor com o referencial-raio estão dentro da area de cobertura.
+1.  **`expose` Mode (`-mode expose`):**
+    *   Presents the predefined digit patterns (0-9) to the network repeatedly over a specified number of epochs.
+    *   During this phase, all dynamics are active: Hebbian learning updates weights, chemical levels modulate learning rates and thresholds, and synaptogenesis allows neurons to move.
+    *   This mode is for allowing the network to self-organize based on input experience.
+    *   Learned synaptic weights can be saved to a file.
+    *   Key flags: `-epochs`, `-lrBase` (base learning rate), `-cyclesPerPattern`, `-weightsFile`.
 
-### 7. **Sinapogênese**
-A sinapogênese é a taxa de movimentação dos neurônios no espaço, ajustada após a propagação de pulsos:
+2.  **`observe` Mode (`-mode observe`):**
+    *   Loads a previously saved set of synaptic weights.
+    *   Presents a specified digit pattern to the network.
+    *   Runs the network for a few "settling" cycles (with Hebbian learning, synaptogenesis, and dynamic chemical changes temporarily disabled for a clean feed-forward pass).
+    *   Outputs the activation pattern (e.g., `AccumulatedPulse` values) of the 10 output neurons, allowing the user to see how the trained network represents the input digit.
+    *   Key flags: `-digit <0-9>`, `-weightsFile`, `-cyclesToSettle`.
+
+3.  **`sim` Mode (`-mode sim`):**
+    *   Runs a general simulation with all dynamics (synaptogenesis, chemical modulation, Hebbian learning if weights are present) enabled.
+    *   Allows for continuous input stimulus to a specified input neuron at a given frequency.
+    *   Can log full network snapshots to an SQLite database for detailed analysis.
+    *   Useful for observing the original CrowNet dynamic behaviors over longer periods without the specific constraints of the digit exposure/observation tasks.
+    *   Key flags: `-cycles`, `-stimInputID`, `-stimInputFreqHz`, `-monitorOutputID`, `-dbPath`, `-saveInterval`, `-debugChem`.
+
+## Technologies Utilized (MVP)
+
+*   **Go:** Implementation language.
+*   **SQLite:** For saving detailed simulation snapshots (primarily in "sim" mode or for detailed analysis of "expose" mode).
+*   **JSON:** For saving and loading learned synaptic weights.
+
+### Deferred/Future Technologies (from original README)
+*   **ArrayFire (GPU Acceleration):** Not implemented in MVP due to environmental constraints.
+*   **Robotgo (Visualization):** Not implemented in MVP.
+*   **OpenNoise (Procedural Generation):** Neuron placement currently uses random distribution within radial constraints; a sophisticated noise generator is deferred.
+
+## Further Documentation
+
+For more detailed information, please refer to:
+*   `PROJECT_REQUIREMENTS.md`: Goals, scope, and features of the current MVP.
+*   `USE_CASES.md`: Scenarios for using the different modes of the application.
+*   `TECHNICAL_DESIGN.md`: Overview of the architecture, data structures, and core algorithms.
+
+## Original README Concepts (Preserved for Context)
+
+(The following sections are largely from the original README, providing context on the initial biological inspirations. Some aspects, like the detailed 10-step pulse propagation, are simplified in the current MVP.)
+
+### Neuron Cycles & Firing
+(Original section 4, 10, 11 from README can be kept as they generally apply)
+O comportamento dos neurônios é modelado em 4 ciclos principais: Repouso, Disparo, Refratário Absoluto, Refratário. Cada neurônio mantém um registro do último ciclo em que disparou. Os neurônios disparam quando a soma dos pulsos recebidos (modulated by weights) excede o limiar de disparo. Quando não recebem pulsos, a soma diminui gradativamente.
+
+### Pulse Propagation (Original Specification Detail)
+(Original section 5, 6, and the 10-step pseudocode from README can be kept here, with a note that the MVP uses a simplified spherical expansion model currently.)
+A propagação de pulso entre os neurônios é baseada na distância percorrida (velocidade: 0.6 unidades/ciclo). A distância é Euclidiana em 16D.
+*Original 10-step pulse processing pseudocode can be included here, marked as 'deferred in current MVP implementation'.*
+
+### Synaptogenesis (Neuron Movement - As Implemented)
+A sinapogênese é a taxa de movimentação dos neurônios no espaço, ajustada após a propagação de pulsos e modulada por químicos:
 - Neurônios se aproximam daqueles que dispararam ou estavam em período refratário.
 - Neurônios se afastam daqueles que estavam em repouso.
 
-### 8. **Cortisol e Dopamina**
-- **Cortisol**: A produção de cortisol é afetada pelos pulsos excitatórios que atingem a glândula de cortisol. O cortisol diminui o limiar de disparo dos neurônios inicialmente, mas ao atingir um pico, começa a reduzir o limiar, diminuindo também a sinapogênese. Caso não haja pulsos na glândula de cortisol, a quantidade de cortisol diminui com o tempo.
-- **Dopamina**: A dopamina é gerada pelos neurônios dopaminérgicos e serve para aumentar o limiar de disparo dos neurônios e também aumentar a sinapogênese. A dopamina tem uma taxa de decaimento mais acentuada ao longo do tempo, ao contrário do cortisol.
+### Cortisol e Dopamina (Effects on Thresholds & Plasticity - As Implemented)
+- **Cortisol**: Produção afetada por pulsos excitatórios na glândula central. Modula limiar de disparo (U-shaped) e sinapogênese/taxa de aprendizado (supressão em níveis altos). Decai com o tempo.
+- **Dopamina**: Gerada por neurônios dopaminérgicos. Aumenta limiar de disparo. Aumenta sinapogênese/taxa de aprendizado. Decai mais rapidamente que o cortisol.
 
-### 9. **Codificação de Input/Output**
-A codificação de **input** e **output** dos neurônios é baseada na **frequência de pulsos (Hz)**. A frequência é algo em torno de 10 ciclos por segundo (framerate), mas ajustes serão feitos conforme a necessidade do modelo. 
-
-### 10. **Registro de Ciclos**
-Cada neurônio mantém um registro do último ciclo em que disparou, e esse contador é atualizado apenas quando o neurônio efetivamente dispara, evitando atualizações desnecessárias a cada ciclo.
-
-### 11. **Disparo dos Neurônios**
-Os neurônios disparam quando a soma dos pulsos recebidos excede o **limiar de disparo**. Quando não recebem pulsos, a soma dos pulsos diminui gradativamente, voltando ao estado basal.
-
-```go
-loop {
-  for(pulse of pulses){
-    # Processamento da propagação dos pulsos
-    1) Obter distancia do neuronio para os 17 referenciais e o raio
-    2) Subtrair o raio das 17 distancias com o referencial
-    3) Filtrar por neuronios onde a distancia com cada referencial é maior que a distancia calculada no passo anterior, exceto o proprio neuronio emissor
-    4) Calcular o vetor 16D da posição dos neuronios baseado na distancia com os referenciais
-       4.1) resolução da equação quadratica
-    5) Calcular a distancia do neuronio emissor para os neuronios
-    6) range de distancia de propagação do pulso para a iteração
-       6.1) inicio = (int8(raio/0.6)*0.6) * iteração-1
-       6.2) fim = (int8(raio/0.6)*0.6) * iteração
-    7) Verificar se a faixa fim é maior que o raio, se for retorna
-    8) Filtrar os neuronios que a distancia é maior ou igual ao inicio e menor que fim
-    9) Se for soma soma 0.3 ao valor do neurono, se for inibição subitrai 0.3 do valor do neuronio se for dopamina soma a quanidade de dopamina do neuronio
-    10) Verificar se o neuronio atingiu o limiar, se sim, criar novo pulso na fila para o neuronio
- }
-
-}
-```
+---
+This updated README should provide a good overview of the current project state.
