@@ -116,20 +116,23 @@ func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP f
 		return 0, 0, 0, nil
 	}
 
-	// Garantir que os percentuais não sejam negativos.
-	dopaP = math.Max(0.0, dopaP)
+	dopaP = math.Max(0.0, dopaP) // Garantir que os percentuais não sejam negativos.
 	inhibP = math.Max(0.0, inhibP)
 
 	numDopaminergic = int(math.Floor(float64(remainingForDistribution) * dopaP))
-	numInhibitory = int(math.Floor(float64(remainingForInternalDistribution) * inhibP))
+	numInhibitory = int(math.Floor(float64(remainingForDistribution) * inhibP))
 
 	currentAllocated := numDopaminergic + numInhibitory
 	numExcitatory = remainingForInternalDistribution - currentAllocated
 
 	if numExcitatory < 0 {
-		warnings = append(warnings, fmt.Sprintf("Percentuais de Dopa (%.2f) e Inhib (%.2f) excedem 100%% do espaço restante para neurônios internos. Ajustando contagens.", dopaP, inhibP))
+		// O warning sobre percentuais excedendo 100% é agora tratado pela validação em config.AppConfig.Validate()
+		// No entanto, a lógica de ajuste ainda é necessária aqui caso a validação seja contornada ou
+		// se os percentuais forem válidos individualmente mas sua soma para o remainingForDistribution cause numExcitatory < 0.
+		// A mensagem de warning pode ser removida daqui se a validação de config for considerada suficiente.
+		// Por ora, manteremos a lógica de ajuste, mas o warning pode ser opcional.
+		// warnings = append(warnings, fmt.Sprintf("Ajuste interno: Percentuais de Dopa (%.2f) e Inhib (%.2f) recalculados para caber no espaço restante.", dopaP, inhibP))
 		numExcitatory = 0
-		// Recalcular dopa e inhib para caber, proporcionalmente ao configurado.
 		if dopaP+inhibP > 0 { // Evitar divisão por zero
 			totalInternalPercentConfigured := dopaP + inhibP
 			numDopaminergic = int(math.Round(float64(remainingForInternalDistribution) * (dopaP / totalInternalPercentConfigured)))

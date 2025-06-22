@@ -1,10 +1,24 @@
 package network
 
 import (
+	"crownet/common" // Adicionado para TestRecordOutputFiring e outros
+	"crownet/config" // Adicionado para TestRecordOutputFiring e outros
+	"crownet/neuron" // Adicionado para TestRecordOutputFiring e outros
 	"fmt"
 	"math"
+	"math/rand" // Adicionado para TestMain e potencialmente outros
+	"reflect"   // Adicionado para DeepEqual em TestRecordOutputFiring
+	"strings"   // Adicionado para TestCalculateInternalNeuronCounts
 	"testing"
 )
+
+// Helper para comparar floats com tolerância
+func floatEquals(a, b, tolerance float64) bool {
+	if a == b { // Shortcut for exact equality, handles infinities.
+		return true
+	}
+	return math.Abs(a-b) < tolerance
+}
 
 func TestCalculateInternalNeuronCounts(t *testing.T) {
 	testCases := []struct {
@@ -1097,6 +1111,65 @@ func floatEquals(a, b, tolerance float64) bool {
 		return true
 	}
 	return math.Abs(a-b) < tolerance
+}
+
+func TestRecordOutputFiring(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.OutputFrequencyWindowCycles = 10 // Janela de 10 ciclos
+	// Usar uma semente fixa para NewCrowNet se ele usar RNG para algo na inicialização que afete este teste.
+	net := NewCrowNet(5, 0.01, &simParams, 131415)
+
+	// Configurar um neurônio de output
+	if len(net.Neurons) == 0 {
+		t.Fatal("NewCrowNet não criou neurônios")
+	}
+	outputID := net.Neurons[0].ID
+	net.Neurons[0].Type = neuron.Output // Forçar tipo para teste
+	net.OutputNeuronIDs = []common.NeuronID{outputID}
+	// Assegurar que o mapa e a slice para este ID existem.
+	// NewCrowNet -> finalizeInitialization já faz `cn.outputFiringHistory[outID] = make([]common.CycleCount, 0)`
+	if _, ok := net.outputFiringHistory[outputID]; !ok {
+		net.outputFiringHistory[outputID] = make([]common.CycleCount, 0)
+	}
+
+	// Caso 1: Registrar primeiro disparo
+	net.CycleCount = 5
+	net.recordOutputFiring(outputID)
+	if history, ok := net.outputFiringHistory[outputID]; !ok || len(history) != 1 || history[0] != 5 {
+		t.Errorf("Histórico C1 incorreto: esperado [5], got %v (ok: %t)", history, ok)
+	}
+
+	// Caso 2: Registrar múltiplos disparos dentro da janela
+	net.CycleCount = 7
+	net.recordOutputFiring(outputID)
+	net.CycleCount = 9
+	net.recordOutputFiring(outputID)
+	expectedHistory2 := []common.CycleCount{5, 7, 9}
+	if history, ok := net.outputFiringHistory[outputID]; !ok || !reflect.DeepEqual(history, expectedHistory2) {
+		t.Errorf("Histórico C2 incorreto: esperado %v, got %v", expectedHistory2, history)
+	}
+
+	// Caso 3: Registrar disparos que fazem os antigos saírem da janela (teste de poda)
+	// Histórico atual: [5, 7, 9]. Janela=10.
+	// Adicionar disparo no ciclo 16. Cutoff = 16-10 = 6.
+	// Disparos >= 6 são mantidos.
+	net.CycleCount = 16
+	net.recordOutputFiring(outputID) // Adiciona 16. Histórico antes da poda: [5,7,9,16]
+	expectedHistory3 := []common.CycleCount{7, 9, 16} // 5 deve sair
+	if history, ok := net.outputFiringHistory[outputID]; !ok || !reflect.DeepEqual(history, expectedHistory3) {
+		t.Errorf("Histórico C3 (poda): esperado %v, got %v (cutoff: %d)", expectedHistory3, history, net.CycleCount - common.CycleCount(simParams.OutputFrequencyWindowCycles))
+	}
+
+	// Caso 4: Registrar para ID não output (não deve fazer nada)
+	nonOutputID := common.NeuronID(99)
+	originalHistoryLen := len(net.outputFiringHistory[outputID])
+	net.recordOutputFiring(nonOutputID)
+	if _, ok := net.outputFiringHistory[nonOutputID]; ok {
+		t.Errorf("Histórico não deveria ter sido criado para nonOutputID")
+	}
+	if len(net.outputFiringHistory[outputID]) != originalHistoryLen {
+		t.Errorf("Histórico do outputID mudou indevidamente (%d vs %d) após registrar para nonOutputID", len(net.outputFiringHistory[outputID]), originalHistoryLen)
+	}
 }
 
 func TestMain(m *testing.M) {

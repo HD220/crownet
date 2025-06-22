@@ -21,21 +21,6 @@ type Percentage float64
 // Rate representa uma taxa (ex: taxa de aprendizado, taxa de decaimento).
 type Rate float64
 
-// Factor representa um fator de multiplicação.
-type Factor float64
-
-// Threshold representa um valor de limiar.
-type Threshold float64
-
-// Level representa o nível de uma substância química.
-type Level float64
-
-// Percentage representa um valor percentual, tipicamente no intervalo [0.0, 1.0].
-type Percentage float64
-
-// Rate representa uma taxa (ex: taxa de aprendizado, taxa de decaimento), tipicamente não-negativa.
-type Rate float64
-
 // Factor representa um fator de multiplicação, geralmente positivo.
 type Factor float64
 

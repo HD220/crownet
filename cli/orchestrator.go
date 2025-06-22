@@ -128,13 +128,22 @@ func (o *Orchestrator) Run() {
 		o.runObserveMode()
 	default:
 		// A validação em config.NewAppConfig() deve pegar isso, mas um fallback é bom.
-		log.Fatalf("Modo desconhecido: %s. Escolha um dos modos suportados.", o.AppCfg.Cli.Mode)
+	log.Fatalf("Modo desconhecido ou não suportado encontrado em Orchestrator.Run: %s.", o.AppCfg.Cli.Mode)
 	}
+
+	if errRun != nil {
+		// Usar log.Fatalf aqui ainda encerra, mas centraliza o tratamento do erro retornado pelos run...Mode.
+		// Alternativamente, Run() poderia retornar o erro para main.go tratar (o que main.go já faz para config).
+		log.Fatalf("Erro durante a execução do modo '%s': %v", o.AppCfg.Cli.Mode, errRun)
+	}
+
 	duration := time.Since(startTime)
 	fmt.Printf("\nSessão CrowNet finalizada. Duração total: %s.\n", duration)
 }
 
-func (o *Orchestrator) setupContinuousInputStimulus() {
+// setupContinuousInputStimulus configura o estímulo de input para o modo sim.
+// Retorna erro se a configuração falhar de forma crítica (ex: ID de neurônio inválido).
+func (o *Orchestrator) setupContinuousInputStimulus() error {
 	if o.AppCfg.Cli.StimInputFreqHz > 0.0 && o.AppCfg.Cli.StimInputID != -2 && len(o.Net.InputNeuronIDs) > 0 {
 		stimID := o.AppCfg.Cli.StimInputID
 		if stimID == -1 && len(o.Net.InputNeuronIDs) > 0 { // -1 para primeiro disponível
@@ -149,19 +158,18 @@ func (o *Orchestrator) setupContinuousInputStimulus() {
 			}
 		}
 		if isValidStimID {
-			// TODO: Verificar se o.Net.ConfigureFrequencyInput pode retornar erro e tratar.
 			if err := o.Net.ConfigureFrequencyInput(common.NeuronID(stimID), o.AppCfg.Cli.StimInputFreqHz); err != nil {
-				log.Printf("Aviso: Falha ao configurar estímulo de input: %v\n", err)
-			} else {
-				fmt.Printf("Estímulo geral: Neurônio de Input %d a %.1f Hz.\n", stimID, o.AppCfg.Cli.StimInputFreqHz)
+				return fmt.Errorf("falha ao configurar estímulo de input para neurônio %d a %.1f Hz: %w", stimID, o.AppCfg.Cli.StimInputFreqHz, err)
 			}
+			fmt.Printf("Estímulo geral: Neurônio de Input %d a %.1f Hz.\n", stimID, o.AppCfg.Cli.StimInputFreqHz)
 		} else {
-			fmt.Printf("Aviso: ID do neurônio de input para estímulo geral (%d) não encontrado ou inválido.\n", stimID)
+			return fmt.Errorf("ID do neurônio de input para estímulo geral (%d) não encontrado ou inválido", stimID)
 		}
 	}
+	return nil
 }
 
-func (o *Orchestrator) runSimulationLoop() {
+func (o *Orchestrator) runSimulationLoop() { // Esta função não parece precisar retornar erro, pois os logs são informativos/avisos.
 	for i := 0; i < o.AppCfg.Cli.Cycles; i++ {
 		o.Net.RunCycle()
 		if i%10 == 0 || i == o.AppCfg.Cli.Cycles-1 { // Log a cada 10 ciclos e no último
@@ -218,19 +226,22 @@ func (o *Orchestrator) reportMonitoredOutputFrequency() {
 	}
 }
 
-func (o *Orchestrator) runSimMode() {
+func (o *Orchestrator) runSimMode() error {
 	fmt.Printf("\nIniciando Simulação Geral por %d ciclos...\n", o.AppCfg.Cli.Cycles)
-	o.setupContinuousInputStimulus()
+	if err := o.setupContinuousInputStimulus(); err != nil {
+		return fmt.Errorf("erro em setupContinuousInputStimulus: %w", err)
+	}
 	o.Net.SetDynamicState(true, true, true) // Todas as dinâmicas ativas para 'sim'
-	o.runSimulationLoop()
+	o.runSimulationLoop() // runSimulationLoop não retorna erro atualmente, apenas loga avisos.
 	o.reportMonitoredOutputFrequency()
 	fmt.Printf("Estado Final: Cortisol=%.3f, Dopamina=%.3f\n", o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
+	return nil
 }
 
-func (o *Orchestrator) runExposureEpochs() {
+func (o *Orchestrator) runExposureEpochs() error {
 	allPatterns, err := datagen.GetAllDigitPatterns(&o.AppCfg.SimParams)
 	if err != nil {
-		log.Fatalf("Falha ao carregar padrões de dígitos: %v", err)
+		return fmt.Errorf("falha ao carregar padrões de dígitos: %w", err)
 	}
 
 	for epoch := 0; epoch < o.AppCfg.Cli.Epochs; epoch++ {
@@ -244,8 +255,8 @@ func (o *Orchestrator) runExposureEpochs() {
 			}
 
 			o.Net.ResetNetworkStateForNewPattern()
-			if err := o.Net.PresentPattern(pattern); err != nil {
-				log.Fatalf("Falha ao apresentar padrão para dígito %d na época %d: %v", digit, epoch+1, err)
+			if errPres := o.Net.PresentPattern(pattern); errPres != nil {
+				return fmt.Errorf("falha ao apresentar padrão para dígito %d na época %d: %w", digit, epoch+1, errPres)
 			}
 
 			for cycleInPattern := 0; cycleInPattern < o.AppCfg.Cli.CyclesPerPattern; cycleInPattern++ {
@@ -262,9 +273,10 @@ func (o *Orchestrator) runExposureEpochs() {
 			epoch+1, o.AppCfg.Cli.Epochs, patternsProcessedThisEpoch,
 			o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel, o.Net.ChemicalEnv.LearningRateModulationFactor)
 	}
+	return nil
 }
 
-func (o *Orchestrator) runExposeMode() {
+func (o *Orchestrator) runExposeMode() error {
 	fmt.Printf("\nIniciando Fase de Exposição por %d épocas (TaxaAprendizadoBase: %.4f, CiclosPorPadrão: %d)...\n",
 		o.AppCfg.Cli.Epochs, o.AppCfg.Cli.BaseLearningRate, o.AppCfg.Cli.CyclesPerPattern)
 
@@ -273,12 +285,15 @@ func (o *Orchestrator) runExposeMode() {
 	}
 
 	o.Net.SetDynamicState(true, true, true) // Todas as dinâmicas ativas para 'expose'
-	o.runExposureEpochs()
+	if err := o.runExposureEpochs(); err != nil {
+		return err
+	}
 
 	fmt.Println("Fase de exposição concluída.")
 	if err := o.saveWeights(o.AppCfg.Cli.WeightsFile); err != nil {
-		log.Fatalf(err.Error())
+		return err // Retorna o erro em vez de log.Fatalf
 	}
+	return nil
 }
 
 func (o *Orchestrator) runObservationPattern() ([]float64, error) {
@@ -288,15 +303,19 @@ func (o *Orchestrator) runObservationPattern() ([]float64, error) {
 	}
 
 	o.Net.ResetNetworkStateForNewPattern()
-	if err := o.Net.PresentPattern(patternToObserve); err != nil {
-		return nil, fmt.Errorf("falha ao apresentar padrão para observação: %w", err)
+	if errPres := o.Net.PresentPattern(patternToObserve); errPres != nil {
+		return nil, fmt.Errorf("falha ao apresentar padrão para observação: %w", errPres)
 	}
 
 	for i := 0; i < o.AppCfg.Cli.CyclesToSettle; i++ {
 		o.Net.RunCycle()
 	}
 
-	return o.Net.GetOutputActivation()
+	outputActivation, errAct := o.Net.GetOutputActivation()
+	if errAct != nil {
+		return nil, fmt.Errorf("falha ao obter ativação de saída: %w", errAct)
+	}
+	return outputActivation, nil
 }
 
 func (o *Orchestrator) displayOutputActivation(outputActivation []float64) {
@@ -311,23 +330,24 @@ func (o *Orchestrator) displayOutputActivation(outputActivation []float64) {
 	}
 }
 
-func (o *Orchestrator) runObserveMode() {
+func (o *Orchestrator) runObserveMode() error {
 	fmt.Printf("\nObservando Resposta da Rede para o dígito %d (%d ciclos de acomodação)...\n",
 		o.AppCfg.Cli.Digit, o.AppCfg.Cli.CyclesToSettle)
 
 	if err := o.loadWeights(o.AppCfg.Cli.WeightsFile); err != nil {
-		log.Fatalf("Para o modo %s: %v. Exponha a rede primeiro.", ModeObserve, err)
+		return fmt.Errorf("para o modo %s: %w. Exponha a rede primeiro", config.ModeObserve, err)
 	}
 
 	o.Net.SetDynamicState(false, false, false) // Dinâmicas alteradoras desligadas para observação
 
 	outputActivation, err := o.runObservationPattern()
 	if err != nil {
-		log.Fatalf("Falha ao rodar padrão de observação: %v", err)
+		return fmt.Errorf("falha ao rodar padrão de observação: %w", err)
 	}
 
 	o.displayOutputActivation(outputActivation)
 	o.Net.SetDynamicState(true, true, true) // Restaurar estado dinâmico padrão
+	return nil
 }
 
 // Helper para evitar pânico com slices vazias
@@ -338,8 +358,5 @@ func min(a, b int) int {
 	return b
 }
 
-// Adicionar a network.CrowNet:
-// ConfigureFrequencyInput(id common.NeuronID, hz float64)
-// GetOutputFrequency(id common.NeuronID) (float64, error)
-// SetupDopamineStimulationForExpose() (opcional, ou lógica similar)
+// Fim do arquivo
 ```
