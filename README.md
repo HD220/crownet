@@ -44,17 +44,23 @@ A aplicação suporta três modos principais, controlados pelo flag `-mode`:
 
 Para uma compreensão completa das funcionalidades, arquitetura técnica, requisitos e casos de uso do CrowNet MVP, por favor, consulte os documentos localizados no diretório `/docs`:
 
-*   **`/docs/funcional/`**: Descrições detalhadas de cada funcionalidade do sistema.
+*   **`docs/01_visao_geral.md`**: Visão geral do projeto.
+*   **`docs/02_arquitetura.md`**: Detalhes da arquitetura de software, pacotes e algoritmos.
+*   **`docs/requisitos.md`**: Requisitos Funcionais e Não Funcionais do MVP.
+*   **`docs/03_guias/`**: Guias de configuração, estilo de código e interface de linha de comando.
+    *   `guia_configuracao_ambiente.md`
+    *   `guia_estilo_codigo.md`
+    *   `guia_interface_linha_comando.md`
+*   **`docs/04_funcionalidades/`**: Descrições detalhadas de cada funcionalidade do sistema e seus casos de uso.
     *   `01-inicializacao-rede.md`
     *   `02-ciclo-simulacao-aprendizado.md`
     *   `03-entrada-saida-dados.md`
     *   `04-modos-operacao.md`
     *   `05-persistencia-dados.md`
-*   **`/docs/tecnico/`**: Documentação técnica, de estilo e arquitetural.
-    *   `guia_interface_linha_comando.md`: Detalhes sobre a CLI, flags e formatos de saída.
-    *   `arquitetura.md`: Visão geral da arquitetura de software, pacotes e algoritmos.
-    *   `requisitos.md`: Requisitos Funcionais e Não Funcionais do MVP.
-    *   `casos-de-uso/`: Descrições detalhadas dos cenários de uso para cada modo de operação.
+    *   `casos-de-uso/uc-expose.md`
+    *   `casos-de-uso/uc-observe.md`
+    *   `casos-de-uso/uc-sim.md`
+*   **Outros documentos relevantes em `/docs`**: `TESTING_SCENARIOS.md`, `use_cases.md` (pode ser redundante com os UCs em funcionalidades), `refactoring_log.md`, `testing_approach.md`.
 
 ## Como Construir e Executar (Exemplo)
 
