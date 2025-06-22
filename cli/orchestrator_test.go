@@ -151,6 +151,91 @@ func TestSetupContinuousInputStimulus_ErrorCases(t *testing.T) {
 	}
 }
 
+func TestUseCase_ExposeMode_BasicRunAndSave(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	// Ajustar PatternSize para algo pequeno para datagen não falhar se usarmos o real
+	simParams.PatternHeight = 1
+	simParams.PatternWidth = 1
+	simParams.PatternSize = 1
+	simParams.MinInputNeurons = 1
+	simParams.MinOutputNeurons = 1 // Precisa de pelo menos um output para que a rede seja válida
+
+
+	tempDir := t.TempDir()
+	weightsFilePath := filepath.Join(tempDir, "expose_uc_weights.json")
+
+	cliCfg := config.CLIConfig{
+		Mode:             config.ModeExpose,
+		WeightsFile:      weightsFilePath,
+		Epochs:           1,
+		CyclesPerPattern: 1,
+		TotalNeurons:     2, // 1 input, 1 output
+		BaseLearningRate: 0.01,
+		Seed:             777,
+	}
+	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
+	orchestrator := cli.NewOrchestrator(appCfg)
+
+	saveWeightsCalled := false
+	var savedFilePath string
+	orchestrator.SetSaveWeightsFn(func(weights synaptic.NetworkWeights, filepathStr string) error {
+		saveWeightsCalled = true
+		savedFilePath = filepathStr
+		// Não criar arquivo real, apenas verificar chamada
+		return nil
+	})
+
+	orchestrator.SetLoadWeightsFn(func(filepathStr string) (synaptic.NetworkWeights, error) {
+		return nil, fmt.Errorf("mock: arquivo de pesos não encontrado intencionalmente para expose")
+	})
+
+	originalGetDigitPatternFn := datagen.GetDigitPatternFn
+	datagen.GetDigitPatternFn = func(digit int, sp *config.SimulationParameters) ([]float64, error) {
+		return []float64{1.0}, nil // Padrão simples de 1x1
+	}
+	defer func() { datagen.GetDigitPatternFn = originalGetDigitPatternFn }()
+
+
+	// Criar a rede manualmente para o teste, como em TestRunObserveMode_OutputVerification
+	orchestrator.Net = network.NewCrowNet(cliCfg.TotalNeurons, common.Rate(cliCfg.BaseLearningRate), &simParams, cliCfg.Seed)
+	if len(orchestrator.Net.Neurons) < 2 { // Esperamos pelo menos 1 input e 1 output
+		t.Fatalf("Rede não tem neurônios suficientes (esperado %d, got %d)", cliCfg.TotalNeurons, len(orchestrator.Net.Neurons))
+	}
+	// Configurar InputNeuronIDs e OutputNeuronIDs para que PresentPattern funcione
+	// e para que a rede seja minimamente funcional para o teste.
+	// Os IDs reais são atribuídos por NewCrowNet.
+	if simParams.MinInputNeurons > 0 && len(orchestrator.Net.Neurons) >= simParams.MinInputNeurons {
+		inputIDs := make([]common.NeuronID, simParams.MinInputNeurons)
+		for i := 0; i < simParams.MinInputNeurons; i++ {
+			orchestrator.Net.Neurons[i].Type = neuron.Input
+			inputIDs[i] = orchestrator.Net.Neurons[i].ID
+		}
+		orchestrator.Net.InputNeuronIDs = inputIDs
+	}
+	if simParams.MinOutputNeurons > 0 && len(orchestrator.Net.Neurons) >= simParams.MinInputNeurons + simParams.MinOutputNeurons {
+		outputIDs := make([]common.NeuronID, simParams.MinOutputNeurons)
+		for i := 0; i < simParams.MinOutputNeurons; i++ {
+			idx := simParams.MinInputNeurons + i
+			orchestrator.Net.Neurons[idx].Type = neuron.Output
+			outputIDs[i] = orchestrator.Net.Neurons[idx].ID
+		}
+		orchestrator.Net.OutputNeuronIDs = outputIDs
+	}
+
+
+	err := orchestrator.RunExposeModeForTest()
+	if err != nil {
+		t.Fatalf("RunExposeModeForTest retornou erro inesperado: %v", err)
+	}
+
+	if !saveWeightsCalled {
+		t.Errorf("saveWeightsFn não foi chamado durante RunExposeModeForTest")
+	}
+	if savedFilePath != weightsFilePath {
+		t.Errorf("saveWeightsFn foi chamado com o caminho de arquivo incorreto: esperado '%s', got '%s'", weightsFilePath, savedFilePath)
+	}
+}
+
 func TestUseCase_SimMode_DBCreation(t *testing.T) {
 	tempDir := t.TempDir()
 	dbFilePath := filepath.Join(tempDir, "sim_test_db_creation.db")

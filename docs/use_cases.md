@@ -40,8 +40,13 @@ Este documento detalha os principais casos de uso que o sistema de simulação d
     3.  O console exibe logs indicando o progresso das épocas e o estado final dos neuromoduladores.
 *   **Fluxos Alternativos/Exceções:**
     *   Se `-weightsFile` for especificado para carregar pesos e o arquivo não existir, o sistema loga um aviso e continua com pesos inicializados aleatoriamente.
-    *   Se houver erro ao salvar o arquivo de pesos final, o sistema termina com erro.
+    *   Se houver erro ao salvar o arquivo de pesos final, o sistema termina com erro (ou retorna erro para o chamador `Run()`).
     *   Se os parâmetros da CLI forem inválidos (ex: épocas <= 0), a validação de configuração impede a execução.
+*   **Exemplo de Execução CLI (Simplificado):**
+    `./crownet -mode expose -neurons 70 -epochs 10 -cyclesPerPattern 5 -lrBase 0.01 -weightsFile trained_digits.json`
+*   **Resultados Chave Esperados:**
+    *   Criação/atualização do arquivo `trained_digits.json`.
+    *   Logs no console indicando o progresso de cada época.
 
 ## 2. CU2: Observação/Inferência da Rede em um Padrão Conhecido (Pós-Treinamento)
 
@@ -49,101 +54,104 @@ Este documento detalha os principais casos de uso que o sistema de simulação d
 *   **Descrição/Objetivo:** Apresentar um padrão específico (um dígito) a uma rede neural previamente treinada e observar o padrão de ativação de seus neurônios de saída. Isso permite avaliar quão bem a rede "reconhece" ou "classifica" o padrão de entrada.
 *   **Pré-condições:**
     1.  Um arquivo de pesos sinápticos treinado (`-weightsFile`) deve existir (geralmente resultado do CU1).
-    2.  Configuração da simulação definida.
+    2.  Configuração da simulação definida, consistente com a rede cujos pesos foram salvos.
 *   **Fluxo Principal de Eventos:**
     1.  O usuário executa o CrowNet com o modo `observe`.
     2.  Flags da CLI especificam:
         *   `-mode observe`
         *   `-digit <numero_digito>`: O dígito (0-9) a ser apresentado.
         *   `-weightsFile <caminho_arquivo>`: Arquivo contendo os pesos treinados.
-        *   `-cyclesToSettle <ciclos>`: Número de ciclos para a rede "acomodar" o padrão e estabilizar sua resposta.
-        *   `-neurons <numero>`: Deve corresponder à configuração da rede cujos pesos foram salvos.
-    3.  O sistema carrega os pesos sinápticos do `-weightsFile`. Se falhar, termina com erro.
-    4.  As dinâmicas de aprendizado e sinaptogênese da rede são desabilitadas (`SetDynamicState(false, false, false)`). A modulação química pode ou não ser desabilitada, dependendo se o objetivo é ver a resposta "pura" ou modulada. Atualmente, é desabilitada.
-    5.  O padrão do dígito especificado é obtido de `datagen`.
-    6.  O estado da rede é resetado.
-    7.  O padrão é apresentado aos neurônios de input.
-    8.  A rede executa `cyclesToSettle` ciclos de simulação.
-    9.  O potencial acumulado dos neurônios de saída é recuperado.
-    10. O sistema imprime no console o dígito apresentado e o padrão de ativação (potencial acumulado) de cada neurônio de saída.
+        *   `-cyclesToSettle <ciclos>`: Número de ciclos para a rede "acomodar" o padrão.
+        *   `-neurons <numero>`: (Deve corresponder à rede dos pesos).
+    3.  O sistema carrega os pesos do `-weightsFile`. Se falhar, termina com erro.
+    4.  Dinâmicas de aprendizado/sinaptogênese são desabilitadas.
+    5.  O padrão do dígito é apresentado à rede.
+    6.  A rede executa `cyclesToSettle` ciclos.
+    7.  O sistema imprime no console a ativação dos neurônios de saída.
 *   **Pós-condições/Resultado Esperado:**
-    1.  A saída no console mostra a ativação dos neurônios de saída. Idealmente, para uma rede bem treinada, o neurônio de saída correspondente ao dígito apresentado terá a maior ativação.
+    1.  Saída no console mostrando "Dígito Apresentado: X" e uma lista de "OutNeurônio[i] (ID Y): Z.ZZZZ", onde Z.ZZZZ é o potencial acumulado.
+    2.  Para uma rede bem treinada, o neurônio de saída associado ao dígito X deve ter a maior ativação.
 *   **Fluxos Alternativos/Exceções:**
-    *   Se `-weightsFile` não for encontrado ou for inválido, o sistema termina com erro.
-    *   Se `-digit` for inválido, a validação de configuração impede a execução.
-    *   Se houver erro ao obter o padrão do dígito ou ao apresentar o padrão à rede, o sistema termina com erro.
+    *   Falha ao carregar `-weightsFile` resulta em erro.
+    *   Dígito inválido ou erro ao obter padrão resulta em erro.
+*   **Exemplo de Execução CLI:**
+    `./crownet -mode observe -digit 7 -weightsFile trained_digits.json -neurons 70 -cyclesToSettle 10`
+*   **Resultados Chave Esperados:**
+    *   Linhas no console como: `OutNeurônio[7] (ID N): PotencialAlto` e outros neurônios com potencial mais baixo.
 
 ## 3. CU3: Simulação da Dinâmica da Rede sob Estímulo Contínuo e Logging de Estado
 
 *   **Ator Principal:** Pesquisador / Usuário da CLI
-*   **Descrição/Objetivo:** Executar uma simulação de forma livre da rede por um número especificado de ciclos, opcionalmente aplicando um estímulo contínuo a um neurônio de input específico, e registrar a evolução do estado da rede (neurônios, neuroquímicos) em um banco de dados para análise posterior.
-*   **Pré-condições:**
-    1.  Configuração da simulação definida.
+*   **Descrição/Objetivo:** Executar uma simulação de forma livre, opcionalmente com estímulo contínuo, e registrar o estado da rede para análise.
+*   **Pré-condições:** Configuração da simulação.
 *   **Fluxo Principal de Eventos:**
-    1.  O usuário executa o CrowNet com o modo `sim`.
-    2.  Flags da CLI especificam:
-        *   `-mode sim`
-        *   `-cycles <numero_de_ciclos>`
-        *   `-neurons <numero>`
-        *   (Opcional) `-stimInputID <id>` e `-stimInputFreqHz <freq>` para estímulo contínuo.
-        *   (Opcional) `-dbPath <caminho_db>` e `-saveInterval <intervalo>` para logging SQLite.
-        *   (Opcional) `-weightsFile <caminho_arquivo>` para carregar pesos iniciais (a rede não aprende ativamente neste modo por padrão, a menos que `isLearningEnabled` seja modificado programaticamente).
-    3.  O sistema inicializa a rede (e opcionalmente carrega pesos).
-    4.  Se o estímulo de input estiver configurado, ele é aplicado à rede.
-    5.  Todas as dinâmicas da rede (aprendizado, sinaptogênese, modulação química) são ativadas por padrão para o modo `sim`.
-    6.  A rede executa o número especificado de `-cycles`. Em cada ciclo:
-        a.  Inputs de frequência são processados.
-        b.  Estados dos neurônios são atualizados (potencial, disparo, refratário).
-        c.  Pulsos ativos são processados.
-        d.  Níveis neuroquímicos são atualizados e seus efeitos aplicados.
-        e.  Aprendizado Hebbiano e sinaptogênese ocorrem.
-        f.  (Opcional) Se o logging SQLite estiver ativo, o estado da rede é salvo no intervalo especificado.
-        g.  O console exibe um log resumido do estado da rede periodicamente.
-    7.  (Opcional) Se o logging SQLite estiver ativo e não houve salvamento no último ciclo devido ao intervalo, um salvamento final é feito.
-    8.  (Opcional) Frequência de um neurônio de output monitorado é reportada.
-    9.  O estado final dos neuroquímicos é impresso.
+    1.  Usuário executa com `-mode sim`.
+    2.  Flags: `-cycles`, `-neurons`, opcionalmente `-stimInputID`, `-stimInputFreqHz`, `-dbPath`, `-saveInterval`.
+    3.  Sistema inicializa a rede (opcionalmente carrega pesos se `-weightsFile` fornecido).
+    4.  Aplica estímulo se configurado.
+    5.  Executa simulação por N ciclos, aplicando todas as dinâmicas.
+    6.  Logs periódicos no console.
+    7.  Salva estado no DB em intervalos (se configurado).
+    8.  Reporta frequência de output (se configurado) e estado final dos químicos.
 *   **Pós-condições/Resultado Esperado:**
-    1.  Logs no console mostrando a progressão da simulação.
-    2.  Se o logging SQLite estiver ativo, o arquivo de banco de dados especificado contém os snapshots do estado da rede.
+    1.  Logs no console.
+    2.  Arquivo de banco de dados SQLite (`.db`) criado e populado se `-dbPath` e `-saveInterval` (ou ciclos > 0) forem usados.
 *   **Fluxos Alternativos/Exceções:**
-    *   Se `-stimInputID` for inválido, um erro é retornado/logado, e a simulação prossegue sem esse estímulo específico (ou termina, dependendo da implementação do tratamento de erro).
-    *   Erro na inicialização do logger SQLite é fatal.
+    *   ID de estímulo inválido resulta em erro (ou aviso e continuação sem o estímulo).
+    *   Erro ao inicializar logger é fatal.
+*   **Exemplo de Execução CLI:**
+    `./crownet -mode sim -cycles 500 -neurons 100 -stimInputID 0 -stimInputFreqHz 20 -dbPath simulation_log.db -saveInterval 100`
+*   **Resultados Chave Esperados:**
+    *   Criação do arquivo `simulation_log.db`.
+    *   Tabelas `NetworkSnapshots` e `NeuronStates` no DB com dados dos ciclos 100, 200, 300, 400, 500.
+    *   Log no console indicando "Estímulo geral: Neurônio de Input 0 a 20.0 Hz."
 
 ## 4. CU4: Investigação do Efeito da Neuromodulação no Aprendizado
 
 *   **Ator Principal:** Pesquisador
-*   **Descrição/Objetivo:** Comparar a eficácia ou velocidade do aprendizado (CU1) sob diferentes condições neuroquímicas simuladas.
-*   **Pré-condições:**
-    1.  Capacidade de influenciar os níveis de neuroquímicos ou seus efeitos durante o treinamento (modo `expose`). Atualmente, isso é feito através dos parâmetros em `config.SimulationParameters` que definem as taxas de produção/decaimento e os fatores de influência (ex: `DopamineInfluenceOnLR`, `CortisolInfluenceOnLR`).
+*   **Descrição/Objetivo:** Comparar a eficácia do aprendizado (CU1) sob diferentes condições neuroquímicas.
+*   **Pré-condições:** Entendimento de como os parâmetros em `config.SimulationParameters` (ex: `DopamineInfluenceOnLR`, `CortisolInfluenceOnLR`) afetam a taxa de aprendizado efetiva.
 *   **Fluxo Principal de Eventos:**
-    1.  **Sessão de Treinamento A (Baseline):**
-        a.  Executar CU1 com um conjunto de `SimulationParameters` que representem um estado neuroquímico "normal" ou de controle (ex: baixas taxas de produção, ou fatores de influência neutros/padrão). Salvar os pesos em `weights_baseline.json`.
-    2.  **Sessão de Treinamento B (Modulada):**
-        a.  Modificar os `SimulationParameters` relevantes (ex: aumentar `DopamineInfluenceOnLR` ou diminuir `CortisolInfluenceOnLR` (tornando-o menos negativo/supressor) para simular um estado pró-aprendizado; ou o oposto para um estado de aprendizado suprimido). Isso requer modificar `config.DefaultSimulationParameters()` ou ter uma forma de carregar `SimulationParameters` de um arquivo.
-        b.  Executar CU1 com os mesmos parâmetros de época, ciclos, etc., da Sessão A, mas com os `SimulationParameters` modificados. Salvar os pesos em `weights_modulated.json`.
-    3.  **Comparação:**
-        a.  Comparar os arquivos `weights_baseline.json` e `weights_modulated.json` (ex: magnitude das mudanças, distribuição dos pesos).
-        b.  Opcionalmente, executar CU2 (Modo `observe`) com ambos os conjuntos de pesos no mesmo conjunto de padrões de teste e comparar a precisão do reconhecimento.
+    1.  **Sessão A (Baseline):** Executar CU1 com `SimulationParameters` padrão. Salvar pesos (`weights_A.json`).
+    2.  **Sessão B (Dopamina Alta):** Modificar `config.DefaultSimulationParameters()` (ou usar um arquivo de config se suportado) para aumentar `DopamineInfluenceOnLR` (ex: para um valor positivo alto) e/ou diminuir `CortisolInfluenceOnLR` (ex: para um valor menos negativo). Executar CU1 com os mesmos parâmetros de treino. Salvar pesos (`weights_B.json`).
+    3.  **Sessão C (Cortisol Alto):** Modificar `SimulationParameters` para diminuir `DopamineInfluenceOnLR` e/ou aumentar o efeito supressor do `CortisolInfluenceOnLR`. Executar CU1. Salvar pesos (`weights_C.json`).
+    4.  **Comparação:**
+        a.  Analisar as diferenças nos arquivos de pesos.
+        b.  Executar CU2 (modo `observe`) com cada conjunto de pesos em um conjunto de teste de dígitos e comparar a precisão/padrões de ativação.
 *   **Pós-condições/Resultado Esperado:**
-    1.  Dois (ou mais) conjuntos de arquivos de pesos representando diferentes condições neuroquímicas.
-    2.  Observação de diferenças na estrutura dos pesos ou no desempenho da rede, correlacionadas com as modulações neuroquímicas simuladas.
-*   **Notas:** Este caso de uso é mais conceitual e depende da capacidade do pesquisador de configurar e interpretar os `SimulationParameters`. A implementação atual da neuromodulação é simplificada; modelos mais complexos exigiriam mais parâmetros.
+    1.  Diferentes arquivos de pesos.
+    2.  Diferenças observáveis no desempenho de reconhecimento, correlacionadas com as modulações. Espera-se que "Dopamina Alta" melhore o aprendizado e "Cortisol Alto" o prejudique, com base nos fatores de influência.
+*   **Exemplo de Execução CLI (Conceitual):**
+    *   `./crownet -mode expose ... -weightsFile weights_A.json` (com SimParams padrão)
+    *   *Modificar SimParams para Dopamina Alta (requer alteração no código ou config externa)*
+    *   `./crownet -mode expose ... -weightsFile weights_B.json`
+    *   `./crownet -mode observe -weightsFile weights_A.json ...`
+    *   `./crownet -mode observe -weightsFile weights_B.json ...`
+*   **Resultados Chave Esperados:**
+    *   Taxa de aprendizado efetiva (visível nos logs do modo `expose` como "FatorLR Efetivo") deve ser maior na Sessão B e menor na Sessão C em comparação com A.
+    *   Rede da Sessão B pode apresentar melhor performance no modo `observe`.
 
 ## 5. CU5: Investigação do Efeito da Neuromodulação no Limiar de Disparo
 
 *   **Ator Principal:** Pesquisador
-*   **Descrição/Objetivo:** Observar como os níveis de neuroquímicos (cortisol, dopamina) alteram o `CurrentFiringThreshold` dos neurônios, afetando sua excitabilidade.
-*   **Pré-condições:**
-    1.  Uma rede inicializada.
-    2.  Capacidade de definir/influenciar os níveis de `CortisolLevel` e `DopamineLevel` no `neurochemical.Environment` e então chamar `ApplyEffectsToNeurons`.
-*   **Fluxo Principal de Eventos (Simulado em Teste ou Código Específico):**
-    1.  Criar uma instância de `neurochemical.Environment` e `config.SimulationParameters`.
-    2.  Criar alguns neurônios de teste com `BaseFiringThreshold` conhecido.
-    3.  **Cenário A (Controle):** Manter `env.CortisolLevel = 0`, `env.DopamineLevel = 0`. Chamar `env.ApplyEffectsToNeurons()`. Verificar se `CurrentFiringThreshold` é igual a `BaseFiringThreshold`.
-    4.  **Cenário B (Alta Dopamina):** Definir `env.DopamineLevel` para um valor alto (ex: `simParams.DopamineMaxLevel`). Manter `env.CortisolLevel = 0`. Chamar `env.ApplyEffectsToNeurons()`. Verificar se `CurrentFiringThreshold` é modificado conforme esperado por `simParams.FiringThresholdIncreaseOnDopa` (ex: reduzido, se o fator for negativo).
-    5.  **Cenário C (Alto Cortisol):** Definir `env.CortisolLevel` para um valor alto. Manter `env.DopamineLevel = 0`. Chamar `env.ApplyEffectsToNeurons()`. Verificar se `CurrentFiringThreshold` é modificado conforme esperado por `simParams.FiringThresholdIncreaseOnCort` (ex: aumentado, se o fator for positivo).
-    6.  **Cenário D (Ambos Altos):** Definir ambos os níveis como altos e verificar o efeito combinado.
+*   **Descrição/Objetivo:** Observar como os níveis de neuroquímicos alteram o `CurrentFiringThreshold` dos neurônios.
+*   **Pré-condições:** Uma rede inicializada.
+*   **Fluxo Principal de Eventos (Mais adequado para teste unitário/script dedicado):**
+    1.  No código (ex: um teste ou script):
+        a.  Criar `neurochemical.Environment` e `config.SimulationParameters`.
+        b.  Ajustar `simParams.FiringThresholdIncreaseOnDopa` e `simParams.FiringThresholdIncreaseOnCort`.
+        c.  Criar neurônios de teste.
+        d.  Definir `env.DopamineLevel` e `env.CortisolLevel` para vários valores (zero, médio, alto).
+        e.  Chamar `env.ApplyEffectsToNeurons()`.
+        f.  Inspecionar `n.CurrentFiringThreshold` para cada neurônio.
 *   **Pós-condições/Resultado Esperado:**
-    1.  Observação de que `CurrentFiringThreshold` dos neurônios muda em resposta aos níveis simulados de cortisol e dopamina, de acordo com as regras definidas em `ApplyEffectsToNeurons` e os parâmetros em `SimulationParameters`.
-*   **Notas:** Este caso de uso é mais facilmente validado através de testes unitários do pacote `neurochemical` (como os já existentes) ou pequenos scripts de teste, em vez de uma execução completa da CLI, pois requer controle fino sobre os níveis químicos e inspeção direta dos estados dos neurônios.
+    1.  `CurrentFiringThreshold` varia conforme esperado:
+        *   Aumenta com cortisol (se `FiringThresholdIncreaseOnCort` > 0).
+        *   Diminui com dopamina (se `FiringThresholdIncreaseOnDopa` < 0).
+        *   Efeito combinado é multiplicativo.
+*   **Exemplo de Execução CLI (Não aplicável diretamente, mas para contexto):**
+    *   Se o modo `sim` logasse `CurrentFiringThreshold` no DB, poderia ser observado lá após configurar diferentes taxas de produção/decaimento para cortisol/dopamina.
+*   **Resultados Chave Esperados (de testes unitários/scripts):**
+    *   Verificação de que os limiares são ajustados corretamente conforme a fórmula: `Base * (1 + CortisolFactor * NormCortisol) * (1 + DopaFactor * NormDopamine)`.
+*   **Notas:** Este caso de uso é primariamente validado pelos testes unitários em `neurochemical_test.go` (`TestApplyEffectsToNeurons`).
 ```
