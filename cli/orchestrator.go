@@ -18,12 +18,19 @@ type Orchestrator struct {
 	AppCfg *config.AppConfig
 	Net    *network.CrowNet
 	Logger *storage.SQLiteLogger
+
+	// Funções para dependências externas, facilitando o mock em testes.
+	loadWeightsFn func(filepath string) (synaptic.NetworkWeights, error)
+	saveWeightsFn func(weights synaptic.NetworkWeights, filepath string) error
 }
 
 // NewOrchestrator cria um novo orquestrador.
 func NewOrchestrator(appCfg *config.AppConfig) *Orchestrator {
 	return &Orchestrator{
 		AppCfg: appCfg,
+		// Inicializa com as funções reais do pacote storage
+		loadWeightsFn: storage.LoadNetworkWeightsFromJSON,
+		saveWeightsFn: storage.SaveNetworkWeightsToJSON,
 	}
 }
 
@@ -58,20 +65,23 @@ func (o *Orchestrator) createNetwork() {
 }
 
 func (o *Orchestrator) loadWeights(filepath string) error {
-	if _, err := os.Stat(filepath); err == nil {
-		loadedWeights, errLoad := storage.LoadNetworkWeightsFromJSON(filepath)
+	if _, err := os.Stat(filepath); err == nil { // os.Stat ainda é usado para verificar a existência do arquivo
+		loadedWeights, errLoad := o.loadWeightsFn(filepath) // Usa a função injetada/mockável
 		if errLoad == nil {
 			o.Net.SynapticWeights = loadedWeights
 			fmt.Printf("Pesos existentes carregados de %s\n", filepath)
 			return nil
 		}
-		return fmt.Errorf("falha ao carregar pesos de %s (%w). Iniciando com pesos aleatórios iniciais", filepath, errLoad)
+		// Se o arquivo existe mas o carregamento falha, isso é um erro.
+		return fmt.Errorf("falha ao carregar pesos de %s: %w", filepath, errLoad)
 	}
-	return fmt.Errorf("arquivo de pesos %s não encontrado. Iniciando com pesos aleatórios iniciais", filepath)
+	// Se o arquivo não existe, não é necessariamente um erro para todos os modos (ex: expose pode começar do zero)
+	// A função chamadora decidirá se isso é um erro fatal.
+	return fmt.Errorf("arquivo de pesos %s não encontrado", filepath) // Mensagem mais simples
 }
 
 func (o *Orchestrator) saveWeights(filepath string) error {
-	if err := storage.SaveNetworkWeightsToJSON(o.Net.SynapticWeights, filepath); err != nil {
+	if err := o.saveWeightsFn(o.Net.SynapticWeights, filepath); err != nil { // Usa a função injetada/mockável
 		return fmt.Errorf("falha ao salvar pesos treinados em %s: %w", filepath, err)
 	}
 	fmt.Printf("Pesos treinados salvos em %s\n", filepath)
@@ -359,4 +369,31 @@ func min(a, b int) int {
 }
 
 // Fim do arquivo
+
+// --- Métodos de Teste (Exportados para uso no pacote _test) ---
+
+// SetupContinuousInputStimulusForTest é um wrapper de teste para setupContinuousInputStimulus.
+func (o *Orchestrator) SetupContinuousInputStimulusForTest() error {
+	return o.setupContinuousInputStimulus()
+}
+
+// RunObserveModeForTest é um wrapper de teste para runObserveMode.
+func (o *Orchestrator) RunObserveModeForTest() error {
+	return o.runObserveMode()
+}
+
+// RunExposeModeForTest é um wrapper de teste para runExposeMode.
+func (o *Orchestrator) RunExposeModeForTest() error {
+	return o.runExposeMode()
+}
+
+// SetLoadWeightsFn é um setter de teste para a função de carregar pesos.
+func (o *Orchestrator) SetLoadWeightsFn(fn func(filepath string) (synaptic.NetworkWeights, error)) {
+	o.loadWeightsFn = fn
+}
+
+// SetSaveWeightsFn é um setter de teste para a função de salvar pesos.
+func (o *Orchestrator) SetSaveWeightsFn(fn func(weights synaptic.NetworkWeights, filepath string) error) {
+	o.saveWeightsFn = fn
+}
 ```
