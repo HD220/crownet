@@ -38,7 +38,11 @@ Esta tabela rastreia as tarefas de desenvolvimento de alto nível para o projeto
 | REVIEW-007   | Revisar arquivo cli/orchestrator_report_test.go      | Concluído    | 2 - Baixa          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada dos testes de relatório do orquestrador. |
 | REVIEW-008   | Revisar arquivo cli/orchestrator_test.go             | Concluído    | 2 - Baixa          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada dos testes do orquestrador. |
 | REVIEW-009   | Revisar arquivo common/types.go                      | Concluído    | 2 - Baixa          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada dos tipos comuns. |
-| REVIEW-010   | Revisar arquivo config/config.go                     | Pendente    | 3 - Média          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada do código de configuração. |
+| REVIEW-010   | Revisar arquivo config/config.go                     | Subdividido | 3 - Média          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada do código de configuração. Veja REVIEW-010.X |
+| REVIEW-010.1 | Revisar constantes e tipos básicos em config/config.go | Pendente | 1 - Muito Baixa | AgenteJules                | REVIEW-010        | AAAA-MM-DD      | AAAA-MM-DD                        | SimulationParameters, CLIConfig, AppConfig. |
+| REVIEW-010.2 | Revisar DefaultSimulationParameters() em config/config.go | Pendente | 2 - Baixa    | AgenteJules                     | REVIEW-010        | AAAA-MM-DD      | AAAA-MM-DD                        | Verificar valores padrão e completude. |
+| REVIEW-010.3 | Revisar LoadCLIConfig() em config/config.go          | Pendente | 2 - Baixa      | AgenteJules                     | REVIEW-010        | AAAA-MM-DD      | AAAA-MM-DD                        | Definição de flags e valores padrão. |
+| REVIEW-010.4 | Revisar NewAppConfig() e Validate() em config/config.go | Pendente | 2 - Baixa    | AgenteJules                     | REVIEW-010        | AAAA-MM-DD      | AAAA-MM-DD                        | Criação de AppConfig e lógica de validação. |
 | REVIEW-011   | Revisar arquivo datagen/digits.go                    | Concluído    | 2 - Baixa          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada do código de geração de dígitos. |
 | REVIEW-012   | Revisar arquivo datagen/digits_test.go               | Concluído    | 2 - Baixa          | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Revisão detalhada dos testes de geração de dígitos. |
 | REVIEW-013   | Revisar arquivo docs/01_visao_geral.md               | Concluído   | 1 - Muito Baixa    | AgenteJules                     | -                  | AAAA-MM-DD      | AAAA-MM-DD                        | Double check de consistência da visão geral. |
@@ -107,5 +111,3 @@ Esta tabela rastreia as tarefas de desenvolvimento de alto nível para o projeto
 *   **3 (Média):** Tarefa com complexidade moderada, pode envolver múltiplas etapas.
 *   **4 (Alta):** Requer esforço significativo, pesquisa ou design.
 *   **5 (Muito Alta):** Tarefa muito complexa, pode precisar ser subdividida.
-
-[end of .jules/TASKS.md]
