@@ -151,6 +151,64 @@ func TestSetupContinuousInputStimulus_ErrorCases(t *testing.T) {
 	}
 }
 
+func TestUseCase_SimMode_DBCreation(t *testing.T) {
+	tempDir := t.TempDir()
+	dbFilePath := filepath.Join(tempDir, "sim_test_db_creation.db")
+
+	// Garantir que o arquivo não existe antes do teste
+	os.Remove(dbFilePath) // Ignorar erro se não existir
+
+	simParams := config.DefaultSimulationParameters()
+	cliCfg := config.CLIConfig{
+		Mode:         config.ModeSim,
+		Cycles:       1,
+		TotalNeurons: 10,
+		DbPath:       dbFilePath,
+		SaveInterval: 1,
+		Seed:         123,
+	}
+	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
+	orchestrator := cli.NewOrchestrator(appCfg)
+
+	var errRun error
+	// Capturar stdout para evitar poluir logs de teste, e verificar se houve erro fatal
+	// que seria impresso antes do os.Exit() de um log.Fatalf.
+	// No entanto, o Run() do orchestrator agora propaga erros dos runModes,
+	// e ele mesmo chama log.Fatalf.
+	// Para testar a criação do DB, precisamos que o fluxo de sucesso seja executado.
+	// Se NewAppConfig ou initializeLogger falharem, não chegaremos a criar a rede ou rodar o modo.
+
+	// Esta é a forma mais próxima de simular o main.go sem realmente executar um sub-processo.
+	// Se NewAppConfig (que chama Validate) estivesse mockado ou soubéssemos que esta config é válida:
+	// appCfg, _ = config.NewAppConfig() // Supondo que esta config específica passaria na validação.
+	// appCfg.Cli = cliCfg // Sobrescrever com nossa config de teste.
+
+	// Vamos chamar os componentes de Run() que levam à criação do DB.
+	// Assumindo que a configuração é válida.
+
+	runErr = orchestrator.InitializeLoggerForTest() // Usa wrapper
+	if runErr != nil {
+		t.Fatalf("Falha ao inicializar logger para teste de DB: %v", runErr)
+	}
+	defer orchestrator.CloseLoggerForTest() // Usa wrapper
+
+	orchestrator.CreateNetworkForTest() // Usa wrapper
+
+	// Chamar runSimMode e esperar que não haja erro
+	runErr = orchestrator.RunSimModeForTest() // Usa wrapper
+	if runErr != nil {
+		t.Fatalf("Execução do modo sim falhou inesperadamente: %v", runErr)
+	}
+
+	// Verificar se o arquivo de banco de dados foi criado
+	if _, errStat := os.Stat(dbFilePath); os.IsNotExist(errStat) {
+		t.Errorf("Arquivo de banco de dados %s não foi criado", dbFilePath)
+	} else if errStat != nil {
+		t.Errorf("Erro ao verificar o arquivo de banco de dados %s: %v", dbFilePath, errStat)
+	}
+	// Limpeza do arquivo DB é feita por t.TempDir()
+}
+
 // captureStdoutReturnError é como captureStdout mas para funções que retornam erro.
 func captureStdoutReturnError(f func() error) (string, error) {
 	oldStdout := os.Stdout

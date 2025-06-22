@@ -396,4 +396,31 @@ func (o *Orchestrator) SetLoadWeightsFn(fn func(filepath string) (synaptic.Netwo
 func (o *Orchestrator) SetSaveWeightsFn(fn func(weights synaptic.NetworkWeights, filepath string) error) {
 	o.saveWeightsFn = fn
 }
+
+// InitializeLoggerForTest é um wrapper de teste para initializeLogger.
+func (o *Orchestrator) InitializeLoggerForTest() error {
+	return o.initializeLogger()
+}
+
+// CreateNetworkForTest é um wrapper de teste para createNetwork.
+func (o *Orchestrator) CreateNetworkForTest() {
+	o.createNetwork()
+}
+
+// RunSimModeForTest é um wrapper de teste para runSimMode.
+func (o *Orchestrator) RunSimModeForTest() error {
+	return o.runSimMode()
+}
+
+// CloseLoggerForTest é um wrapper de teste para fechar o logger.
+func (o *Orchestrator) CloseLoggerForTest() {
+	if o.Logger != nil {
+		o.Logger.Close()
+	}
+}
+
+// LoadWeightsForTest é um wrapper de teste para loadWeights.
+func (o *Orchestrator) LoadWeightsForTest(filepath string) error {
+	return o.loadWeights(filepath)
+}
 ```
