@@ -10,6 +10,7 @@ import (
 	"crownet/space"
 	"crownet/synaptic"
 	"fmt"
+	"math" // Adicionado
 	"math/rand"
 	"sort"
 )
@@ -79,6 +80,31 @@ func (cn *CrowNet) getNextNeuronID() common.NeuronID {
 	return id
 }
 
+// addNeuronsOfType cria 'count' neurônios do 'neuronType' especificado,
+// os posiciona usando o 'radiusFactor' e os adiciona à rede.
+// Também popula InputNeuronIDs e OutputNeuronIDs conforme necessário.
+func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFactor float64, simParams *config.SimulationParameters) {
+	if count <= 0 {
+		return
+	}
+	for i := 0; i < count; i++ {
+		id := cn.getNextNeuronID()
+		// Usar simParams.SpaceMaxDimension que é o raio da hiperesfera de contenção.
+		// O radiusFactor específico do tipo de neurônio deve ser aplicado a este raio máximo.
+		effectiveRadius := radiusFactor * simParams.SpaceMaxDimension
+		pos := space.GenerateRandomPositionInHyperSphere(effectiveRadius, rand.Float64()) // rand.Float64() é para o fator de escala dentro da esfera
+
+		n := neuron.New(id, neuronType, pos, simParams)
+		cn.Neurons = append(cn.Neurons, n)
+
+		if neuronType == neuron.Input {
+			cn.InputNeuronIDs = append(cn.InputNeuronIDs, id)
+		} else if neuronType == neuron.Output {
+			cn.OutputNeuronIDs = append(cn.OutputNeuronIDs, id)
+		}
+	}
+}
+
 // initializeNeurons cria e distribui os neurônios na rede.
 func (cn *CrowNet) initializeNeurons() {
 	totalCLINeurons := cn.Config.Cli.TotalNeurons
@@ -88,89 +114,67 @@ func (cn *CrowNet) initializeNeurons() {
 	numOutput := simParams.MinOutputNeurons
 
 	if totalCLINeurons < numInput+numOutput {
-		// Em caso de poucos neurônios, priorizar Input/Output e ajustar o restante.
-		// Ou lançar erro. Por enquanto, vamos ajustar.
-		fmt.Printf("Aviso: Total de neurônios (%d) é menor que o mínimo para Input (%d) e Output (%d). Ajustando para o mínimo necessário.\n",
-			totalCLINeurons, numInput, numOutput)
+		fmt.Printf("Aviso: Total de neurônios configurado (%d) é menor que o mínimo para Input (%d) e Output (%d). Ajustando para o mínimo necessário (%d).\n",
+			totalCLINeurons, numInput, numOutput, numInput+numOutput)
 		totalCLINeurons = numInput + numOutput
 	}
 
-	// Neurônios de Input
-	for i := 0; i < numInput; i++ {
-		id := cn.getNextNeuronID()
-		// Posição: ExcitatoryMaxRadius é um bom proxy para uma área geral.
-		pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
-		n := neuron.New(id, neuron.Input, pos, simParams)
-		cn.Neurons = append(cn.Neurons, n)
-		cn.InputNeuronIDs = append(cn.InputNeuronIDs, id)
+	// Usar ExcitatoryRadiusFactor como proxy para raio de I/O se não houver específicos
+	cn.addNeuronsOfType(numInput, neuron.Input, simParams.ExcitatoryRadiusFactor, simParams)
+	cn.addNeuronsOfType(numOutput, neuron.Output, simParams.ExcitatoryRadiusFactor, simParams)
+
+	remainingForInternalDistribution := totalCLINeurons - numInput - numOutput
+	var numDopaminergic, numInhibitory, numExcitatory int
+
+	if remainingForInternalDistribution > 0 {
+		// Usar Floor para dopa e inhib para evitar exceder o total com arredondamentos.
+		// Garantir que os percentuais não sejam negativos.
+		dopaP := math.Max(0.0, simParams.DopaminergicPercent)
+		inhibP := math.Max(0.0, simParams.InhibitoryPercent)
+
+		numDopaminergic = int(math.Floor(float64(remainingForInternalDistribution) * dopaP))
+		numInhibitory = int(math.Floor(float64(remainingForInternalDistribution) * inhibP))
+
+		// Excitatory pega todo o restante.
+		// Isso garante que a soma seja exata e numExcitatory não seja negativo,
+		// a menos que dopaP + inhibP > 1.0.
+		currentAllocated := numDopaminergic + numInhibitory
+		numExcitatory = remainingForInternalDistribution - currentAllocated
+
+		if numExcitatory < 0 {
+			// Isso acontece se dopaP + inhibP > 1.0 (após serem Max(0, ..)).
+			// Neste caso, não há espaço para excitatórios. Zerá-los.
+			// E precisamos reduzir dopa e/ou inhib para que caibam em remainingForInternalDistribution.
+			fmt.Printf("Aviso: Percentuais de Dopa (%.2f) e Inhib (%.2f) excedem 100%% do espaço restante para neurônios internos. Ajustando contagens de Dopa e Inhib.\n", dopaP, inhibP)
+			numExcitatory = 0
+
+			// Recalcular dopa e inhib para caber, proporcionalmente ao configurado.
+			if dopaP+inhibP > 0 { // Evitar divisão por zero se ambos forem zero (improvável aqui, pois numExcitatory < 0)
+				totalInternalPercentConfigured := dopaP + inhibP
+				numDopaminergic = int(math.Round(float64(remainingForInternalDistribution) * (dopaP / totalInternalPercentConfigured)))
+				numInhibitory = remainingForInternalDistribution - numDopaminergic // Inhib absorve arredondamento para garantir a soma exata
+			} else {
+				// Se dopaP e inhibP são ambos zero, mas numExcitatory deu < 0, algo está muito errado.
+				// Isso não deveria acontecer. Zera ambos por segurança.
+				numDopaminergic = 0
+				numInhibitory = 0
+				// E remainingForInternalDistribution deveria ser 0 também neste caso.
+				// Se não for, a lógica inicial de numExcitatory = remaining - currentAllocated é suficiente.
+			}
+		}
 	}
 
-	// Neurônios de Output
-	for i := 0; i < numOutput; i++ {
-		id := cn.getNextNeuronID()
-		pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
-		n := neuron.New(id, neuron.Output, pos, simParams)
-		cn.Neurons = append(cn.Neurons, n)
-		cn.OutputNeuronIDs = append(cn.OutputNeuronIDs, id)
+	cn.addNeuronsOfType(numDopaminergic, neuron.Dopaminergic, simParams.DopaminergicRadiusFactor, simParams)
+	cn.addNeuronsOfType(numInhibitory, neuron.Inhibitory, simParams.InhibitoryRadiusFactor, simParams)
+	cn.addNeuronsOfType(numExcitatory, neuron.Excitatory, simParams.ExcitatoryRadiusFactor, simParams)
+
+	// O bloco de ajuste final foi removido.
+	// A verificação final pode permanecer para depuração durante o desenvolvimento desta refatoração.
+	if len(cn.Neurons) != totalCLINeurons {
+		// Este log é crucial durante o teste desta refatoração.
+		// Se ele aparecer, a lógica de distribuição ainda tem falhas.
+		fmt.Printf("ALERTA DE REFATORAÇÃO: Contagem final de neurônios (%d) não corresponde ao esperado (%d) APÓS a nova lógica de distribuição em initializeNeurons.\n", len(cn.Neurons), totalCLINeurons)
 	}
-
-	remainingNeuronsForDistribution := totalCLINeurons - numInput - numOutput
-
-	numDopaminergic := int(float64(remainingNeuronsForDistribution) * simParams.DopaminergicPercent)
-	numInhibitory := int(float64(remainingNeuronsForDistribution) * simParams.InhibitoryPercent)
-	// Excitatory pega o que sobrar para garantir o total de neurônios.
-	numExcitatory := remainingNeuronsForDistribution - numDopaminergic - numInhibitory
-
-	if numExcitatory < 0 { // Pode acontecer se as porcentagens somarem > 1 ou com arredondamentos.
-	    fmt.Printf("Aviso: contagem de neurônios excitatórios negativa (%d) após distribuição. Ajustando para 0 e redistribuindo ligeiramente.\n", numExcitatory)
-		// Simplificação: apenas zera e aceita um total menor se as porcentagens forem problemáticas.
-		// Uma lógica mais robusta normalizaria as porcentagens ou ajustaria outras contagens.
-		numExcitatory = 0
-		// Recalcular dopa e inhib para preencher o que falta, se possível, ou aceitar menos neurônios.
-		// Esta parte pode ser mais sofisticada. Por ora, a simplicidade prevalece.
-	}
-
-
-	for i := 0; i < numDopaminergic; i++ {
-		id := cn.getNextNeuronID()
-		pos := space.GenerateRandomPositionInHyperSphere(simParams.DopaminergicRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
-		n := neuron.New(id, neuron.Dopaminergic, pos, simParams)
-		cn.Neurons = append(cn.Neurons, n)
-	}
-
-	for i := 0; i < numInhibitory; i++ {
-		id := cn.getNextNeuronID()
-		pos := space.GenerateRandomPositionInHyperSphere(simParams.InhibitoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
-		n := neuron.New(id, neuron.Inhibitory, pos, simParams)
-		cn.Neurons = append(cn.Neurons, n)
-	}
-
-	for i := 0; i < numExcitatory; i++ {
-		id := cn.getNextNeuronID()
-		pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
-		n := neuron.New(id, neuron.Excitatory, pos, simParams)
-		cn.Neurons = append(cn.Neurons, n)
-	}
-
-	// Se o número total de neurônios criados não bate com totalCLINeurons devido a arredondamentos/ajustes:
-	currentCreatedCount := len(cn.Neurons)
-	if currentCreatedCount < totalCLINeurons {
-	    // Adiciona neurônios excitatórios faltantes
-	    fmt.Printf("Aviso: Criados %d neurônios, esperado %d. Adicionando %d neurônios excitatórios extras.\n", currentCreatedCount, totalCLINeurons, totalCLINeurons - currentCreatedCount)
-	    for i := 0; i < (totalCLINeurons - currentCreatedCount); i++ {
-	        id := cn.getNextNeuronID()
-		    pos := space.GenerateRandomPositionInHyperSphere(simParams.ExcitatoryRadiusFactor*simParams.SpaceMaxDimension, rand.Float64)
-		    n := neuron.New(id, neuron.Excitatory, pos, simParams)
-		    cn.Neurons = append(cn.Neurons, n)
-	    }
-	} else if currentCreatedCount > totalCLINeurons {
-	    // Remove neurônios excitatórios extras (ou do último tipo adicionado)
-	     fmt.Printf("Aviso: Criados %d neurônios, esperado %d. Removendo %d neurônios extras.\n", currentCreatedCount, totalCLINeurons, currentCreatedCount - totalCLINeurons)
-	    cn.Neurons = cn.Neurons[:totalCLINeurons]
-	    // Nota: Isso pode bagunçar InputNeuronIDs/OutputNeuronIDs se eles forem os últimos a serem removidos.
-	    // A lógica de criação de I/O primeiro mitiga isso.
-	}
-
 }
 
 // finalizeInitialization realiza tarefas de configuração final após a criação dos neurônios.
