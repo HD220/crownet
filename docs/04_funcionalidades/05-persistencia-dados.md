@@ -1,64 +1,69 @@
-# Funcionalidade: Persistência de Dados (MVP)
+# Funcionalidade: Persistência de Dados da Rede CrowNet
 
-Esta funcionalidade descreve como os dados importantes da simulação CrowNet são persistidos e carregados no MVP, especificamente os pesos sinápticos e, opcionalmente, o estado completo da rede.
+## 1. Visão Geral
 
-## F6: Persistência
+A capacidade de salvar e carregar o estado da rede neural é fundamental no CrowNet. A persistência de dados permite que o progresso do aprendizado (pesos sinápticos) seja preservado entre sessões de simulação e que o estado detalhado da rede seja registrado para análise offline e depuração.
 
-### F6.1: Salvar e Carregar Pesos Sinápticos
-*   **Formato:** Os pesos sinápticos aprendidos pela rede são salvos e carregados em formato JSON.
-*   **Estrutura do JSON:** O arquivo JSON contém um objeto onde cada chave é o ID de um neurônio de origem (como string). O valor para cada ID de origem é outro objeto, onde cada chave é o ID de um neurônio de destino (como string) e o valor é o peso sináptico (float).
-    ```json
-    {
-      "0": { // ID do neurônio de origem
-        "1": 0.7512,
-        "2": -0.3200,
-        // ... outros destinos para o neurônio 0
-        "99": 0.0543
-      },
-      "1": { // ID do neurônio de origem
-        "0": 0.6800,
-        "2": 0.9876,
-        // ...
+Esta funcionalidade abrange dois mecanismos principais:
+*   Persistência dos pesos sinápticos em formato JSON.
+*   Logging opcional do estado dinâmico completo da rede em um banco de dados SQLite.
+
+## 2. Persistência de Pesos Sinápticos
+
+Os pesos das conexões sinápticas, que são o principal resultado do processo de aprendizado da rede, são gerenciados da seguinte forma:
+
+### 2.1. Formato e Estrutura
+*   **Formato do Arquivo:** Os pesos sinápticos são salvos e carregados utilizando arquivos no formato JSON.
+*   **Estrutura de Dados no JSON:** O arquivo JSON representa um mapa onde:
+    *   Cada chave de nível superior é uma string representando o ID de um neurônio de origem.
+    *   O valor associado a cada neurônio de origem é outro mapa, onde:
+        *   Cada chave é uma string representando o ID de um neurônio de destino.
+        *   O valor é o peso numérico (ponto flutuante) da sinapse entre o neurônio de origem e o neurônio de destino.
+    *   Exemplo:
+      ```json
+      {
+        "0": { "1": 0.75, "2": -0.32, /* ... */ },
+        "1": { "0": 0.68, "2": 0.98, /* ... */ }
+        /* ... mais neurônios de origem ... */
       }
-      // ... mais neurônios origem
-    }
-    ```
-*   **Uso:**
-    *   No modo `expose`, os pesos finais são salvos no arquivo especificado por `-weightsFile` ao final do processo de treinamento. Se um arquivo de pesos já existir no início e for válido, ele é carregado como ponto de partida; caso contrário, a rede começa com pesos iniciais aleatórios.
-    *   No modo `observe`, os pesos são carregados do arquivo especificado por `-weightsFile`. A operação falhará se o arquivo não for encontrado ou for inválido.
-    *   No modo `sim`, os pesos podem ser opcionalmente carregados de `-weightsFile`. Este modo não salva os pesos automaticamente ao final.
+      ```
 
-### F6.2: Logging Opcional do Estado da Rede em SQLite
-*   **Propósito:** Para análise detalhada e depuração, o estado completo da rede pode ser salvo em um banco de dados SQLite. Isso é útil para os modos `sim` e `expose` (se configurado).
-*   **Conteúdo do Snapshot:** Um snapshot da rede no banco de dados consiste em:
-    *   **Tabela `NetworkSnapshots`:**
-        *   `SnapshotID` (chave primária)
-        *   `CycleCount` (ciclo da simulação em que o snapshot foi tirado)
-        *   `Timestamp`
-        *   `CortisolLevel`
-        *   `DopamineLevel`
-    *   **Tabela `NeuronStates`:** (um registro por neurônio, por snapshot)
-        *   `StateID` (chave primária)
-        *   `SnapshotID` (chave estrangeira para `NetworkSnapshots`)
-        *   `NeuronID`
-        *   `Position0` a `Position15` (coordenadas do neurônio no espaço 16D)
-        *   `Velocity0` a `Velocity15` (componentes do vetor de velocidade do neurônio)
-        *   `Type` (tipo do neurônio: Excitatory, Inhibitory, etc.)
-        *   `State` (estado atual: Resting, Firing, etc.)
-        *   `AccumulatedPulse`
-        *   `BaseFiringThreshold`
-        *   `CurrentFiringThreshold`
-        *   `LastFiredCycle`
-        *   `CyclesInCurrentState`
-    *   Nota: Os pesos sinápticos em si não são tipicamente duplicados no SQLite a cada snapshot, pois o arquivo JSON é o meio primário para sua persistência. O foco do SQLite é o estado dinâmico.
-*   **Controle:**
-    *   Habilitado pelo fornecimento de um caminho de arquivo no flag `-dbPath <string>`. O arquivo de banco de dados é recriado a cada execução que utiliza esta opção.
-    *   A frequência do logging é controlada pelo flag `-saveInterval <int>`, que especifica de quantos em quantos ciclos o estado da rede é salvo no banco de dados. Se `saveInterval` for 0 ou negativo, o logging pode ocorrer apenas no final ou não ocorrer, dependendo da implementação.
-*   **Uso:**
-    *   Principalmente no modo `sim` para registrar a evolução da rede sob dinâmicas gerais.
-    *   Pode ser usado no modo `expose` para capturar a trajetória de aprendizado.
-    *   Os dados no SQLite são destinados à análise offline usando ferramentas de banco de dados ou scripts.
+### 2.2. Utilização nos Modos de Operação
+*   **Modo `expose` (Treinamento):**
+    *   Ao iniciar, se um arquivo de pesos (especificado via flag `-weightsFile`) existir e for válido, ele é carregado para inicializar a rede. Caso contrário, a rede começa com pesos aleatórios.
+    *   Ao final do processo de treinamento, os pesos sinápticos finais da rede são salvos no arquivo especificado.
+*   **Modo `observe` (Observação/Teste):**
+    *   Os pesos sinápticos devem ser carregados de um arquivo especificado. A operação falhará se o arquivo não for encontrado ou for inválido.
+*   **Modo `sim` (Simulação Geral):**
+    *   Os pesos podem ser opcionalmente carregados de um arquivo no início da simulação. Este modo geralmente não salva os pesos automaticamente ao final, pois seu foco é a simulação de dinâmicas, não necessariamente o treinamento convergente.
 
-## Considerações Adicionais
-*   **Atomicidade:** Operações de salvamento (especialmente JSON) devem ser atômicas para evitar arquivos corrompidos se a simulação for interrompida.
-*   **Tratamento de Erros:** O sistema deve lidar graciosamente com erros de arquivo (ex: arquivo não encontrado, permissões de escrita).
+## 3. Logging Opcional do Estado da Rede em SQLite
+
+Para análises mais detalhadas da dinâmica da rede e para depuração, o sistema oferece a opção de registrar snapshots completos do estado da rede em um banco de dados SQLite.
+
+### 3.1. Propósito e Ativação
+*   **Objetivo:** Capturar a evolução temporal do estado de cada neurônio e dos níveis de neuroquímicos.
+*   **Ativação:** O logging para SQLite é habilitado quando um caminho de arquivo de banco de dados é fornecido através do flag `-dbPath`. Se o arquivo já existir, ele é geralmente recriado a cada nova execução que utiliza esta opção.
+*   **Frequência:** A frequência com que os snapshots são salvos é controlada pelo flag `-saveInterval` (número de ciclos entre cada salvamento).
+
+### 3.2. Conteúdo do Snapshot no Banco de Dados
+Um snapshot da rede no banco de dados SQLite normalmente inclui as seguintes informações, distribuídas em tabelas relacionais:
+
+*   **Tabela `NetworkSnapshots` (ou similar):** Registra informações globais da rede por snapshot.
+    *   Campos: `SnapshotID` (identificador único do snapshot), `CycleCount` (ciclo da simulação), `Timestamp`, `CortisolLevel`, `DopamineLevel`.
+*   **Tabela `NeuronStates` (ou similar):** Registra o estado detalhado de cada neurônio no momento do snapshot.
+    *   Campos: `StateID` (identificador único do estado), `SnapshotID` (referência ao snapshot), `NeuronID`, coordenadas de posição (ex: `Position0` a `Position15`), componentes de velocidade, tipo do neurônio, estado operacional (Repouso, Disparo, etc.), potencial acumulado, limiares de disparo (base e atual), ciclo do último disparo, ciclos no estado atual.
+
+*Nota: Os pesos sinápticos em si geralmente não são duplicados no banco de dados SQLite a cada snapshot, pois o arquivo JSON é o meio primário para sua persistência. O foco do logging em SQLite é o estado dinâmico da rede.*
+
+### 3.3. Utilização
+*   **Modo `sim`:** Particularmente útil para registrar a evolução da rede sob dinâmicas gerais e estímulos específicos.
+*   **Modo `expose`:** Pode ser usado para capturar a trajetória de aprendizado e a evolução dos estados neuronais durante o treinamento.
+*   Os dados armazenados no SQLite são destinados à análise offline, utilizando ferramentas de consulta SQL, scripts de análise de dados (ex: Python com bibliotecas de SQLite e plotagem) ou outras ferramentas de visualização.
+
+## 4. Considerações Importantes
+
+*   **Atomicidade das Operações:** É importante que as operações de salvamento de arquivos (especialmente o JSON de pesos) sejam realizadas de forma atômica ou com mecanismos de proteção (ex: salvar em arquivo temporário e renomear) para minimizar o risco de arquivos corrompidos caso a simulação seja interrompida inesperadamente.
+*   **Tratamento de Erros:** O sistema deve ser robusto a erros comuns de manipulação de arquivos, como arquivo não encontrado (para leitura), falha de permissão de escrita, ou formato de arquivo inválido, fornecendo feedback apropriado ao usuário.
+
+A funcionalidade de persistência é vital para a utilidade e a capacidade de análise do simulador CrowNet.

@@ -1,73 +1,69 @@
-# Funcionalidade: Ciclo de Simulação e Aprendizado (MVP)
+# Funcionalidade: Dinâmicas do Ciclo de Simulação da Rede CrowNet
 
-Esta funcionalidade detalha o ciclo principal de simulação da rede CrowNet no MVP, incluindo a atualização dos estados dos neurônios, propagação de pulsos, aprendizado Hebbiano neuromodulado, sinaptogênese e modulação química.
+## 1. Visão Geral
 
-## F2.1: Ciclo de Simulação Discreto (`RunCycle`)
-*   A simulação progride em passos de tempo discretos, denominados "ciclos".
-*   Cada chamada a `RunCycle` avança a simulação em um ciclo.
+O ciclo de simulação é o processo central que governa a evolução temporal da rede neural CrowNet. A cada ciclo, o estado de todos os neurônios é atualizado, os sinais (pulsos) são propagados, as conexões sinápticas são ajustadas através do aprendizado, os neurônios podem se mover (sinaptogênese), e o ambiente neuroquímico da rede é modificado. Esta interação contínua de processos permite que a rede processe informações e aprenda.
 
-## F2.2: Atualizações de Estado dos Neurônios
-*   **Decaimento da Acumulação de Pulso:** Em cada ciclo, o valor acumulado de pulsos em cada neurônio decai gradualmente se nenhum novo pulso for recebido.
-*   **Estados Neuronais:** Os neurônios transitam entre estados: Repouso, Disparo, Refratário Absoluto, Refratário, com base em suas regras internas e tempo desde o último disparo.
-*   **Acumulação de Pulso:** Neurônios acumulam o valor de pulsos recebidos (`BaseSignal * PesoSinaptico`).
-*   **Limiar de Disparo (`CurrentFiringThreshold`):** O limiar que um neurônio precisa alcançar para disparar é dinâmico, influenciado por neuroquímicos.
+A simulação progride em passos de tempo discretos, chamados "ciclos". As seguintes sub-funcionalidades ocorrem sequencialmente ou em paralelo dentro de cada ciclo:
 
-## F2.3: Disparo de Neurônios
-*   Um neurônio dispara quando seu `AccumulatedPulse` excede seu `CurrentFiringThreshold`.
-*   Ao disparar, um neurônio gera novos pulsos.
+## 2. Atualização do Estado Neuronal
 
-## F2.4: Propagação de Pulso
-*   Os pulsos se propagam a partir do neurônio emissor.
-*   O MVP utiliza um modelo de expansão esférica:
-    *   Pulsos têm um valor base (`BaseSignal`): +1.0 para excitatórios, -1.0 para inibitórios (neurônios dopaminérgicos têm BaseSignal 0, seu efeito é químico).
-    *   Pulsos viajam a uma velocidade fixa (ex: `PulsePropagationSpeed` de `neuron/config.go`, como 0.6 unidades de distância por ciclo).
-    *   A cada ciclo, um pulso varre uma "casca" esférica no espaço. Neurônios dentro desta casca (entre `pulseEffectStartDist` e `pulseEffectEndDist` da origem do pulso) são considerados "atingidos" naquele ciclo.
-    *   Quando um pulso atinge outro neurônio, o neurônio receptor processa o `ValorBaseDoPulso * PesoDaSinapse`.
+O estado individual de cada neurônio é reavaliado a cada ciclo:
 
-## F2.5: Plasticidade Hebbiana Neuromodulada (`ApplyHebbianPlasticity`)
-*   Esta é a principal mecânica de aprendizado no MVP.
-*   **Princípio Hebbiano:** "Neurônios que disparam juntos, conectam-se mais fortemente".
-*   **Co-ativação:** O sistema identifica pares de neurônios (pré-sináptico e pós-sináptico) que demonstraram atividade correlacionada. A correlação é determinada se ambos os neurônios dispararam dentro de uma janela de tempo definida por `HebbianCoincidenceWindow` (ex: 0 para disparo no mesmo ciclo, 1 para até 1 ciclo de diferença).
-*   **Cálculo da Taxa de Aprendizado Efetiva:**
-    *   Uma `BaseLearningRate` (configurável) é definida.
-    *   Esta taxa é modulada pelos níveis atuais de Dopamina e Cortisol (conforme detalhado em F2.7).
-*   **Atualização de Peso Sináptico:** O peso da sinapse (`W_ij`) entre o neurônio pré-sináptico `i` e o pós-sináptico `j` é ajustado:
-    *   `ΔW_ij = taxa_aprendizado_efetiva * atividade_pre_i * atividade_pos_j` (onde atividade é tipicamente 1.0 se disparou na janela).
-    *   `W_ij_novo = W_ij_antigo + ΔW_ij`
-    *   Aplica-se também um decaimento de peso (`HebbianWeightDecay`): `W_ij_novo = W_ij_novo - W_ij_novo * HebbianWeightDecay`.
-*   **Limites de Peso:** Os pesos são mantidos dentro de uma faixa definida (`HebbianWeightMin`, `HebbianWeightMax`).
+*   **Potencial Acumulado:** O potencial elétrico interno de um neurônio (seu "acumulador de pulso") decai gradualmente ao longo do tempo se não houver novos estímulos. Ao receber pulsos de outros neurônios, este potencial aumenta ou diminui com base na força do pulso e no peso da sinapse correspondente.
+*   **Limiar de Disparo:** O limiar de potencial que um neurônio precisa atingir para disparar um novo pulso é dinâmico, sendo influenciado pelos níveis de neuroquímicos simulados (cortisol e dopamina).
+*   **Estados Operacionais:** Os neurônios transitam por diferentes estados com base em seu potencial e histórico de atividade:
+    *   **Repouso (Resting):** Estado base, aguardando estímulo.
+    *   **Disparo (Firing):** Quando o potencial excede o limiar, o neurônio dispara, emitindo pulsos.
+    *   **Refratário (Refractory):** Após o disparo, o neurônio entra em um período refratário (absoluto e depois relativo) durante o qual não pode disparar novamente ou tem um limiar de disparo elevado, respectivamente.
 
-## F2.6: Sinaptogênese (Movimento de Neurônios)
-*   Neurônios podem se mover no espaço 16D.
-*   **Influência da Atividade:**
-    *   Neurônios tendem a se aproximar de outros neurônios que estiveram recentemente ativos (disparando ou em período refratário).
-    *   Neurônios tendem a se afastar de neurônios que estão em repouso.
-*   **Modulação Química:** A taxa ou intensidade do movimento (sinaptogênese) também é modulada pelos níveis de Cortisol e Dopamina. (Ex: Cortisol alto reduz o movimento).
-*   Este movimento pode influenciar a conectividade ao longo do tempo, alterando as proximidades entre neurônios.
+## 3. Propagação de Pulsos Neuronais
 
-## F2.7: Modulação Química (Cortisol e Dopamina)
-*   **Produção de Cortisol:**
-    *   Produzido por uma "glândula" virtual localizada na posição central do espaço (`CortisolGlandPosition`).
-    *   A produção aumenta quando pulsos excitatórios atingem a vizinhança da glândula (definida por `CortisolGlandRadius`). A quantidade produzida é `CortisolProductionPerHit`.
-    *   Decai a uma taxa percentual (`CortisolDecayRate`) por ciclo e é limitado por `CortisolMaxLevel`.
-*   **Produção de Dopamina:**
-    *   Produzida por neurônios do tipo `DopaminergicNeuron` quando estes entram no estado `FiringState`. A quantidade produzida é `DopamineProductionPerEvent`.
-    *   Decai a uma taxa percentual (`DopamineDecayRate`) por ciclo (geralmente mais rápido que o cortisol) e é limitada por `DopamineMaxLevel`.
-*   **Efeitos dos Neuroquímicos:**
-    *   **Modulação dos Limiares de Disparo:**
-        *   **Cortisol:** Altera o `CurrentFiringThreshold` dos neurônios. O efeito tem um perfil em forma de U:
-            *   Abaixo de `CortisolMinEffectThreshold`: Sem efeito significativo.
-            *   Entre `CortisolMinEffectThreshold` e `CortisolOptimalLowThreshold`: Redução progressiva do limiar (até `MaxThresholdReductionFactor`).
-            *   Entre `CortisolOptimalLowThreshold` e `CortisolOptimalHighThreshold`: Redução máxima do limiar.
-            *   Entre `CortisolOptimalHighThreshold` e `CortisolHighEffectThreshold`: Aumento progressivo do limiar de volta ao basal.
-            *   Acima de `CortisolHighEffectThreshold`: Aumento progressivo do limiar acima do basal (até `ThresholdIncreaseFactorHigh`).
-        *   **Dopamina:** Aumenta o `CurrentFiringThreshold` (que já pode ter sido modificado pelo cortisol). O aumento é progressivo com o nível de dopamina, até `DopamineThresholdIncreaseFactor`.
-    *   **Modulação da Taxa de Aprendizado Hebbiano (Plasticidade):**
-        *   A `BaseLearningRate` é multiplicada por um fator derivado dos níveis de Cortisol e Dopamina.
-        *   **Dopamina:** Aumenta o fator de aprendizado (até `MaxDopamineLearningMultiplier` em `DopamineMaxLevel`).
-        *   **Cortisol (Alto):** Suprime o fator de aprendizado (reduzindo-o até `CortisolLearningSuppressionFactor` em `CortisolMaxLevel`, se acima de `CortisolHighEffectThreshold`). A taxa de aprendizado efetiva não cai abaixo de `MinLearningRateFactor` do original.
-    *   **Modulação da Taxa de Sinaptogênese:**
-        *   O fator de movimento base na sinaptogênese é multiplicado por um fator derivado de Cortisol e Dopamina.
-        *   **Cortisol (Alto):** Reduz o movimento (até `SynaptogenesisReductionFactor` em `CortisolMaxLevel`, se acima de `CortisolHighEffectThreshold`).
-        *   **Dopamina:** Aumenta o movimento (até `DopamineSynaptogenesisIncreaseFactor` em `DopamineMaxLevel`).
-        Os efeitos de cortisol e dopamina na sinaptogênese são combinados multiplicativamente.
+Quando um neurônio dispara, ele emite pulsos que viajam pela rede:
+
+*   **Natureza do Pulso:** Pulsos carregam um sinal base, que é positivo para neurônios excitatórios (tendendo a ativar outros neurônios) e negativo para neurônios inibitórios (tendendo a suprimir outros). Neurônios dopaminérgicos não emitem pulsos de sinal direto desta forma; seu efeito é puramente químico.
+*   **Mecanismo de Propagação:** No MVP, os pulsos se propagam a partir do neurônio emissor em um modelo de expansão esférica a uma velocidade constante.
+*   **Impacto nos Neurônios-Alvo:** Neurônios localizados dentro da "casca" de efeito de um pulso em um determinado ciclo são considerados "atingidos". O efeito do pulso no potencial acumulado do neurônio alvo é proporcional ao sinal base do pulso multiplicado pelo peso da conexão sináptica entre o neurônio emissor e o alvo.
+
+## 4. Aprendizado Sináptico (Plasticidade Hebbiana Neuromodulada)
+
+A rede aprende ajustando a força (pesos) de suas conexões sinápticas.
+
+*   **Princípio de Hebb:** A regra fundamental é "neurônios que disparam juntos, fortalecem sua conexão". O sistema detecta a co-ativação de neurônios (disparos que ocorrem próximos no tempo, dentro de uma "janela de coincidência").
+*   **Atualização de Peso:** Quando uma co-ativação é detectada entre um neurônio pré-sináptico e um pós-sináptico, o peso da sinapse entre eles é ajustado. O ajuste é proporcional a uma taxa de aprendizado efetiva e à atividade dos neurônios envolvidos.
+*   **Decaimento de Peso:** Para promover a competição e evitar a saturação, os pesos sinápticos também sofrem um leve decaimento passivo ao longo do tempo ou a cada atualização.
+*   **Limites de Peso:** Os pesos sinápticos são mantidos dentro de uma faixa de valores mínimos e máximos permitidos.
+*   **Neuromodulação do Aprendizado:** A taxa de aprendizado efetiva não é constante. Ela é dinamicamente modulada pelos níveis simulados de:
+    *   **Dopamina:** Níveis elevados de dopamina tendem a aumentar a taxa de aprendizado.
+    *   **Cortisol:** Níveis elevados de cortisol tendem a suprimir (reduzir) a taxa de aprendizado. A taxa efetiva, no entanto, não é reduzida abaixo de um fator mínimo.
+
+## 5. Sinaptogênese (Dinamismo Estrutural)
+
+A estrutura física da rede não é estática; os neurônios podem se mover no espaço 16D.
+
+*   **Movimento Orientado pela Atividade:**
+    *   Neurônios tendem a ser atraídos por outros neurônios que estiveram recentemente ativos (disparando ou em período refratário).
+    *   Neurônios tendem a ser repelidos por neurônios que estão em estado de repouso.
+*   **Neuromodulação da Sinaptogênese:** A intensidade ou taxa deste movimento também é influenciada pelos níveis de neuroquímicos:
+    *   **Dopamina:** Níveis elevados de dopamina tendem a aumentar a taxa de movimento.
+    *   **Cortisol:** Níveis elevados de cortisol tendem a reduzir a taxa de movimento.
+    Os efeitos da dopamina e do cortisol na taxa de sinaptogênese são combinados de forma multiplicativa.
+*   Este movimento pode, ao longo do tempo, alterar as proximidades entre neurônios, influenciando indiretamente a formação e o desfazimento de conexões sinápticas efetivas.
+
+## 6. Modulação Neuroquímica
+
+O ambiente químico da rede, representado pelos níveis de Cortisol e Dopamina, influencia diversas dinâmicas neuronais.
+
+*   **Produção e Decaimento:**
+    *   **Cortisol:** É produzido por uma "glândula" virtual central quando esta é estimulada por pulsos excitatórios em sua vizinhança. O nível de cortisol decai passivamente a uma taxa percentual a cada ciclo e é limitado a um máximo.
+    *   **Dopamina:** É liberada por neurônios do tipo Dopaminérgico quando estes disparam. O nível de dopamina também decai passivamente (geralmente mais rápido que o cortisol) e é limitado a um máximo.
+*   **Efeitos Principais:**
+    *   **Nos Limiares de Disparo:**
+        *   O cortisol tem um efeito complexo (em forma de "U") no limiar de disparo dos neurônios: níveis moderados podem diminuir o limiar (facilitando o disparo), enquanto níveis muito baixos ou muito altos podem aumentá-lo.
+        *   A dopamina geralmente aumenta o limiar de disparo, tornando os neurônios um pouco menos propensos a disparar apenas com base no seu efeito direto. Os efeitos do cortisol e da dopamina nos limiares são combinados.
+    *   **Na Taxa de Aprendizado Hebbiano:** Detalhado na Seção 4 (Aprendizado Sináptico).
+    *   **Na Taxa de Sinaptogênese:** Detalhado na Seção 5 (Sinaptogênese).
+
+## 7. Conclusão do Ciclo
+
+Ao final de cada ciclo de simulação, todos esses processos foram aplicados, resultando em um novo estado global da rede. A repetição desses ciclos permite que a rede CrowNet exiba comportamentos complexos, processe informações de entrada e adapte sua estrutura e função através do aprendizado.
