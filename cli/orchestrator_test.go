@@ -14,6 +14,9 @@ import (
 	"crownet/synaptic" // Necessário para synaptic.NetworkWeights nos setters
 	"fmt"
 	// "math/rand"
+	"path/filepath" // Adicionado para t.TempDir()
+	"crownet/datagen" // Adicionado para mockar GetDigitPatternFn
+	"crownet/storage" // Adicionado para SaveNetworkWeightsToJSON
 )
 
 // Helper para capturar stdout
