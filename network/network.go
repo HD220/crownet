@@ -19,6 +19,7 @@ import (
 type CrowNet struct {
 	SimParams        *config.SimulationParameters // Parâmetros da simulação
 	baseLearningRate common.Rate                  // Taxa de aprendizado base da CLI
+	rng              *rand.Rand                   // Fonte de aleatoriedade local
 
 	Neurons            []*neuron.Neuron
 	InputNeuronIDs     []common.NeuronID
@@ -44,10 +45,12 @@ type CrowNet struct {
 }
 
 // NewCrowNet cria e inicializa uma nova instância de CrowNet.
-func NewCrowNet(totalNeurons int, baseLR common.Rate, simParams *config.SimulationParameters) *CrowNet {
+func NewCrowNet(totalNeurons int, baseLR common.Rate, simParams *config.SimulationParameters, seed int64) *CrowNet {
+	localRng := rand.New(rand.NewSource(seed))
 	net := &CrowNet{
 		SimParams:              simParams,
 		baseLearningRate:       baseLR,
+		rng:                    localRng,
 		Neurons:                make([]*neuron.Neuron, 0, totalNeurons),
 		InputNeuronIDs:         make([]common.NeuronID, 0, simParams.MinInputNeurons),
 		OutputNeuronIDs:        make([]common.NeuronID, 0, simParams.MinOutputNeurons),
@@ -65,14 +68,12 @@ func NewCrowNet(totalNeurons int, baseLR common.Rate, simParams *config.Simulati
 		isChemicalModulationEnabled: true, // Habilitado por padrão
 	}
 
-	// Passar totalNeurons diretamente para initializeNeurons
-	net.initializeNeurons(totalNeurons)
+	net.initializeNeurons(totalNeurons) // Usa cn.rng internamente agora
 	allNeuronIDs := make([]common.NeuronID, len(net.Neurons))
 	for i, n := range net.Neurons {
 		allNeuronIDs[i] = n.ID
 	}
-	// Passar simParams diretamente, pois agora é um campo de net
-	net.SynapticWeights.InitializeAllToAllWeights(allNeuronIDs, net.SimParams)
+	net.SynapticWeights.InitializeAllToAllWeights(allNeuronIDs, net.SimParams, net.rng) // Passa o rng
 	net.finalizeInitialization()
 
 	return net
@@ -95,7 +96,7 @@ func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFac
 	for i := 0; i < count; i++ {
 		id := cn.getNextNeuronID()
 		effectiveRadius := radiusFactor * cn.SimParams.SpaceMaxDimension
-		pos := space.GenerateRandomPositionInHyperSphere(effectiveRadius, rand.Float64())
+		pos := space.GenerateRandomPositionInHyperSphere(effectiveRadius, cn.rng.Float64) // Usa cn.rng
 
 		n := neuron.New(id, neuronType, pos, cn.SimParams)
 		cn.Neurons = append(cn.Neurons, n)
@@ -214,7 +215,8 @@ func (cn *CrowNet) RunCycle() {
 	cn.processActivePulses()
 
 	if cn.isChemicalModulationEnabled {
-		cn.ChemicalEnv.UpdateLevels(cn.Neurons, cn.ActivePulses, cn.CortisolGlandPosition, cn.SimParams)
+		// Passar cn.ActivePulses.GetAll() pois UpdateLevels espera []*pulse.Pulse
+		cn.ChemicalEnv.UpdateLevels(cn.Neurons, cn.ActivePulses.GetAll(), cn.CortisolGlandPosition, cn.SimParams)
 		cn.ChemicalEnv.ApplyEffectsToNeurons(cn.Neurons, cn.SimParams)
 	} else {
 		cn.ChemicalEnv.LearningRateModulationFactor = 1.0
@@ -567,7 +569,7 @@ func (cn *CrowNet) ConfigureFrequencyInput(neuronID common.NeuronID, hz float64)
 	} else {
 		cn.inputTargetFrequencies[neuronID] = hz
 		cyclesPerFiring := cn.SimParams.CyclesPerSecond / hz
-		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(rand.Float64()*cyclesPerFiring)+1))
+		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1)) // Usa cn.rng
 	}
 	return nil
 }

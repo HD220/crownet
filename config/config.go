@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt
 	"strings"
+	"time" // Adicionado para time.Now().UnixNano()
 	"crownet/common" // Adicionado para common.CycleCount
 )
 
@@ -29,7 +30,9 @@ type SimulationParameters struct {
 	InhibitoryRadiusFactor        float64 // Factor for placement radius of inhibitory neurons
 	MinInputNeurons               int     // Minimum number of input neurons
 	MinOutputNeurons              int     // Minimum number of output neurons (e.g., for digit classification)
-	PatternSize                   int     // Size of the input pattern (e.g., 7x5 = 35 for a digit)
+	PatternHeight                 int     // Height of the input pattern (e.g., 7 for a 7x5 digit)
+	PatternWidth                  int     // Width of the input pattern (e.g., 5 for a 7x5 digit)
+	PatternSize                   int     // Total size of the input pattern (Height * Width)
 	AccumulatedPulseDecayRate     float64 // Rate at which accumulated potential in a neuron decays per cycle
 	AbsoluteRefractoryCycles      common.CycleCount // Cycles a neuron stays in absolute refractory state
 	RelativeRefractoryCycles      common.CycleCount // Cycles a neuron stays in relative refractory state
@@ -53,8 +56,33 @@ type SimulationParameters struct {
 	DopamineInfluenceOnLR         float64 // How much dopamine increases learning rate
 	CortisolInfluenceOnSynapto    float64 // How much cortisol influences synaptogenesis
 	DopamineInfluenceOnSynapto    float64 // How much dopamine influences synaptogenesis
-	FiringThresholdIncreaseOnDopa float64 // How much dopamine decreases firing threshold (making it easier to fire)
-	FiringThresholdIncreaseOnCort float64 // How much cortisol increases firing threshold
+	FiringThresholdIncreaseOnDopa float64 // How much dopamine decreases firing threshold (e.g., a factor like -0.2 for 20% reduction from base)
+	FiringThresholdIncreaseOnCort float64 // How much cortisol increases firing threshold (e.g., a factor like 0.3 for 30% increase from base)
+	SynapticWeightDecayRate       float64 // Rate at which synaptic weights decay towards zero if not reinforced
+
+	// Neurochemical production, decay, and levels
+	CortisolProductionPerHit    float64 // Amount of cortisol produced per pulse hitting the gland
+	CortisolMaxLevel            float64 // Maximum cortisol level
+	DopamineProductionPerEvent  float64 // Amount of dopamine produced per firing dopaminergic neuron
+	DopamineMaxLevel            float64 // Maximum dopamine level
+
+	// Modulation factors for Learning Rate
+	MaxDopamineLearningMultiplier float64 // e.g., 2.0 means dopamine can double the LR
+	CortisolHighEffectThreshold   float64 // Cortisol level at which high-impact effects start
+	CortisolLearningSuppressionFactor float64 // Factor by which LR is suppressed at max cortisol (e.g., 0.1 means 10% of original LR)
+	MinLearningRateFactor         float64 // Minimum learning rate factor (e.g., 0.05)
+
+	// Modulation factors for Synaptogenesis
+	SynaptogenesisReductionFactor      float64 // Factor by which synaptogenesis is reduced at max cortisol (e.g., 0.2 means 20% of original rate)
+	DopamineSynaptogenesisIncreaseFactor float64 // e.g., 1.5 means dopamine can increase synaptogenesis by 50%
+
+	// Modulation factors for Firing Threshold (U-shape for Cortisol)
+	CortisolMinEffectThreshold   float64 // Cortisol level below which there's no significant effect on threshold
+	CortisolOptimalLowThreshold  float64 // Lower bound of optimal cortisol range for threshold reduction
+	CortisolOptimalHighThreshold float64 // Upper bound of optimal cortisol range for threshold reduction
+	MaxThresholdReductionFactor  float64 // Factor by which threshold is reduced at optimal cortisol (e.g., 0.8 for 20% reduction)
+	ThresholdIncreaseFactorHigh  float64 // Factor by which threshold is increased at very high cortisol (e.g., 1.5 for 50% increase)
+	// DopamineThresholdIncreaseFactor foi removido, usar FiringThresholdIncreaseOnDopa
 }
 
 // CLIConfig holds parameters that are typically set via command-line flags.
@@ -74,6 +102,7 @@ type CLIConfig struct {
 	BaseLearningRate float64
 	CyclesPerPattern int
 	CyclesToSettle   int
+	Seed             int64 // Seed for random number generator
 }
 
 // AppConfig bundles all configuration.
@@ -94,12 +123,14 @@ func DefaultSimulationParameters() SimulationParameters {
 		ExcitatoryRadiusFactor:        1.0,   // Placed throughout the main sphere volume
 		DopaminergicRadiusFactor:      0.8,   // Slightly more central
 		InhibitoryRadiusFactor:        0.9,   // Generally distributed
-		MinInputNeurons:               35,    // e.g., 7x5 grid
+		MinInputNeurons:               35,    // e.g., 7x5 grid, should align with PatternSize
 		MinOutputNeurons:              10,    // For 0-9 digits
-		PatternSize:                   35,    // Matches MinInputNeurons typically
+		PatternHeight:                 7,
+		PatternWidth:                  5,
+		PatternSize:                   7 * 5, // Explicitly Height * Width
 		AccumulatedPulseDecayRate:     0.1,   // 10% decay per cycle
-		AbsoluteRefractoryCycles:      2,
-		RelativeRefractoryCycles:      3,
+		AbsoluteRefractoryCycles:      common.CycleCount(2),
+		RelativeRefractoryCycles:      common.CycleCount(3),
 		SynaptogenesisInfluenceRadius: 2.0,   // Neurons interact if within this distance
 		AttractionForceFactor:         0.01,
 		RepulsionForceFactor:          0.005,
@@ -120,8 +151,32 @@ func DefaultSimulationParameters() SimulationParameters {
 		DopamineInfluenceOnLR:         0.8,  // Increases LR by up to 80%
 		CortisolInfluenceOnSynapto:    -0.3,
 		DopamineInfluenceOnSynapto:    0.5,
-		FiringThresholdIncreaseOnDopa: -0.2, // Lowers threshold
-		FiringThresholdIncreaseOnCort: 0.3,  // Raises threshold
+	FiringThresholdIncreaseOnDopa: -0.2, // Lowers threshold (e.g. base * (1 + (-0.2)))
+	FiringThresholdIncreaseOnCort: 0.3,  // Raises threshold (e.g. base * (1 + 0.3))
+	SynapticWeightDecayRate:       0.0001,
+
+	// Neurochemical production, decay, and levels - Defaults
+	CortisolProductionPerHit:    0.05,
+	CortisolMaxLevel:            1.0,
+	DopamineProductionPerEvent:  0.1,
+	DopamineMaxLevel:            1.0,
+
+	// Modulation factors for Learning Rate - Defaults
+	MaxDopamineLearningMultiplier: 2.0,   // Dopamine can double LR
+	CortisolHighEffectThreshold:   0.7,   // High cortisol effects start at 70% of max
+	CortisolLearningSuppressionFactor: 0.2, // At max cortisol, LR is 20% of normal
+	MinLearningRateFactor:         0.1,   // LR factor won't go below 10%
+
+	// Modulation factors for Synaptogenesis - Defaults
+	SynaptogenesisReductionFactor:      0.3,   // At max cortisol, synaptogenesis is 30% of normal
+	DopamineSynaptogenesisIncreaseFactor: 1.5, // Dopamine can increase synaptogenesis by 50%
+
+	// Modulation factors for Firing Threshold (U-shape for Cortisol) - Defaults
+	CortisolMinEffectThreshold:   0.1,  // Below 10% cortisol, no effect
+	CortisolOptimalLowThreshold:  0.25, // Optimal range for threshold reduction
+	CortisolOptimalHighThreshold: 0.5,
+	MaxThresholdReductionFactor:  0.8,  // Threshold can be reduced to 80% of base (20% reduction)
+	ThresholdIncreaseFactorHigh:  1.5,  // At very high cortisol, threshold increases by 50%
 	}
 }
 
@@ -143,11 +198,18 @@ func LoadCLIConfig() CLIConfig {
 	flag.StringVar(&cfg.WeightsFile, "weightsFile", "crownet_weights.json", "File to save/load synaptic weights.") // Changed default name
 	flag.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
 	flag.Float64Var(&cfg.BaseLearningRate, "lrBase", 0.01, "Base learning rate for Hebbian plasticity.") // Adjusted default
-	flag.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20, "Number of cycles to run per pattern presentation during 'expose' mode.") // Increased default
-	flag.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.") // Increased default
+	flag.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20, "Number of cycles to run per pattern presentation during 'expose' mode.")
+	flag.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.")
+	flag.Int64Var(&cfg.Seed, "seed", 0, "Seed for random number generator (0 uses current time, other values are used directly).")
 
 	if !flag.Parsed() {
 		flag.Parse()
+	}
+
+	// Se a semente for 0, usar o tempo atual para aleatoriedade.
+	// Qualquer outro valor (positivo ou negativo) será usado diretamente.
+	if cfg.Seed == 0 {
+		cfg.Seed = time.Now().UnixNano()
 	}
 	return cfg
 }

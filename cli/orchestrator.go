@@ -46,9 +46,10 @@ func (o *Orchestrator) createNetwork() {
 	totalNeurons := o.AppCfg.Cli.TotalNeurons
 	baseLearningRate := common.Rate(o.AppCfg.Cli.BaseLearningRate) // Converter para common.Rate
 	simParams := &o.AppCfg.SimParams
+	seed := o.AppCfg.Cli.Seed
 
-	// Chamar NewCrowNet com os parâmetros individualizados
-	o.Net = network.NewCrowNet(totalNeurons, baseLearningRate, simParams)
+	// Chamar NewCrowNet com os parâmetros individualizados, incluindo a semente
+	o.Net = network.NewCrowNet(totalNeurons, baseLearningRate, simParams, seed)
 
 	fmt.Printf("Rede criada: %d neurônios. IDs Input: %v..., IDs Output: %v...\n",
 		len(o.Net.Neurons), o.Net.InputNeuronIDs[:min(5, len(o.Net.InputNeuronIDs))], o.Net.OutputNeuronIDs[:min(10, len(o.Net.OutputNeuronIDs))])

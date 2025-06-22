@@ -90,6 +90,50 @@ func (pl *PulseList) Count() int {
     return len(pl.pulses)
 }
 
+// processSinglePulseOnTargetNeuron processa o efeito de um único pulso em um único neurônio alvo.
+// Retorna um novo pulso se o neurônio alvo disparar como resultado.
+func processSinglePulseOnTargetNeuron(
+	p *Pulse,
+	targetNeuron *neuron.Neuron,
+	weights synaptic.NetworkWeights,
+	currentCycle common.CycleCount,
+	simParams *config.SimulationParameters,
+	shellStartRadius, shellEndRadius float64,
+) (newlyGeneratedPulse *Pulse) {
+
+	if targetNeuron.ID == p.EmittingNeuronID {
+		return nil // Um pulso não afeta o neurônio que o emitiu diretamente desta forma
+	}
+
+	distanceToTarget := space.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
+
+	// Verifica se o targetNeuron está dentro da casca de efeito do pulso
+	if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
+		weight := weights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
+		effectivePotential := p.BaseSignalValue * weight
+
+		if effectivePotential == 0 { // Se peso for zero ou BaseSignalValue for zero
+			return nil
+		}
+
+		if targetNeuron.IntegrateIncomingPotential(effectivePotential, currentCycle) {
+			// Neurônio disparou! O estado do targetNeuron já foi mudado para Firing.
+			emittedSignal := targetNeuron.EmittedPulseSign()
+			if emittedSignal != 0 {
+				// MaxTravelRadius para novos pulsos pode ser o diâmetro do espaço
+				return New(
+					targetNeuron.ID,
+					targetNeuron.Position,
+					emittedSignal,
+					currentCycle,
+					simParams.SpaceMaxDimension*2.0,
+				)
+			}
+		}
+	}
+	return nil
+}
+
 // ProcessCycle propaga todos os pulsos, processa seus efeitos nos neurônios
 // e retorna uma lista de novos pulsos gerados por neurônios que dispararam.
 // A lista interna de pulsos é atualizada (removendo os dissipados).
@@ -98,11 +142,10 @@ func (pl *PulseList) ProcessCycle(
 	weights synaptic.NetworkWeights,
 	currentCycle common.CycleCount,
 	simParams *config.SimulationParameters,
-	// spaceOps space.Operations // Se tivéssemos uma interface spaceOps
 ) (newlyGeneratedPulses []*Pulse) {
 
 	remainingActivePulses := make([]*Pulse, 0, len(pl.pulses))
-	newlyGeneratedPulses = make([]*Pulse, 0)
+	newlyGeneratedPulses = make([]*Pulse, 0) // Inicializa como slice vazio
 
 	for _, p := range pl.pulses {
 		if !p.Propagate(simParams) {
@@ -113,37 +156,8 @@ func (pl *PulseList) ProcessCycle(
 		shellStartRadius, shellEndRadius := p.GetEffectShellForCycle(simParams)
 
 		for _, targetNeuron := range neurons {
-			if targetNeuron.ID == p.EmittingNeuronID {
-				continue // Um pulso não afeta o neurônio que o emitiu diretamente desta forma
-			}
-
-			distanceToTarget := space.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
-
-			// Verifica se o targetNeuron está dentro da casca de efeito do pulso
-			if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
-				weight := weights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
-				effectivePotential := p.BaseSignalValue * weight
-
-				if effectivePotential == 0 { // Se peso for zero ou BaseSignalValue for zero
-					continue
-				}
-
-				if targetNeuron.IntegrateIncomingPotential(effectivePotential, currentCycle) {
-					// Neurônio disparou!
-					// O estado do targetNeuron já foi mudado para Firing.
-
-					emittedSignal := targetNeuron.EmittedPulseSign()
-					if emittedSignal != 0 {
-						newP := New( // Usa o construtor New do pacote pulse
-							targetNeuron.ID,
-							targetNeuron.Position,
-							emittedSignal,
-							currentCycle,
-							simParams.SpaceMaxDimension*2.0, // MaxTravelRadius pode ser o diâmetro do espaço
-						)
-						newlyGeneratedPulses = append(newlyGeneratedPulses, newP)
-					}
-				}
+			if newPulse := processSinglePulseOnTargetNeuron(p, targetNeuron, weights, currentCycle, simParams, shellStartRadius, shellEndRadius); newPulse != nil {
+				newlyGeneratedPulses = append(newlyGeneratedPulses, newPulse)
 			}
 		}
 	}
