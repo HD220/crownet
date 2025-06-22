@@ -91,9 +91,10 @@ func TestNeuronAdvanceState(t *testing.T) {
 	// Cenário 2: AbsoluteRefractory -> RelativeRefractory
 	n.CurrentState = neuron.AbsoluteRefractory
 	n.LastFiredCycle = 0
-	n.CyclesInCurrentState = common.CycleCount(simParams.AbsoluteRefractoryCycles - 1) // No último ciclo de Absolute
+	// simParams.AbsoluteRefractoryCycles já é common.CycleCount
+	n.CyclesInCurrentState = simParams.AbsoluteRefractoryCycles - 1 // No último ciclo de Absolute
 
-	n.AdvanceState(common.CycleCount(simParams.AbsoluteRefractoryCycles), &simParams) // Avança para o ciclo onde a transição ocorre
+	n.AdvanceState(simParams.AbsoluteRefractoryCycles, &simParams) // Avança para o ciclo onde a transição ocorre
 
 	if n.CurrentState != neuron.RelativeRefractory {
 		t.Errorf("Esperado estado RelativeRefractory após AbsoluteRefractory, obteve %s", n.CurrentState)
@@ -105,9 +106,10 @@ func TestNeuronAdvanceState(t *testing.T) {
 	// Cenário 3: RelativeRefractory -> Resting
 	n.CurrentState = neuron.RelativeRefractory
 	n.LastFiredCycle = 0
-	n.CyclesInCurrentState = common.CycleCount(simParams.RelativeRefractoryCycles -1) // No último ciclo de Relative
+	// simParams.RelativeRefractoryCycles já é common.CycleCount
+	n.CyclesInCurrentState = simParams.RelativeRefractoryCycles - 1 // No último ciclo de Relative
 
-	n.AdvanceState(common.CycleCount(simParams.AbsoluteRefractoryCycles + simParams.RelativeRefractoryCycles), &simParams)
+	n.AdvanceState(simParams.AbsoluteRefractoryCycles + simParams.RelativeRefractoryCycles, &simParams)
 
 	if n.CurrentState != neuron.Resting {
 		t.Errorf("Esperado estado Resting após RelativeRefractory, obteve %s", n.CurrentState)
@@ -203,4 +205,37 @@ func TestNeuronNoFireInAbsoluteRefractory(t *testing.T) {
     if n.LastFiredCycle != 0 { // Não deve ter disparado novamente
 	t.Errorf("LastFiredCycle mudou, indicando novo disparo em AbsoluteRefractory. Esperado 0, obteve %d", n.LastFiredCycle)
     }
+}
+
+func TestNeuronUpdatePosition(t *testing.T) {
+	simParams := config.DefaultSimulationParameters() // Necessário para neuron.New, mas não usado diretamente aqui
+	n := neuron.New(1, neuron.Excitatory, common.Point{1.0, 2.0, 3.0}, &simParams)
+	n.Velocity = common.Vector{0.5, -0.5, 0.1}
+
+	// Preencher o restante das 16 dimensões para evitar valores não inicializados afetando o teste
+	for i := 3; i < 16; i++ {
+		n.Position[i] = common.Coordinate(float64(i + 1)) // Ex: 4.0, 5.0 ...
+		n.Velocity[i] = 0.0 // Sem movimento nas outras dimensões para este teste
+	}
+
+	expectedPosition := n.Position // Copiar para calcular o esperado
+	for i := 0; i < 16; i++ {
+		expectedPosition[i] += common.Coordinate(n.Velocity[i])
+	}
+
+	n.UpdatePosition()
+
+	if n.Position != expectedPosition {
+		t.Errorf("UpdatePosition falhou: esperado %v, obteve %v", expectedPosition, n.Position)
+	}
+
+	// Teste com velocidade zero
+	n.Position = common.Point{1.0, 1.0}
+	n.Velocity = common.Vector{0.0, 0.0}
+	expectedPositionZeroVel := n.Position
+
+	n.UpdatePosition()
+	if n.Position != expectedPositionZeroVel {
+		t.Errorf("UpdatePosition com velocidade zero falhou: esperado %v, obteve %v", expectedPositionZeroVel, n.Position)
+	}
 }

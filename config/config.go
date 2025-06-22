@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt
 	"strings"
+	"crownet/common" // Adicionado para common.CycleCount
 )
 
 // Constantes para modos de operação
@@ -30,8 +31,8 @@ type SimulationParameters struct {
 	MinOutputNeurons              int     // Minimum number of output neurons (e.g., for digit classification)
 	PatternSize                   int     // Size of the input pattern (e.g., 7x5 = 35 for a digit)
 	AccumulatedPulseDecayRate     float64 // Rate at which accumulated potential in a neuron decays per cycle
-	AbsoluteRefractoryCycles      int     // Cycles a neuron stays in absolute refractory state
-	RelativeRefractoryCycles      int     // Cycles a neuron stays in relative refractory state
+	AbsoluteRefractoryCycles      common.CycleCount // Cycles a neuron stays in absolute refractory state
+	RelativeRefractoryCycles      common.CycleCount // Cycles a neuron stays in relative refractory state
 	SynaptogenesisInfluenceRadius float64 // Max distance for synaptogenesis interaction
 	AttractionForceFactor         float64 // Factor for attractive force in synaptogenesis
 	RepulsionForceFactor          float64 // Factor for repulsive force in synaptogenesis
