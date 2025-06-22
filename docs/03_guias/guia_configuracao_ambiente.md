@@ -71,7 +71,9 @@ Consulte o `guia_interface_linha_comando.md` para uma lista completa de modos e 
 *   **IDE/Editor:** Para desenvolvimento em Go, você pode usar qualquer editor de texto ou IDE de sua preferência. Algumas opções populares com bom suporte para Go incluem:
     *   Visual Studio Code com a extensão Go.
     *   GoLand (IDE comercial da JetBrains).
-*   **Formatação de Código:** O projeto deve seguir as convenções padrão de formatação do Go (geralmente aplicadas com `gofmt` ou `goimports`). Consulte o `guia_estilo_codigo.md` (a ser criado) para mais detalhes.
+*   **Formatação de Código:** O projeto deve seguir as convenções padrão de formatação do Go (geralmente aplicadas com `gofmt` ou `goimports`). Consulte o `guia_estilo_codigo.md` para mais detalhes.
+*   **Versão do Go:** Embora o guia mencione Go 1.18+, o projeto está atualmente configurado para `go 1.24.3` (conforme `go.mod`). Recomenda-se usar esta versão ou superior para garantir compatibilidade.
+*   **URL do Repositório:** No passo de clonagem, substitua `<URL_DO_REPOSITORIO_HTTPS>` ou `<URL_DO_REPOSITORIO_SSH>` pela URL correta fornecida para o projeto.
 *   **Variáveis de Ambiente:** Atualmente, o MVP do CrowNet não depende de variáveis de ambiente específicas para sua execução básica, mas isso pode mudar em versões futuras.
 
 Se encontrar problemas durante a configuração, verifique se o Go está corretamente instalado e configurado em seu `PATH`.
