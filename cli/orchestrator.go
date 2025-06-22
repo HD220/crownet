@@ -13,13 +13,6 @@ import (
 	// "math/rand" // Para seed, se necessário
 )
 
-// Constantes para modos de operação
-const (
-	ModeSim     = "sim"
-	ModeExpose  = "expose"
-	ModeObserve = "observe"
-)
-
 // Orchestrator gerencia a execução da simulação com base na configuração da CLI.
 type Orchestrator struct {
 	AppCfg *config.AppConfig
@@ -36,8 +29,8 @@ func NewOrchestrator(appCfg *config.AppConfig) *Orchestrator {
 
 func (o *Orchestrator) initializeLogger() error {
 	if o.AppCfg.Cli.DbPath != "" &&
-		(o.AppCfg.Cli.Mode == ModeSim ||
-			(o.AppCfg.Cli.Mode == ModeExpose && o.AppCfg.Cli.SaveInterval > 0)) {
+		(o.AppCfg.Cli.Mode == config.ModeSim ||
+			(o.AppCfg.Cli.Mode == config.ModeExpose && o.AppCfg.Cli.SaveInterval > 0)) {
 		var err error
 		o.Logger, err = storage.NewSQLiteLogger(o.AppCfg.Cli.DbPath)
 		if err != nil {
@@ -86,18 +79,18 @@ func (o *Orchestrator) saveWeights(filepath string) error {
 
 func (o *Orchestrator) printModeSpecificConfig() {
 	switch o.AppCfg.Cli.Mode {
-	case ModeExpose:
+	case config.ModeExpose:
 		fmt.Printf("  %s: Épocas=%d, TaxaAprendizadoBase=%.4f, CiclosPorPadrão=%d\n",
-			ModeExpose, o.AppCfg.Cli.Epochs, o.AppCfg.Cli.BaseLearningRate, o.AppCfg.Cli.CyclesPerPattern)
-	case ModeObserve:
+			config.ModeExpose, o.AppCfg.Cli.Epochs, o.AppCfg.Cli.BaseLearningRate, o.AppCfg.Cli.CyclesPerPattern)
+	case config.ModeObserve:
 		fmt.Printf("  %s: Dígito=%d, CiclosParaAcomodar=%d\n",
-			ModeObserve, o.AppCfg.Cli.Digit, o.AppCfg.Cli.CyclesToSettle)
-	case ModeSim:
+			config.ModeObserve, o.AppCfg.Cli.Digit, o.AppCfg.Cli.CyclesToSettle)
+	case config.ModeSim:
 		fmt.Printf("  %s: TotalCiclos=%d, CaminhoDB='%s', IntervaloSaveDB=%d\n",
-			ModeSim, o.AppCfg.Cli.Cycles, o.AppCfg.Cli.DbPath, o.AppCfg.Cli.SaveInterval)
+			config.ModeSim, o.AppCfg.Cli.Cycles, o.AppCfg.Cli.DbPath, o.AppCfg.Cli.SaveInterval)
 		if o.AppCfg.Cli.StimInputFreqHz > 0 && o.AppCfg.Cli.StimInputID != -2 {
 			fmt.Printf("  %s: EstímuloGeral: InputID=%d a %.1f Hz\n",
-				ModeSim, o.AppCfg.Cli.StimInputID, o.AppCfg.Cli.StimInputFreqHz)
+				config.ModeSim, o.AppCfg.Cli.StimInputID, o.AppCfg.Cli.StimInputFreqHz)
 		}
 	}
 }
@@ -126,14 +119,15 @@ func (o *Orchestrator) Run() {
 
 	startTime := time.Now()
 	switch o.AppCfg.Cli.Mode {
-	case ModeSim:
+	case config.ModeSim:
 		o.runSimMode()
-	case ModeExpose:
+	case config.ModeExpose:
 		o.runExposeMode()
-	case ModeObserve:
+	case config.ModeObserve:
 		o.runObserveMode()
 	default:
-		log.Fatalf("Modo desconhecido: %s. Escolha '%s', '%s', ou '%s'.", o.AppCfg.Cli.Mode, ModeSim, ModeExpose, ModeObserve)
+		// A validação em config.NewAppConfig() deve pegar isso, mas um fallback é bom.
+		log.Fatalf("Modo desconhecido: %s. Escolha um dos modos suportados.", o.AppCfg.Cli.Mode)
 	}
 	duration := time.Since(startTime)
 	fmt.Printf("\nSessão CrowNet finalizada. Duração total: %s.\n", duration)
