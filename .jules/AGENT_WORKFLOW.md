@@ -22,12 +22,12 @@ Ao receber uma instrução genérica para continuar o trabalho, siga os passos a
 3.  **Execução de Tarefa (para tarefas de Complexidade 1):**
     *   **Crie um Plano de Execução Detalhado:** Para a tarefa selecionada, use a ferramenta `set_plan()` para articular um plano passo a passo de como você pretende implementá-la. Este plano deve ser específico e acionável.
     *   **Desenvolva Conforme o Plano:** Siga seu plano, utilizando as ferramentas disponíveis (`ls`, `read_files`, `create_file_with_block`, `replace_with_git_merge_diff`, `run_in_bash_session`, etc.).
-    *   **Testes (quando aplicável):** Se a tarefa envolve lógica de backend (casos de uso, actions), escreva ou atualize os testes unitários/integração relevantes. Siga as diretrizes de teste em `AGENTS.md`.
+    *   **Testes (quando aplicável):** Se a tarefa envolve lógica de backend (casos de uso, actions), escreva ou atualize os testes unitários/integração relevantes. Siga as diretrizes de teste em `AGENTS.md`. Execute testes com `go test ./...` ou `go test path/to/package/...`.
     *   **Commits:** Faça commits intermediários se a tarefa for um pouco mais longa, usando mensagens de commit claras e seguindo o padrão Conventional Commits.
     *   **Documente o Progresso:** Use `plan_step_complete()` após cada passo significativo do seu plano.
 
 4.  **Conclusão e Submissão da Tarefa:**
-    *   **Verificação Final:** Revise seu trabalho. Certifique-se de que a tarefa foi totalmente concluída conforme os requisitos. Execute testes relevantes (`npm test` para lógica de backend).
+    *   **Verificação Final:** Revise seu trabalho. Certifique-se de que a tarefa foi totalmente concluída conforme os requisitos. Execute testes relevantes (`go test ./...` ou `go test path/to/package/...` para lógica de backend).
     *   **Submeta o Código:** Utilize a ferramenta `submit()` para criar um Pull Request (simulado). Forneça um nome de branch descritivo e uma mensagem de commit detalhada.
     *   **Atualize `.jules/TASKS.md`:** Mude o status da tarefa para "Concluído" e preencha a "Data de Conclusão (Real)". Adicione notas relevantes, como o link para o commit ou PR.
 
