@@ -75,9 +75,9 @@ Comentários são importantes, mas o melhor código é aquele que se auto-docume
 
 O uso de um linter abrangente como `golangci-lint` é altamente recomendado para identificar problemas de estilo, bugs potenciais e inconsistências no código.
 
-Se um arquivo de configuração para `golangci-lint` (ex: `.golangci.yml`) for adicionado ao projeto, ele definirá o conjunto de linters e suas configurações.
+Atualmente, o projeto não possui um arquivo de configuração dedicado para `golangci-lint` (ex: `.golangci.yml`) versionado no repositório. A execução do `golangci-lint` usaria suas configurações padrão ou aquelas definidas localmente pelo desenvolvedor. Considera-se para o futuro a adição de um arquivo `.golangci.yml` padronizado para o projeto.
 
-**Exemplo de uso (se configurado):**
+**Exemplo de uso (com configuração padrão ou local):**
 ```bash
 golangci-lint run ./...
 ```

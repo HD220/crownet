@@ -22,7 +22,11 @@ func main() {
 	orchestrator := cli.NewOrchestrator(appCfg)
 
 	// Executar a lógica principal da aplicação através do orquestrador
-	orchestrator.Run()
-
+	if err := orchestrator.Run(); err != nil {
+		// Idealmente, logar com mais detalhes ou usar um logger configurado,
+		// mas para uma CLI simples, Fprintf para Stderr e Exit(1) é comum.
+		fmt.Fprintf(os.Stderr, "Erro durante a execução: %v\n", err)
+		os.Exit(1)
+	}
 }
 ```

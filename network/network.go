@@ -110,40 +110,23 @@ func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFac
 }
 
 // calculateInternalNeuronCounts calcula a distribuição de neurônios internos.
-// Retorna as contagens e uma lista de strings de aviso.
-func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP float64) (numDopaminergic, numInhibitory, numExcitatory int, warnings []string) {
+// Pressupõe que dopaP e inhibP são >= 0 e dopaP + inhibP <= 1.0,
+// conforme validado por config.AppConfig.Validate().
+func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP float64) (numDopaminergic, numInhibitory, numExcitatory int) {
 	if remainingForDistribution <= 0 {
-		return 0, 0, 0, nil
+		return 0, 0, 0
 	}
 
-	dopaP = math.Max(0.0, dopaP) // Garantir que os percentuais não sejam negativos.
-	inhibP = math.Max(0.0, inhibP)
-
+	// Usa math.Floor para garantir que não excedemos os percentuais.
+	// O restante será alocado para neurônios excitatórios.
 	numDopaminergic = int(math.Floor(float64(remainingForDistribution) * dopaP))
 	numInhibitory = int(math.Floor(float64(remainingForDistribution) * inhibP))
 
 	currentAllocated := numDopaminergic + numInhibitory
-	numExcitatory = remainingForInternalDistribution - currentAllocated
+	numExcitatory = remainingForDistribution - currentAllocated
 
-	if numExcitatory < 0 {
-		// O warning sobre percentuais excedendo 100% é agora tratado pela validação em config.AppConfig.Validate()
-		// No entanto, a lógica de ajuste ainda é necessária aqui caso a validação seja contornada ou
-		// se os percentuais forem válidos individualmente mas sua soma para o remainingForDistribution cause numExcitatory < 0.
-		// A mensagem de warning pode ser removida daqui se a validação de config for considerada suficiente.
-		// Por ora, manteremos a lógica de ajuste, mas o warning pode ser opcional.
-		// warnings = append(warnings, fmt.Sprintf("Ajuste interno: Percentuais de Dopa (%.2f) e Inhib (%.2f) recalculados para caber no espaço restante.", dopaP, inhibP))
-		numExcitatory = 0
-		if dopaP+inhibP > 0 { // Evitar divisão por zero
-			totalInternalPercentConfigured := dopaP + inhibP
-			numDopaminergic = int(math.Round(float64(remainingForInternalDistribution) * (dopaP / totalInternalPercentConfigured)))
-			numInhibitory = remainingForInternalDistribution - numDopaminergic // Inhib absorve arredondamento
-		} else {
-			// Se ambos os percentuais configurados eram 0, mas numExcitatory deu < 0 (o que não deveria acontecer aqui),
-			// zera ambos por segurança.
-			numDopaminergic = 0
-			numInhibitory = 0
-		}
-	}
+	// numExcitatory deve ser >= 0 devido à validação de que dopaP + inhibP <= 1.0
+	// e ao uso de math.Floor que não "rouba" da contagem de excitatórios.
 	return
 }
 
@@ -156,9 +139,9 @@ func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) {
 	numOutput := simParams.MinOutputNeurons
 
 	if actualTotalNeurons < numInput+numOutput {
-		warningMsg := fmt.Sprintf("Aviso: Total de neurônios configurado (%d) é menor que o mínimo para Input (%d) e Output (%d). Ajustando para o mínimo necessário (%d).",
+		// Este log é importante, pois indica um ajuste automático.
+		fmt.Printf("Aviso: Total de neurônios configurado (%d) é menor que o mínimo para Input (%d) e Output (%d). Ajustando para o mínimo necessário (%d).\n",
 			actualTotalNeurons, numInput, numOutput, numInput+numOutput)
-		fmt.Println(warningMsg) // Ou logar de forma mais estruturada
 		actualTotalNeurons = numInput + numOutput
 	}
 
@@ -167,15 +150,11 @@ func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) {
 
 	remainingForInternalDistribution := actualTotalNeurons - numInput - numOutput
 
-	numDopaminergic, numInhibitory, numExcitatory, calcWarnings := calculateInternalNeuronCounts(
+	numDopaminergic, numInhibitory, numExcitatory := calculateInternalNeuronCounts(
 		remainingForInternalDistribution,
 		simParams.DopaminergicPercent,
 		simParams.InhibitoryPercent,
 	)
-
-	for _, w := range calcWarnings {
-		fmt.Println("Aviso:", w) // Ou logar de forma mais estruturada
-	}
 
 	cn.addNeuronsOfType(numDopaminergic, neuron.Dopaminergic, simParams.DopaminergicRadiusFactor)
 	cn.addNeuronsOfType(numInhibitory, neuron.Inhibitory, simParams.InhibitoryRadiusFactor)
