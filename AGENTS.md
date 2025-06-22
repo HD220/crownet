@@ -84,6 +84,12 @@ Arquivos com sufixo `_test.go` contêm testes unitários para os respectivos pac
 *   **Tratamento de Erros:** Utilize o tratamento de erros idiomático do Go, retornando erros onde apropriado.
 *   **Logging:** Para logs informativos durante a execução, utilize o pacote `fmt` ou `log` do Go. Para persistência de dados da simulação, o pacote `storage` com SQLite é utilizado.
 *   **Reprodutibilidade:** A simulação visa ser determinística se a semente do gerador de números aleatórios (`-seed` flag) for fixada. Mantenha isso em mente ao introduzir nova aleatoriedade.
+*   **Modulação de Limiares Neuronais por Neuroquímicos:**
+    *   O limiar de disparo de um neurônio (`CurrentFiringThreshold`) é dinamicamente ajustado com base nos níveis de cortisol e dopamina. Este valor é derivado do `BaseFiringThreshold` do neurônio.
+    *   O ajuste é feito pela função `ApplyEffectsToNeurons` no pacote `neurochemical`.
+    *   **Cortisol:** Modifica o limiar multiplicativamente usando o parâmetro `simParams.FiringThresholdIncreaseOnCort`. Um valor positivo deste parâmetro faz com que o cortisol aumente o limiar.
+    *   **Dopamina:** Similarmente, modifica o limiar (após o efeito do cortisol) multiplicativamente usando `simParams.FiringThresholdIncreaseOnDopa`.
+    *   Ambos os efeitos são diretos e proporcionais aos níveis normalizados dos respectivos neuroquímicos. Notavelmente, qualquer documentação anterior sobre um efeito em "U" do cortisol nos limiares não reflete a implementação atual.
 *   **Documentação Interna:** Comente o código de forma clara, especialmente para lógica complexa nos algoritmos de simulação.
 
 Lembre-se que este documento é vivo e pode ser atualizado conforme o projeto evolui. Consulte-o regularmente. Boa codificação!
