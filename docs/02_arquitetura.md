@@ -47,9 +47,10 @@ A análise do código existente e o plano de reescrita sugerem a seguinte estrut
 
 *   **`pulse`** (Proposto para Reescrita, ou parte de `network`)
     *   Responsável por:
-        *   Definir a estrutura `Pulse`.
-        *   Lógica de propagação do pulso (movimento, cálculo de alcance por ciclo, dissipação).
-    *   Dependências: `common`/`types`, `neuron` (para `Point`).
+        *   Definir a estrutura `Pulse` e `PulseList`.
+        *   `PulseList` gerencia a coleção de pulsos ativos, sua propagação, interações com neurônios e geração de novos pulsos.
+        *   `Pulse` individualmente rastreia seu movimento e alcance.
+    *   Dependências: `common`/`types`, `neuron` (para `Point`), `synaptic`, `space`.
 
 *   **`space`** (Proposto para Reescrita, ou parte de `utils`)
     *   Responsável por:
@@ -117,9 +118,12 @@ A análise do código existente e o plano de reescrita sugerem a seguinte estrut
     *   `CreationCycle int`
     *   `CurrentDistance float64`
     *   `MaxTravelDistance float64`
+*   **`pulse.PulseList`**:
+    *   `pulses []*pulse.Pulse`
+    *   Responsável por gerenciar a coleção de pulsos ativos, processar seu ciclo de vida (propagação, interação, remoção) e facilitar a criação de novos pulsos.
 *   **`network.CrowNet`**:
     *   `Neurons []*neuron.Neuron`
-    *   `ActivePulses []*network.Pulse`
+    *   `ActivePulses *pulse.PulseList` // Anteriormente []*network.Pulse
     *   `InputNeuronIDs []int`, `OutputNeuronIDs []int`
     *   `CortisolLevel float64`, `DopamineLevel float64`
     *   `CycleCount int`
@@ -172,7 +176,7 @@ A análise do código existente e o plano de reescrita sugerem a seguinte estrut
 *   **Máquina de Estados:** O comportamento do `neuron.Neuron` (Resting, Firing, Refractory) é um exemplo claro do padrão State.
 *   **Strategy (Implícito):** Os diferentes modos de operação (`expose`, `observe`, `sim`) podem ser vistos como diferentes estratégias de execução da simulação, orquestradas em `main` (ou futuro `cli`).
 *   **Tipos Primitivos Encapsulados (Value Object):** Para a reescrita, usar tipos como `NeuronID`, `CycleCount` em vez de `int` puro para melhorar a semântica e segurança de tipo.
-*   **Coleções de Primeira Classe (para Reescrita):** Estruturas como `SynapticWeights` (mapa de mapas) ou `ActivePulses` (slice de `Pulse`) já se aproximam disso. A reescrita pode formalizar mais, por exemplo, `type NeuronCollection []*Neuron`.
+*   **Coleções de Primeira Classe (para Reescrita):** Estruturas como `synaptic.NetworkWeights` (gerenciando pesos sinápticos) e `pulse.PulseList` (gerenciando a coleção de pulsos ativos e seu processamento) são exemplos deste padrão. A reescrita pode formalizar outras coleções, como `type NeuronCollection []*Neuron`.
 *   **Builder (Potencial):** Para a inicialização complexa de `CrowNet`, um padrão Builder poderia ser considerado na reescrita para torná-la mais fluida, embora a função `NewCrowNet` atual já lide com isso.
 
 A arquitetura atual é funcional para o MVP. A reescrita focará em refinar a modularidade, aplicar princípios de Código Limpo e Object Calisthenics, e formalizar alguns desses padrões para melhorar a manutenibilidade e testabilidade.

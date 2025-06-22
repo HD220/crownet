@@ -24,7 +24,7 @@ type CrowNet struct {
 	neuronIDCounter    common.NeuronID
 	CortisolGlandPosition common.Point // Posição da glândula de cortisol
 
-	ActivePulses   []*pulse.Pulse
+	ActivePulses   *pulse.PulseList // MODIFICADO: Agora é um ponteiro para PulseList
 	SynapticWeights synaptic.NetworkWeights
 	ChemicalEnv    *neurochemical.Environment
 
@@ -50,7 +50,7 @@ func NewCrowNet(appCfg *config.AppConfig) *CrowNet {
 		OutputNeuronIDs:        make([]common.NeuronID, 0, appCfg.SimParams.MinOutputNeurons),
 		neuronIDCounter:        0,
 		CortisolGlandPosition: common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // Centro
-		ActivePulses:           make([]*pulse.Pulse, 0),
+		ActivePulses:           pulse.NewPulseList(), // MODIFICADO: Inicializa PulseList
 		SynapticWeights:        synaptic.NewNetworkWeights(),
 		ChemicalEnv:            neurochemical.NewEnvironment(),
 		CycleCount:             0,
@@ -204,8 +204,7 @@ func (cn *CrowNet) RunCycle() {
 	}
 
 	// 2. Propagar pulsos ativos e processar seus efeitos
-	newlyCreatedPulses := cn.processActivePulses()
-	cn.ActivePulses = append(cn.ActivePulses, newlyCreatedPulses...)
+	cn.processActivePulses() // MODIFICADO: processActivePulses agora não retorna e PulseList gerencia os pulsos
 
 	// 3. Atualizar ambiente neuroquímico e aplicar seus efeitos
 	if cn.isChemicalModulationEnabled {
@@ -234,68 +233,33 @@ func (cn *CrowNet) RunCycle() {
 	cn.CycleCount++
 }
 
-// processActivePulses propaga todos os pulsos ativos, processa seus efeitos nos neurônios
-// e retorna uma lista de novos pulsos gerados por neurônios que dispararam.
-// Também remove os pulsos que se dissiparam.
-func (cn *CrowNet) processActivePulses() []*pulse.Pulse {
-	remainingActivePulses := make([]*pulse.Pulse, 0, len(cn.ActivePulses))
-	newlyFiredPulses := make([]*pulse.Pulse, 0)
+// processActivePulses gerencia o processamento de pulsos pela PulseList e lida com os novos pulsos gerados.
+func (cn *CrowNet) processActivePulses() {
+	// Delega o processamento do ciclo de pulsos para PulseList
+	// PulseList.ProcessCycle irá iterar, propagar, aplicar efeitos e retornar os novos pulsos.
+	newlyGeneratedPulses := cn.ActivePulses.ProcessCycle(
+		cn.Neurons,
+		cn.SynapticWeights,
+		cn.CycleCount,
+		&cn.Config.SimParams,
+		// spaceOps // Se tivéssemos uma interface spaceOps, seria passada aqui
+	)
 
-	for _, p := range cn.ActivePulses {
-		if !p.Propagate(&cn.Config.SimParams) {
-			continue // Pulso dissipou (excedeu MaxTravelRadius)
-		}
-		remainingActivePulses = append(remainingActivePulses, p)
-
-		shellStartRadius, shellEndRadius := p.GetEffectShellForCycle(&cn.Config.SimParams)
-
-		for _, targetNeuron := range cn.Neurons {
-			if targetNeuron.ID == p.EmittingNeuronID {
-				continue // Um pulso não afeta o neurônio que o emitiu desta forma
-			}
-
-			// Verifica se o targetNeuron está dentro da casca de efeito do pulso
-			distanceToTarget := space.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
-
-			if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
-				// Neurônio atingido pelo pulso
-				weight := cn.SynapticWeights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
-				effectivePotential := p.BaseSignalValue * weight // BaseSignalValue é +/-1.0 ou 0.0
-
-				if effectivePotential == 0 { // Se peso for zero ou BaseSignalValue for zero
-					continue
-				}
-
-				if targetNeuron.IntegrateIncomingPotential(effectivePotential, cn.CycleCount) {
-					// Neurônio disparou!
-					// O estado do targetNeuron já foi mudado para Firing por IntegrateIncomingPotential.
-					// Ele será avançado para AbsoluteRefractory em AdvanceState no início do *próximo* ciclo.
-					// Ou, se AdvanceState for chamado após processPulses no mesmo ciclo, ele já terá sido atualizado.
-					// A ordem atual é: Decay, AdvanceState (para refratários), ProcessPulses (que pode causar Firing).
-					// Então, o LastFiredCycle será registrado corretamente no próximo AdvanceState.
-
-					if targetNeuron.Type == neuron.Output {
-						cn.recordOutputFiring(targetNeuron.ID)
-					}
-
-					// Gerar novo pulso a partir do neurônio que disparou
-					emittedSignal := targetNeuron.EmittedPulseSign()
-					if emittedSignal != 0 { // Apenas se o tipo de neurônio emite pulsos padrão
-						newP := pulse.New(
-							targetNeuron.ID,
-							targetNeuron.Position,
-							emittedSignal,
-							cn.CycleCount,
-							cn.Config.SimParams.SpaceMaxDimension*2.0, // MaxTravelRadius pode ser o diâmetro do espaço
-						)
-						newlyFiredPulses = append(newlyFiredPulses, newP)
-					}
+	// Lidar com os pulsos recém-gerados
+	if len(newlyGeneratedPulses) > 0 {
+		for _, newP := range newlyGeneratedPulses {
+			// Verificar se o neurônio emissor é um neurônio de output para registrar o disparo
+			// A struct Pulse (newP) tem EmittingNeuronID
+			for _, outID := range cn.OutputNeuronIDs {
+				if newP.EmittingNeuronID == outID {
+					cn.recordOutputFiring(outID) // Passa o ID do neurônio de output
+					break
 				}
 			}
 		}
+		// Adicionar todos os novos pulsos à lista de ativos gerenciada por PulseList
+		cn.ActivePulses.AddAll(newlyGeneratedPulses)
 	}
-	cn.ActivePulses = remainingActivePulses // Atualiza a lista de pulsos ativos da rede
-	return newlyFiredPulses
 }
 
 // applyHebbianLearning itera sobre as conexões e aplica a regra de aprendizado.
@@ -482,7 +446,7 @@ func (cn *CrowNet) processFrequencyInputs() {
                         cn.CycleCount,
                         cn.Config.SimParams.SpaceMaxDimension*2.0,
                     )
-                    cn.ActivePulses = append(cn.ActivePulses, newP)
+					cn.ActivePulses.Add(newP) // MODIFICADO: Usa Add de PulseList
                 }
             }
             // Resetar o timer para o próximo disparo
@@ -562,7 +526,7 @@ func (cn *CrowNet) PresentPattern(patternData []float64) error {
                         cn.CycleCount, // Pulso criado no ciclo atual
                         cn.Config.SimParams.SpaceMaxDimension*2.0,
                     )
-                    cn.ActivePulses = append(cn.ActivePulses, newP)
+					cn.ActivePulses.Add(newP) // MODIFICADO: Usa Add de PulseList
                 }
 			} else {
 				return fmt.Errorf("neurônio de input ID %d não encontrado ou não é do tipo Input", inputNeuronID)
@@ -589,7 +553,7 @@ func (cn *CrowNet) ResetNetworkStateForNewPattern() {
         // isso pode ser um problema.
         // Para o MVP, vamos apenas resetar o potencial. O estado evoluirá.
     }
-    cn.ActivePulses = make([]*pulse.Pulse, 0) // Limpar pulsos antigos
+	cn.ActivePulses.Clear() // MODIFICADO: Usa o método Clear de PulseList
 }
 
 
