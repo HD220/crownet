@@ -307,7 +307,7 @@ func (o *Orchestrator) runExposeMode() error {
 }
 
 func (o *Orchestrator) runObservationPattern() ([]float64, error) {
-	patternToObserve, err := datagen.GetDigitPattern(o.AppCfg.Cli.Digit, &o.AppCfg.SimParams)
+	patternToObserve, err := datagen.GetDigitPatternFn(o.AppCfg.Cli.Digit, &o.AppCfg.SimParams) // Usa GetDigitPatternFn
 	if err != nil {
 		return nil, fmt.Errorf("falha ao obter padrão para o dígito %d: %w", o.AppCfg.Cli.Digit, err)
 	}

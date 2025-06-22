@@ -100,10 +100,14 @@ var digitPatternData = map[int][][]int{
 	},
 }
 
-// GetDigitPattern retorna um padrão de dígito como uma fatia achatada de float64.
+// GetDigitPatternFn é uma variável de função para permitir o mock em testes.
+// A implementação real é getDigitPatternInternal.
+var GetDigitPatternFn = getDigitPatternInternal
+
+// getDigitPatternInternal é a implementação real de GetDigitPattern.
 // Os valores são 1.0 para "ligado" e 0.0 para "desligado".
 // Utiliza os parâmetros de SimParams para validação de dimensões.
-func GetDigitPattern(digit int, simParams *config.SimulationParameters) ([]float64, error) {
+func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) ([]float64, error) {
 	pattern2D, ok := digitPatternData[digit]
 	if !ok {
 		return nil, fmt.Errorf("padrão de dígito para %d não encontrado", digit)
