@@ -67,4 +67,3 @@ func (ns State) String() string {
 		return "Unknown"
 	}
 }
-```
