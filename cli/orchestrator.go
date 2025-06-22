@@ -129,21 +129,30 @@ func (o *Orchestrator) Run() {
 	o.createNetwork()
 
 	startTime := time.Now()
+	var errRun error // Declarar errRun fora do switch para que seja acessível depois
+
 	switch o.AppCfg.Cli.Mode {
 	case config.ModeSim:
-		o.runSimMode()
+		errRun = o.runSimMode()
 	case config.ModeExpose:
-		o.runExposeMode()
+		errRun = o.runExposeMode()
 	case config.ModeObserve:
-		o.runObserveMode()
+		errRun = o.runObserveMode()
 	default:
 		// A validação em config.NewAppConfig() deve pegar isso, mas um fallback é bom.
-	log.Fatalf("Modo desconhecido ou não suportado encontrado em Orchestrator.Run: %s.", o.AppCfg.Cli.Mode)
+		// Usar log.Fatalf aqui é apropriado pois é um erro de programação/configuração inesperado.
+		log.Fatalf("Modo desconhecido ou não suportado encontrado em Orchestrator.Run: %s.", o.AppCfg.Cli.Mode)
 	}
 
 	if errRun != nil {
-		// Usar log.Fatalf aqui ainda encerra, mas centraliza o tratamento do erro retornado pelos run...Mode.
-		// Alternativamente, Run() poderia retornar o erro para main.go tratar (o que main.go já faz para config).
+		// Agora main.go trata o erro de Run(), então aqui podemos apenas retornar o erro.
+		// No entanto, o Run() do orchestrator não retorna erro no momento.
+		// Para manter a consistência com a modificação em main.go que espera um erro de Run(),
+		// e para permitir que main.go logue o erro específico do modo:
+		// Esta função Run() deveria retornar 'error'.
+		// Por agora, vamos manter o log.Fatalf, mas idealmente Run() retornaria o erro.
+		// Se REFACTOR-003/REFACTOR-005 for para fazer Run() retornar erro, então esta linha mudaria.
+		// Assumindo que Run() não retorna erro por enquanto, este log.Fatalf é o tratamento final aqui.
 		log.Fatalf("Erro durante a execução do modo '%s': %v", o.AppCfg.Cli.Mode, errRun)
 	}
 
