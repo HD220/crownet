@@ -66,23 +66,14 @@ type SimulationParameters struct {
 	DopamineProductionPerEvent  float64 // Amount of dopamine produced per firing dopaminergic neuron
 	DopamineMaxLevel            float64 // Maximum dopamine level
 
-	// Modulation factors for Learning Rate
-	MaxDopamineLearningMultiplier float64 // e.g., 2.0 means dopamine can double the LR
-	CortisolHighEffectThreshold   float64 // Cortisol level at which high-impact effects start
-	CortisolLearningSuppressionFactor float64 // Factor by which LR is suppressed at max cortisol (e.g., 0.1 means 10% of original LR)
+	// Simplified modulation factors (used by current neurochemical logic)
 	MinLearningRateFactor         float64 // Minimum learning rate factor (e.g., 0.05)
-
-	// Modulation factors for Synaptogenesis
-	SynaptogenesisReductionFactor      float64 // Factor by which synaptogenesis is reduced at max cortisol (e.g., 0.2 means 20% of original rate)
-	DopamineSynaptogenesisIncreaseFactor float64 // e.g., 1.5 means dopamine can increase synaptogenesis by 50%
-
-	// Modulation factors for Firing Threshold (U-shape for Cortisol)
-	CortisolMinEffectThreshold   float64 // Cortisol level below which there's no significant effect on threshold
-	CortisolOptimalLowThreshold  float64 // Lower bound of optimal cortisol range for threshold reduction
-	CortisolOptimalHighThreshold float64 // Upper bound of optimal cortisol range for threshold reduction
-	MaxThresholdReductionFactor  float64 // Factor by which threshold is reduced at optimal cortisol (e.g., 0.8 for 20% reduction)
-	ThresholdIncreaseFactorHigh  float64 // Factor by which threshold is increased at very high cortisol (e.g., 1.5 for 50% increase)
-	// DopamineThresholdIncreaseFactor foi removido, usar FiringThresholdIncreaseOnDopa
+	// Os parâmetros mais complexos para modulação de LR e Threshold (MaxDopamineLearningMultiplier,
+	// CortisolHighEffectThreshold, CortisolLearningSuppressionFactor, SynaptogenesisReductionFactor,
+	// DopamineSynaptogenesisIncreaseFactor, CortisolMinEffectThreshold, CortisolOptimalLowThreshold,
+	// CortisolOptimalHighThreshold, MaxThresholdReductionFactor, ThresholdIncreaseFactorHigh)
+	// foram removidos pois a lógica em neurochemicals.go foi simplificada para usar
+	// os parâmetros de influência direta (ex: CortisolInfluenceOnLR, FiringThresholdIncreaseOnCort).
 }
 
 // CLIConfig holds parameters that are typically set via command-line flags.
@@ -161,22 +152,9 @@ func DefaultSimulationParameters() SimulationParameters {
 	DopamineProductionPerEvent:  0.1,
 	DopamineMaxLevel:            1.0,
 
-	// Modulation factors for Learning Rate - Defaults
-	MaxDopamineLearningMultiplier: 2.0,   // Dopamine can double LR
-	CortisolHighEffectThreshold:   0.7,   // High cortisol effects start at 70% of max
-	CortisolLearningSuppressionFactor: 0.2, // At max cortisol, LR is 20% of normal
+	// Simplified modulation factors - Defaults
 	MinLearningRateFactor:         0.1,   // LR factor won't go below 10%
-
-	// Modulation factors for Synaptogenesis - Defaults
-	SynaptogenesisReductionFactor:      0.3,   // At max cortisol, synaptogenesis is 30% of normal
-	DopamineSynaptogenesisIncreaseFactor: 1.5, // Dopamine can increase synaptogenesis by 50%
-
-	// Modulation factors for Firing Threshold (U-shape for Cortisol) - Defaults
-	CortisolMinEffectThreshold:   0.1,  // Below 10% cortisol, no effect
-	CortisolOptimalLowThreshold:  0.25, // Optimal range for threshold reduction
-	CortisolOptimalHighThreshold: 0.5,
-	MaxThresholdReductionFactor:  0.8,  // Threshold can be reduced to 80% of base (20% reduction)
-	ThresholdIncreaseFactorHigh:  1.5,  // At very high cortisol, threshold increases by 50%
+	// Os valores padrão para os parâmetros de modulação complexos removidos não são mais necessários aqui.
 	}
 }
 
