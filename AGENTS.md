@@ -65,5 +65,19 @@ O projeto passou por uma refatoração sistemática significativa. As principais
 *   Priorize a clareza e a legibilidade.
 *   Adicione testes unitários para novas funcionalidades ou ao corrigir bugs.
 
+## 7. Abordagem de Testes e Uso de Mocks
+
+O projeto CrowNet emprega uma estratégia de testes em várias camadas:
+
+*   **Testes Unitários:** Cada pacote (`neuron`, `pulse`, `synaptic`, etc.) possui seus próprios testes (`_test.go`) que verificam a lógica interna de suas funções e tipos de forma isolada.
+*   **Testes de "Quase Integração" para a CLI:** O pacote `cli_test` contém testes que verificam o `Orchestrator`. Para isolar a lógica do orquestrador de dependências externas como o sistema de arquivos (`storage`) ou a geração de dados (`datagen`), são usadas algumas técnicas:
+    *   **Injeção de Dependência de Função:** O `Orchestrator` possui campos como `loadWeightsFn` e `saveWeightsFn`. No código de produção, eles usam as funções reais do pacote `storage`. Nos testes, eles podem ser sobrescritos por funções mock para simular sucesso, falha ou capturar dados.
+    *   **Variáveis de Função de Pacote Mockáveis:** Funções como `datagen.GetDigitPattern` são expostas como variáveis (`datagen.GetDigitPatternFn`) que podem ser temporariamente substituídas nos testes por implementações mock.
+    *   **Importante:** Esses "mocks" são apenas para fins de teste e não indicam funcionalidade ausente no código de produção. As implementações reais são usadas por padrão.
+*   **Testes de Sistema (Manuais/Planejados):** Os documentos `TESTING_SCENARIOS.md` e `docs/use_cases.md` detalham cenários de teste de ponta a ponta que envolvem a execução do binário compilado com várias flags. Um exemplo de relatório de execução simulada programaticamente pode ser encontrado em `docs/execution_reports/`.
+*   **Documentação Adicional:** Consulte `docs/testing_approach.md` para uma descrição mais detalhada da filosofia e das camadas de teste.
+
+Ao trabalhar nos testes ou no código que eles cobrem, é importante entender o papel dessas técnicas de mock para evitar confusão.
+
 Esperamos que este guia seja útil! Boas contribuições!
 ```
