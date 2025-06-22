@@ -22,8 +22,8 @@ Este documento descreve cenários de teste de ponta a ponta para validar a funci
     1.  O programa executa por 10 ciclos.
     2.  O programa termina sem erros (código de saída 0).
     3.  Saída no console deve indicar o início e fim da simulação, e logs de ciclo (a cada 10 ciclos ou no último, conforme `cli/orchestrator.go`).
-    4.  Um arquivo de banco de dados (padrão: `crownet_sim_run.db`) **não** deve ser criado se `-dbPath` não for especificado ou se `-saveInterval` for 0 (a menos que o padrão de `dbPath` não seja vazio e `saveInterval` seja >0 por padrão na CLIConfig para o modo sim). *Nota: A lógica atual de `initializeLogger` e `runSimulationLoop` pode criar o DB mesmo com `saveInterval=0` se `dbPath` for fornecido. Isso precisa ser verificado.*
-*   **Verificação:** Código de saída, logs no console.
+    4.  Um arquivo de banco de dados (padrão: `crownet_sim_run.db`) **será criado** mesmo se `-dbPath` e `-saveInterval` não forem explicitamente fornecidos, devido aos valores padrão (`DbPath="crownet_sim_run.db"`, `SaveInterval=100` em `config.go`) que ativam o logger e o log final. O log periódico pode não ocorrer para poucos ciclos, mas o log final sim.
+*   **Verificação:** Código de saída, logs no console, existência do arquivo de banco de dados.
 
 ### Teste SIM_02: Modo `sim` com Logging SQLite
 *   **Comando:** `EXEC -mode sim -cycles 25 -neurons 50 -dbPath sim_test.db -saveInterval 10`

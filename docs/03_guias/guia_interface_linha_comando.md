@@ -20,11 +20,12 @@ A aplicação é executada como um único binário (`crownet` após compilação
 
 Estas flags podem ser aplicadas à maioria dos modos de operação:
 
-*   `-neurons <int>`: Número total de neurônios na rede. (Padrão: 100)
-*   `-weightsFile <string>`: Caminho para o arquivo JSON para salvar/carregar os pesos sinápticos. (Padrão: "crownet_digit_weights.json")
-*   `-dbPath <string>`: Caminho para o arquivo SQLite para logging detalhado da simulação. Se fornecido, o logging é ativado. O arquivo é recriado a cada execução. (Padrão: "crownet_data.db")
-*   `-saveInterval <int>`: Intervalo de ciclos para salvar o estado no SQLite (0 para desabilitar saves periódicos, apenas final se aplicável). (Padrão: 0)
+*   `-neurons <int>`: Número total de neurônios na rede. (Padrão: 200)
+*   `-weightsFile <string>`: Caminho para o arquivo JSON para salvar/carregar os pesos sinápticos. (Padrão: "crownet_weights.json")
+*   `-dbPath <string>`: Caminho para o arquivo SQLite para logging detalhado da simulação. Se fornecido, o logging é ativado. O arquivo é recriado a cada execução. (Padrão: "crownet_sim_run.db")
+*   `-saveInterval <int>`: Intervalo de ciclos para salvar o estado no SQLite (0 para desabilitar saves periódicos, apenas final se aplicável). (Padrão: 100)
 *   `-debugChem <bool>`: Habilita logs de depuração para produção/níveis de neuroquímicos. (Padrão: false)
+*   `-seed <int64>`: Semente para o gerador de números aleatórios (0 usa o tempo atual). (Padrão: 0)
 
 ## 4. Formato da Saída no Console por Modo
 
@@ -46,10 +47,10 @@ Initial State: Cortisol=<nivel_C>, Dopamine=<nivel_D>
 ### 4.2. Modo `sim` (`-mode sim`)
 
 *   **Flags Específicas:**
-    *   `-cycles <int>`: Número total de ciclos de simulação para este modo. (Padrão: 100)
+    *   `-cycles <int>`: Número total de ciclos de simulação para este modo. (Padrão: 1000)
     *   `-stimInputID <int>`: ID de um neurônio de entrada para estímulo contínuo (-1 para primeiro disponível, -2 para desabilitar). (Padrão: -1)
     *   `-stimInputFreqHz <float64>`: Frequência (Hz) para o estímulo contínuo (0.0 para desabilitar). (Padrão: 0.0)
-    *   `-monitorOutputID <int>`: ID de um neurônio de saída para monitorar frequência (-1 para primeiro disponível). (Padrão: -1)
+    *   `-monitorOutputID <int>`: ID de um neurônio de saída para monitorar frequência (-1 para primeiro disponível, -2 para desabilitar). (Padrão: -1)
 
 *   **Saída no Console:**
     ```text
@@ -74,8 +75,8 @@ Initial State: Cortisol=<nivel_C>, Dopamine=<nivel_D>
 
 *   **Flags Específicas:**
     *   `-epochs <int>`: Número de épocas de exposição aos padrões. (Padrão: 50)
-    *   `-lrBase <float64>`: Taxa de aprendizado base para plasticidade Hebbiana. (Padrão: 0.005)
-    *   `-cyclesPerPattern <int>`: Número de ciclos de simulação por apresentação de padrão. (Padrão: 5)
+    *   `-lrBase <float64>`: Taxa de aprendizado base para plasticidade Hebbiana. (Padrão: 0.01)
+    *   `-cyclesPerPattern <int>`: Número de ciclos de simulação por apresentação de padrão. (Padrão: 20)
 
 *   **Saída no Console:**
     ```text
@@ -98,7 +99,7 @@ Initial State: Cortisol=<nivel_C>, Dopamine=<nivel_D>
 
 *   **Flags Específicas:**
     *   `-digit <0-9>`: O dígito a ser apresentado. (Padrão: 0)
-    *   `-cyclesToSettle <int>`: Número de ciclos para acomodação da rede. (Padrão: 5)
+    *   `-cyclesToSettle <int>`: Número de ciclos para acomodação da rede. (Padrão: 50)
 
 *   **Saída no Console:**
     ```text
@@ -126,7 +127,7 @@ Initial State: Cortisol=<nivel_C>, Dopamine=<nivel_D>
 
 O arquivo JSON armazena os pesos sinápticos como um objeto principal. Cada chave deste objeto é uma string representando o `ID` de um neurônio de origem. O valor associado a cada neurônio de origem é outro objeto, onde cada chave é uma string representando o `ID` de um neurônio de destino, e o valor é o peso sináptico (um número float).
 
-Exemplo (`crownet_digit_weights.json`):
+Exemplo (`crownet_weights.json`):
 ```json
 {
   "0": {
