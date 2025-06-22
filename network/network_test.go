@@ -1,10 +1,24 @@
 package network
 
 import (
+	"crownet/common" // Adicionado para TestRecordOutputFiring e outros
+	"crownet/config" // Adicionado para TestRecordOutputFiring e outros
+	"crownet/neuron" // Adicionado para TestRecordOutputFiring e outros
 	"fmt"
 	"math"
+	"math/rand" // Adicionado para TestMain e potencialmente outros
+	"reflect"   // Adicionado para DeepEqual em TestRecordOutputFiring
+	"strings"   // Adicionado para TestCalculateInternalNeuronCounts
 	"testing"
 )
+
+// Helper para comparar floats com tolerância
+func floatEquals(a, b, tolerance float64) bool {
+	if a == b { // Shortcut for exact equality, handles infinities.
+		return true
+	}
+	return math.Abs(a-b) < tolerance
+}
 
 func TestCalculateInternalNeuronCounts(t *testing.T) {
 	testCases := []struct {
@@ -527,11 +541,16 @@ func TestNewCrowNet_Initialization(t *testing.T) {
 
 	totalNeuronsCLI := 100
 	baseLR := common.Rate(0.01)
+	seed := int64(42) // Semente fixa para o teste
 
-	net := NewCrowNet(totalNeuronsCLI, baseLR, &simParams)
+	net := NewCrowNet(totalNeuronsCLI, baseLR, &simParams, seed)
 
 	if net == nil {
 		t.Fatalf("NewCrowNet returned nil")
+	}
+
+	if net.rng == nil {
+		t.Errorf("Expected net.rng to be initialized, got nil")
 	}
 
 	if net.SimParams == nil {
@@ -551,9 +570,6 @@ func TestNewCrowNet_Initialization(t *testing.T) {
 		expectedTotalNeurons = simParams.MinInputNeurons + simParams.MinOutputNeurons
 	}
 
-	// Verificar se o número de neurônios criados está correto
-	// A lógica exata está em initializeNeurons, que já tem calculateInternalNeuronCounts testado.
-	// Aqui, apenas uma verificação de sanidade no total.
 	if len(net.Neurons) != expectedTotalNeurons {
 		t.Errorf("Total neurons: expected %d, got %d", expectedTotalNeurons, len(net.Neurons))
 	}
@@ -565,6 +581,40 @@ func TestNewCrowNet_Initialization(t *testing.T) {
 		t.Errorf("OutputNeuronIDs count: expected %d, got %d", simParams.MinOutputNeurons, len(net.OutputNeuronIDs))
 	}
 
+	// Verificar se SynapticWeights foi inicializado (InitializeAllToAllWeights foi chamado)
+	// Esperamos N entradas no mapa principal, onde N é o número de neurônios
+	if len(net.SynapticWeights) != expectedTotalNeurons {
+		t.Errorf("Expected %d entries in SynapticWeights map, got %d", expectedTotalNeurons, len(net.SynapticWeights))
+	}
+	// Verificar um peso aleatório para ver se está dentro da faixa esperada (assumindo que InitializeAllToAllWeights funciona)
+	if expectedTotalNeurons > 1 { // Só faz sentido se houver pelo menos 2 neurônios para ter uma conexão não-self
+		foundNonZeroWeight := false
+		for fromID, toMap := range net.SynapticWeights {
+			for toID, weight := range toMap {
+				if fromID != toID && weight != 0 { // Encontrou um peso não-self e não-zero
+					// Verificar se o peso está na faixa de inicialização (aproximado, já que InitializeAllToAllWeights é testado em synaptic_test)
+					// Esta é uma verificação de sanidade que a inicialização ocorreu.
+					if float64(weight) < simParams.InitialSynapticWeightMin || float64(weight) > simParams.InitialSynapticWeightMax {
+						// Permitir uma pequena margem se min == max
+						if !(simParams.InitialSynapticWeightMin == simParams.InitialSynapticWeightMax && floatEquals(float64(weight), simParams.InitialSynapticWeightMin, 1e-9)) {
+							t.Errorf("Initial weight %f for %d->%d out of expected range [%f, %f]",
+								weight, fromID, toID, simParams.InitialSynapticWeightMin, simParams.InitialSynapticWeightMax)
+						}
+					}
+					foundNonZeroWeight = true
+					break
+				}
+			}
+			if foundNonZeroWeight {
+				break
+			}
+		}
+		if !foundNonZeroWeight && (expectedTotalNeurons > 1 && simParams.InitialSynapticWeightMax > 0) { // Se max > 0, deveríamos ter pesos não-zero
+			t.Errorf("SynapticWeights seem to be all zero, InitializeAllToAllWeights might not have run as expected.")
+		}
+	}
+
+
 	if net.CycleCount != 0 {
 		t.Errorf("Initial CycleCount: expected 0, got %d", net.CycleCount)
 	}
@@ -574,14 +624,362 @@ func TestNewCrowNet_Initialization(t *testing.T) {
 	if net.ActivePulses == nil {
 		t.Errorf("ActivePulses should be initialized, got nil")
 	}
-	if net.SynapticWeights.Weights == nil { // Assuming Weights is the map
-		t.Errorf("SynapticWeights should be initialized, got nil map")
+	// A verificação de net.SynapticWeights.Weights == nil não é mais válida pois NetworkWeights é um map.
+	// A verificação len(net.SynapticWeights) acima é melhor.
+}
+
+
+func TestAddNeuronsOfType(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.MinInputNeurons = 2
+	simParams.MinOutputNeurons = 1
+	simParams.SpaceMaxDimension = 10.0
+
+	seed := int64(123)
+	net := NewCrowNet(10, 0.01, &simParams, seed) // Inicializa uma rede base
+	initialNeuronCount := len(net.Neurons)
+	initialInputIDs := len(net.InputNeuronIDs)
+	initialOutputIDs := len(net.OutputNeuronIDs)
+
+	// Adicionar neurônios de Input
+	numToAddInput := 3
+	net.addNeuronsOfType(numToAddInput, neuron.Input, simParams.ExcitatoryRadiusFactor)
+	if len(net.Neurons) != initialNeuronCount+numToAddInput {
+		t.Errorf("After adding %d Input neurons, expected %d total, got %d",
+			numToAddInput, initialNeuronCount+numToAddInput, len(net.Neurons))
+	}
+	if len(net.InputNeuronIDs) != initialInputIDs+numToAddInput {
+		t.Errorf("After adding %d Input neurons, expected %d InputNeuronIDs, got %d",
+			numToAddInput, initialInputIDs+numToAddInput, len(net.InputNeuronIDs))
+	}
+	// Verificar se os novos neurônios são do tipo Input e têm posições válidas (dentro de SpaceMaxDimension)
+	for i := initialNeuronCount; i < len(net.Neurons); i++ {
+		n := net.Neurons[i]
+		if n.Type != neuron.Input {
+			t.Errorf("Neuron %d: expected type Input, got %s", n.ID, n.Type)
+		}
+		distSq := 0.0
+		for _, coord := range n.Position {
+			distSq += float64(coord * coord)
+		}
+		if distSq > simParams.SpaceMaxDimension*simParams.SpaceMaxDimension*simParams.ExcitatoryRadiusFactor*simParams.ExcitatoryRadiusFactor + 1e-9 { // Pequena tolerância
+			t.Errorf("Neuron %d (Input) position %v is outside radius %f (distSq: %f)",
+				n.ID, n.Position, simParams.SpaceMaxDimension*simParams.ExcitatoryRadiusFactor, distSq)
+		}
+	}
+
+	// Adicionar neurônios de Output
+	numToAddOutput := 2
+	currentTotalNeurons := len(net.Neurons)
+	net.addNeuronsOfType(numToAddOutput, neuron.Output, simParams.ExcitatoryRadiusFactor) // Usa net.rng implicitamente via GenerateRandomPositionInHyperSphere
+	if len(net.Neurons) != currentTotalNeurons+numToAddOutput {
+		t.Errorf("After adding %d Output neurons, expected %d total, got %d",
+			numToAddOutput, currentTotalNeurons+numToAddOutput, len(net.Neurons))
+	}
+	if len(net.OutputNeuronIDs) != initialOutputIDs+numToAddOutput {
+		t.Errorf("After adding %d Output neurons, expected %d OutputNeuronIDs, got %d",
+			numToAddOutput, initialOutputIDs+numToAddOutput, len(net.OutputNeuronIDs))
 	}
 }
 
+
+func TestProcessFrequencyInputs(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.CyclesPerSecond = 100 // Para facilitar o cálculo de timeToNextInputFire
+	net := NewCrowNet(5, 0.01, &simParams, 123) // 5 neurônios, alguns podem ser input
+
+	// Forçar alguns neurônios a serem do tipo Input para o teste
+	if len(net.Neurons) < 2 {
+		t.Fatalf("Necessário pelo menos 2 neurônios para o teste, tem %d", len(net.Neurons))
+	}
+	// Forçar os dois primeiros neurônios a serem de Input e registrar seus IDs
+	inputID1 := net.Neurons[0].ID
+	inputID2 := net.Neurons[1].ID
+	net.Neurons[0].Type = neuron.Input
+	net.Neurons[1].Type = neuron.Input
+	net.InputNeuronIDs = []common.NeuronID{inputID1, inputID2} // Garantir que a lista de IDs de input esteja correta
+
+	// Configurar frequência para inputID1: 50Hz -> dispara a cada 2 ciclos (100/50)
+	// Configurar frequência para inputID2: 25Hz -> dispara a cada 4 ciclos (100/25)
+	net.inputTargetFrequencies[inputID1] = 50.0
+	net.timeToNextInputFire[inputID1] = 2 // Dispara no ciclo 2 (contando a partir de 1)
+	net.inputTargetFrequencies[inputID2] = 25.0
+	net.timeToNextInputFire[inputID2] = 4 // Dispara no ciclo 4
+
+	// Ciclo 1: Nada deve disparar
+	net.CycleCount = 0 // Simula o início do ciclo 1 (CycleCount é incrementado no final de RunCycle)
+	net.processFrequencyInputs()
+	if net.Neurons[0].CurrentState == neuron.Firing || net.Neurons[1].CurrentState == neuron.Firing {
+		t.Errorf("Ciclo 1: Nenhum neurônio deveria ter disparado por frequência")
+	}
+	if net.ActivePulses.Count() != 0 {
+		t.Errorf("Ciclo 1: Nenhum pulso deveria ter sido gerado, got %d", net.ActivePulses.Count())
+	}
+	if net.timeToNextInputFire[inputID1] != 1 || net.timeToNextInputFire[inputID2] != 3 {
+		t.Errorf("Ciclo 1: timeToNextInputFire incorreto. ID1: %d (exp 1), ID2: %d (exp 3)",
+			net.timeToNextInputFire[inputID1], net.timeToNextInputFire[inputID2])
+	}
+
+	// Ciclo 2: inputID1 deve disparar
+	net.CycleCount = 1
+	net.processFrequencyInputs()
+	if net.Neurons[0].CurrentState != neuron.Firing {
+		t.Errorf("Ciclo 2: Neurônio ID1 (index 0) deveria ter disparado. Estado: %s", net.Neurons[0].CurrentState)
+	}
+	if net.Neurons[1].CurrentState == neuron.Firing {
+		t.Errorf("Ciclo 2: Neurônio ID2 (index 1) NÃO deveria ter disparado. Estado: %s", net.Neurons[1].CurrentState)
+	}
+	if net.ActivePulses.Count() != 1 {
+		t.Errorf("Ciclo 2: Esperado 1 pulso gerado, got %d", net.ActivePulses.Count())
+	} else if net.ActivePulses.GetAll()[0].EmittingNeuronID != inputID1 {
+		t.Errorf("Ciclo 2: Pulso gerado com ID emissor incorreto")
+	}
+	// timeToNextInputFire[inputID1] deve ser resetado para 2 (100/50)
+	// timeToNextInputFire[inputID2] deve ser 2
+	if net.timeToNextInputFire[inputID1] != 2 || net.timeToNextInputFire[inputID2] != 2 {
+		t.Errorf("Ciclo 2: timeToNextInputFire incorreto. ID1: %d (exp 2), ID2: %d (exp 2)",
+			net.timeToNextInputFire[inputID1], net.timeToNextInputFire[inputID2])
+	}
+	net.Neurons[0].CurrentState = neuron.Resting // Reset para próximo ciclo de teste
+	net.ActivePulses.Clear()
+
+	// Ciclo 3: Nada deve disparar
+	net.CycleCount = 2
+	net.processFrequencyInputs()
+	if net.Neurons[0].CurrentState == neuron.Firing || net.Neurons[1].CurrentState == neuron.Firing {
+		t.Errorf("Ciclo 3: Nenhum neurônio deveria ter disparado por frequência")
+	}
+	if net.ActivePulses.Count() != 0 {
+		t.Errorf("Ciclo 3: Nenhum pulso deveria ter sido gerado, got %d", net.ActivePulses.Count())
+	}
+	if net.timeToNextInputFire[inputID1] != 1 || net.timeToNextInputFire[inputID2] != 1 {
+		t.Errorf("Ciclo 3: timeToNextInputFire incorreto. ID1: %d (exp 1), ID2: %d (exp 1)",
+			net.timeToNextInputFire[inputID1], net.timeToNextInputFire[inputID2])
+	}
+
+	// Ciclo 4: Ambos devem disparar
+	net.CycleCount = 3
+	net.processFrequencyInputs()
+	if net.Neurons[0].CurrentState != neuron.Firing {
+		t.Errorf("Ciclo 4: Neurônio ID1 (index 0) deveria ter disparado. Estado: %s", net.Neurons[0].CurrentState)
+	}
+	if net.Neurons[1].CurrentState != neuron.Firing {
+		t.Errorf("Ciclo 4: Neurônio ID2 (index 1) deveria ter disparado. Estado: %s", net.Neurons[1].CurrentState)
+	}
+	if net.ActivePulses.Count() != 2 {
+		t.Errorf("Ciclo 4: Esperado 2 pulsos gerados, got %d", net.ActivePulses.Count())
+	}
+	// timeToNextInputFire[inputID1] deve ser resetado para 2
+	// timeToNextInputFire[inputID2] deve ser resetado para 4
+	if net.timeToNextInputFire[inputID1] != 2 || net.timeToNextInputFire[inputID2] != 4 {
+		t.Errorf("Ciclo 4: timeToNextInputFire incorreto. ID1: %d (exp 2), ID2: %d (exp 4)",
+			net.timeToNextInputFire[inputID1], net.timeToNextInputFire[inputID2])
+	}
+}
+
+func TestPresentPattern(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.PatternSize = 3
+	simParams.MinInputNeurons = 3 // Garantir que temos neurônios de input suficientes
+	net := NewCrowNet(5, 0.01, &simParams, 456)
+
+	// Forçar os primeiros MinInputNeurons a serem do tipo Input
+	for i := 0; i < simParams.MinInputNeurons; i++ {
+		if i < len(net.Neurons) {
+			net.Neurons[i].Type = neuron.Input
+		} else {
+			t.Fatalf("Rede não tem neurônios suficientes para configurar como Input para o teste.")
+		}
+	}
+	// Atualizar InputNeuronIDs explicitamente para o teste
+	net.InputNeuronIDs = make([]common.NeuronID, 0, simParams.MinInputNeurons)
+	for i:=0; i < simParams.MinInputNeurons; i++ {
+		net.InputNeuronIDs = append(net.InputNeuronIDs, net.Neurons[i].ID)
+	}
+
+
+	// Caso 1: Padrão válido
+	pattern1 := []float64{1.0, 0.0, 1.0} // Ativar neurônios de input 0 e 2
+	net.CycleCount = 0 // Definir ciclo atual
+	err := net.PresentPattern(pattern1)
+	if err != nil {
+		t.Fatalf("PresentPattern com padrão válido retornou erro: %v", err)
+	}
+	if net.Neurons[0].CurrentState != neuron.Firing {
+		t.Errorf("Neurônio de Input 0 deveria estar Firing")
+	}
+	if net.Neurons[1].CurrentState == neuron.Firing {
+		t.Errorf("Neurônio de Input 1 NÃO deveria estar Firing")
+	}
+	if net.Neurons[2].CurrentState != neuron.Firing {
+		t.Errorf("Neurônio de Input 2 deveria estar Firing")
+	}
+	if net.ActivePulses.Count() != 2 { // Dois neurônios dispararam
+		t.Errorf("Esperado 2 pulsos ativos, got %d", net.ActivePulses.Count())
+	}
+	// Verificar IDs dos emissores dos pulsos
+	emitters := make(map[common.NeuronID]bool)
+	for _, p := range net.ActivePulses.GetAll() {
+		emitters[p.EmittingNeuronID] = true
+	}
+	if !emitters[net.InputNeuronIDs[0]] || !emitters[net.InputNeuronIDs[2]] {
+		t.Errorf("Pulsos gerados com IDs emissores incorretos: %v", emitters)
+	}
+
+
+	// Resetar estados para próximo teste
+	for _, n := range net.Neurons { n.CurrentState = neuron.Resting }
+	net.ActivePulses.Clear()
+
+	// Caso 2: Tamanho do padrão incorreto
+	pattern2 := []float64{1.0, 0.0} // Tamanho 2, esperado 3
+	err = net.PresentPattern(pattern2)
+	if err == nil {
+		t.Errorf("PresentPattern deveria retornar erro para tamanho de padrão incorreto, mas não retornou")
+	}
+
+	// Caso 3: Não há neurônios de input suficientes (simular isso artificialmente)
+	originalInputIDs := net.InputNeuronIDs
+	net.InputNeuronIDs = []common.NeuronID{net.Neurons[0].ID} // Apenas 1 neurônio de input
+	simParams.PatternSize = 2 // Agora esperamos um padrão de tamanho 2
+	pattern3 := []float64{1.0, 1.0}
+	err = net.PresentPattern(pattern3)
+	if err == nil {
+		t.Errorf("PresentPattern deveria retornar erro para InputNeuronIDs insuficientes, mas não retornou")
+	}
+	net.InputNeuronIDs = originalInputIDs // Restaurar
+	simParams.PatternSize = 3 // Restaurar
+}
+
+
+func TestConfigureFrequencyInput(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.CyclesPerSecond = 100.0 // Para cálculo do tempo de disparo
+	net := NewCrowNet(3, 0.01, &simParams, 789)
+
+	// Forçar o primeiro neurônio a ser Input
+	inputID := net.Neurons[0].ID
+	net.Neurons[0].Type = neuron.Input
+	net.InputNeuronIDs = []common.NeuronID{inputID}
+
+	// Caso 1: Configurar frequência válida
+	err := net.ConfigureFrequencyInput(inputID, 10.0) // 10 Hz
+	if err != nil {
+		t.Fatalf("ConfigureFrequencyInput retornou erro inesperado: %v", err)
+	}
+	if targetHz, ok := net.inputTargetFrequencies[inputID]; !ok || !floatEquals(targetHz, 10.0, 1e-9) {
+		t.Errorf("inputTargetFrequencies incorreto: esperado 10.0, got %f (ok: %t)", targetHz, ok)
+	}
+	// timeToNextFire é aleatório, mas deve ser > 0 e <= cyclesPerFiring (100/10 = 10)
+	if timeLeft, ok := net.timeToNextInputFire[inputID]; !ok || timeLeft <= 0 || timeLeft > 10 {
+		t.Errorf("timeToNextInputFire incorreto: esperado >0 e <=10, got %d (ok: %t)", timeLeft, ok)
+	}
+
+	// Caso 2: Configurar frequência zero (desabilitar)
+	err = net.ConfigureFrequencyInput(inputID, 0.0)
+	if err != nil {
+		t.Fatalf("ConfigureFrequencyInput (hz=0) retornou erro inesperado: %v", err)
+	}
+	if _, ok := net.inputTargetFrequencies[inputID]; ok {
+		t.Errorf("inputTargetFrequencies deveria ter sido removido para hz=0")
+	}
+	if _, ok := net.timeToNextInputFire[inputID]; ok {
+		t.Errorf("timeToNextInputFire deveria ter sido removido para hz=0")
+	}
+
+	// Caso 3: ID de neurônio inválido
+	invalidID := common.NeuronID(999)
+	err = net.ConfigureFrequencyInput(invalidID, 10.0)
+	if err == nil {
+		t.Errorf("ConfigureFrequencyInput deveria retornar erro para ID inválido, mas não retornou")
+	}
+}
+
+func TestGetOutputFrequency(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.CyclesPerSecond = 100.0
+	simParams.OutputFrequencyWindowCycles = 50.0 // Janela de 50 ciclos
+	net := NewCrowNet(3, 0.01, &simParams, 101112)
+
+	// Forçar o primeiro neurônio a ser Output
+	outputID := net.Neurons[0].ID
+	net.Neurons[0].Type = neuron.Output
+	net.OutputNeuronIDs = []common.NeuronID{outputID}
+
+	// Caso 1: Sem histórico de disparos
+	freq, err := net.GetOutputFrequency(outputID)
+	if err != nil {
+		t.Fatalf("GetOutputFrequency (sem histórico) retornou erro: %v", err)
+	}
+	if !floatEquals(freq, 0.0, 1e-9) {
+		t.Errorf("Frequência esperada 0.0 para sem histórico, got %f", freq)
+	}
+
+	// Caso 2: Com histórico de disparos
+	// Simular 5 disparos na janela de 50 ciclos (0.5 segundos) -> 10 Hz
+	net.CycleCount = 100 // Ciclo atual
+	net.outputFiringHistory[outputID] = []common.CycleCount{
+		60, 70, 80, 90, 100, // 5 disparos dentro da janela [51, 100]
+	}
+	freq, err = net.GetOutputFrequency(outputID)
+	if err != nil {
+		t.Fatalf("GetOutputFrequency (com histórico) retornou erro: %v", err)
+	}
+	if !floatEquals(freq, 10.0, 1e-9) { // 5 disparos / 0.5s = 10 Hz
+		t.Errorf("Frequência esperada 10.0 Hz, got %f", freq)
+	}
+
+	// Caso 3: Disparos fora da janela
+	net.outputFiringHistory[outputID] = []common.CycleCount{
+		10, 20, 30, // Todos fora da janela [51, 100]
+	}
+	// A poda do histórico é feita em recordOutputFiring, não em GetOutputFrequency diretamente.
+	// Para testar GetOutputFrequency isoladamente, precisamos popular o histórico já podado.
+	// Se recordOutputFiring estivesse correto, o histórico acima não aconteceria.
+	// Vamos simular um histórico já podado:
+	net.outputFiringHistory[outputID] = []common.CycleCount{} // Nenhum disparo na janela
+	freq, err = net.GetOutputFrequency(outputID)
+	if err != nil {
+		t.Fatalf("GetOutputFrequency (disparos fora da janela) retornou erro: %v", err)
+	}
+	if !floatEquals(freq, 0.0, 1e-9) {
+		t.Errorf("Frequência esperada 0.0 Hz para disparos fora da janela, got %f", freq)
+	}
+
+
+	// Caso 4: ID de neurônio inválido
+	invalidID := common.NeuronID(999)
+	_, err = net.GetOutputFrequency(invalidID)
+	if err == nil {
+		t.Errorf("GetOutputFrequency deveria retornar erro para ID inválido, mas não retornou")
+	}
+
+	// Caso 5: CyclesPerSecond é zero (para evitar divisão por zero)
+	simParamsZeroHz := simParams // Copiar
+	simParamsZeroHz.CyclesPerSecond = 0.0
+	netZeroHz := NewCrowNet(3, 0.01, &simParamsZeroHz, 101113) // Nova net com config diferente
+	netZeroHz.Neurons[0].Type = neuron.Output
+	netZeroHz.OutputNeuronIDs = []common.NeuronID{netZeroHz.Neurons[0].ID}
+	netZeroHz.outputFiringHistory[netZeroHz.Neurons[0].ID] = []common.CycleCount{1} // Um disparo
+
+	_, err = netZeroHz.GetOutputFrequency(netZeroHz.Neurons[0].ID)
+	if err == nil {
+		t.Errorf("GetOutputFrequency deveria retornar erro se CyclesPerSecond é zero, mas não retornou")
+	}
+}
+
+
 func TestCalculateNetForceOnNeuron(t *testing.T) {
 	// Setup Neurons
-	n1 := neuron.New(0, neuron.Excitatory, common.Point{0, 0}, &config.SimulationParameters{})
+	// Usar simParams que serão passados para neuron.New
+	simP := config.DefaultSimulationParameters()
+	simP.SynaptogenesisInfluenceRadius = 2.0
+	simP.AttractionForceFactor = 1.0
+	simP.RepulsionForceFactor = 0.5
+
+	n1 := neuron.New(0, neuron.Excitatory, common.Point{0, 0}, &simP)
+	n2 := neuron.New(1, neuron.Excitatory, common.Point{1, 0}, &simP)
+	n3 := neuron.New(2, neuron.Inhibitory, common.Point{0, 1}, &simP)
 	n2 := neuron.New(1, neuron.Excitatory, common.Point{1, 0}, &config.SimulationParameters{SynaptogenesisInfluenceRadius: 2.0, AttractionForceFactor: 1.0, RepulsionForceFactor: 0.5})
 	n3 := neuron.New(2, neuron.Inhibitory, common.Point{0, 1}, &config.SimulationParameters{SynaptogenesisInfluenceRadius: 2.0, AttractionForceFactor: 1.0, RepulsionForceFactor: 0.5})
 
@@ -715,6 +1113,65 @@ func floatEquals(a, b, tolerance float64) bool {
 	return math.Abs(a-b) < tolerance
 }
 
+func TestRecordOutputFiring(t *testing.T) {
+	simParams := config.DefaultSimulationParameters()
+	simParams.OutputFrequencyWindowCycles = 10 // Janela de 10 ciclos
+	// Usar uma semente fixa para NewCrowNet se ele usar RNG para algo na inicialização que afete este teste.
+	net := NewCrowNet(5, 0.01, &simParams, 131415)
+
+	// Configurar um neurônio de output
+	if len(net.Neurons) == 0 {
+		t.Fatal("NewCrowNet não criou neurônios")
+	}
+	outputID := net.Neurons[0].ID
+	net.Neurons[0].Type = neuron.Output // Forçar tipo para teste
+	net.OutputNeuronIDs = []common.NeuronID{outputID}
+	// Assegurar que o mapa e a slice para este ID existem.
+	// NewCrowNet -> finalizeInitialization já faz `cn.outputFiringHistory[outID] = make([]common.CycleCount, 0)`
+	if _, ok := net.outputFiringHistory[outputID]; !ok {
+		net.outputFiringHistory[outputID] = make([]common.CycleCount, 0)
+	}
+
+	// Caso 1: Registrar primeiro disparo
+	net.CycleCount = 5
+	net.recordOutputFiring(outputID)
+	if history, ok := net.outputFiringHistory[outputID]; !ok || len(history) != 1 || history[0] != 5 {
+		t.Errorf("Histórico C1 incorreto: esperado [5], got %v (ok: %t)", history, ok)
+	}
+
+	// Caso 2: Registrar múltiplos disparos dentro da janela
+	net.CycleCount = 7
+	net.recordOutputFiring(outputID)
+	net.CycleCount = 9
+	net.recordOutputFiring(outputID)
+	expectedHistory2 := []common.CycleCount{5, 7, 9}
+	if history, ok := net.outputFiringHistory[outputID]; !ok || !reflect.DeepEqual(history, expectedHistory2) {
+		t.Errorf("Histórico C2 incorreto: esperado %v, got %v", expectedHistory2, history)
+	}
+
+	// Caso 3: Registrar disparos que fazem os antigos saírem da janela (teste de poda)
+	// Histórico atual: [5, 7, 9]. Janela=10.
+	// Adicionar disparo no ciclo 16. Cutoff = 16-10 = 6.
+	// Disparos >= 6 são mantidos.
+	net.CycleCount = 16
+	net.recordOutputFiring(outputID) // Adiciona 16. Histórico antes da poda: [5,7,9,16]
+	expectedHistory3 := []common.CycleCount{7, 9, 16} // 5 deve sair
+	if history, ok := net.outputFiringHistory[outputID]; !ok || !reflect.DeepEqual(history, expectedHistory3) {
+		t.Errorf("Histórico C3 (poda): esperado %v, got %v (cutoff: %d)", expectedHistory3, history, net.CycleCount - common.CycleCount(simParams.OutputFrequencyWindowCycles))
+	}
+
+	// Caso 4: Registrar para ID não output (não deve fazer nada)
+	nonOutputID := common.NeuronID(99)
+	originalHistoryLen := len(net.outputFiringHistory[outputID])
+	net.recordOutputFiring(nonOutputID)
+	if _, ok := net.outputFiringHistory[nonOutputID]; ok {
+		t.Errorf("Histórico não deveria ter sido criado para nonOutputID")
+	}
+	if len(net.outputFiringHistory[outputID]) != originalHistoryLen {
+		t.Errorf("Histórico do outputID mudou indevidamente (%d vs %d) após registrar para nonOutputID", len(net.outputFiringHistory[outputID]), originalHistoryLen)
+	}
+}
+
 func TestMain(m *testing.M) {
 	rand.Seed(1) // Seed for deterministic behavior if any randomness is used in tests (e.g. neuron positions)
 	_ = m.Run()
@@ -741,4 +1198,3 @@ func TestMain(m *testing.M) {
 // Multiplicado por `simParams.MaxMovementPerCycle` (1.0) resulta em `{1.0, 0.0}`.
 // A verificação agora é `if !floatEquals(newVelCapped[0], 1.0, 1e-9) || !floatEquals(newVelCapped[1], 0.0, 1e-9)`
 // O `floatEquals` foi melhorado para lidar com igualdade exata (incluindo NaN/Inf).
-```

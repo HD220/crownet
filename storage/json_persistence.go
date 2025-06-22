@@ -8,6 +8,10 @@ import (
 	"os"
 )
 
+	"os"
+	"strconv" // Adicionado para conversão de ID
+)
+
 // SaveNetworkWeightsToJSON serializa a estrutura NetworkWeights para um arquivo JSON.
 // A estrutura do JSON será: map[string]map[string]float64
 // onde as chaves string são os NeuronIDs.
@@ -15,10 +19,10 @@ func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) 
 	// Converter NeuronIDs (int) para string para chaves JSON
 	serializableWeights := make(map[string]map[string]float64)
 	for fromID, toMap := range weights {
-		strFromID := fmt.Sprintf("%d", fromID)
+		strFromID := strconv.FormatInt(int64(fromID), 10) // Usa strconv
 		serializableWeights[strFromID] = make(map[string]float64)
 		for toID, weightVal := range toMap {
-			strToID := fmt.Sprintf("%d", toID)
+			strToID := strconv.FormatInt(int64(toID), 10) // Usa strconv
 			serializableWeights[strFromID][strToID] = float64(weightVal)
 		}
 	}
@@ -54,19 +58,19 @@ func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error
 	// Converter chaves string de volta para NeuronID (int)
 	loadedWeights := synaptic.NewNetworkWeights()
 	for strFromID, toMap := range serializableWeights {
-		var fromID common.NeuronID
-		_, err := fmt.Sscan(strFromID, &fromID)
+		fromIDVal, err := strconv.ParseInt(strFromID, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("ID de neurônio de origem inválido no JSON '%s': %w", strFromID, err)
 		}
+		fromID := common.NeuronID(fromIDVal)
 
 		loadedWeights[fromID] = make(synaptic.WeightMap)
 		for strToID, weightVal := range toMap {
-			var toID common.NeuronID
-			_, err := fmt.Sscan(strToID, &toID)
+			toIDVal, err := strconv.ParseInt(strToID, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("ID de neurônio de destino inválido no JSON '%s' para origem '%s': %w", strToID, strFromID, err)
 			}
+			toID := common.NeuronID(toIDVal)
 			loadedWeights[fromID][toID] = common.SynapticWeight(weightVal)
 		}
 	}

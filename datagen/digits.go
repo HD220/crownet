@@ -100,30 +100,41 @@ var digitPatternData = map[int][][]int{
 	},
 }
 
-// GetDigitPattern retorna um padrão de dígito como uma fatia achatada de float64.
+// GetDigitPatternFn é uma variável de função para permitir o mock em testes.
+// A implementação real é getDigitPatternInternal.
+var GetDigitPatternFn = getDigitPatternInternal
+
+// getDigitPatternInternal é a implementação real de GetDigitPattern.
 // Os valores são 1.0 para "ligado" e 0.0 para "desligado".
 // Utiliza os parâmetros de SimParams para validação de dimensões.
-func GetDigitPattern(digit int, simParams *config.SimulationParameters) ([]float64, error) {
+func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) ([]float64, error) {
 	pattern2D, ok := digitPatternData[digit]
 	if !ok {
 		return nil, fmt.Errorf("padrão de dígito para %d não encontrado", digit)
 	}
 
 	// Validar dimensões com base em simParams
-	// Assumindo que simParams.PatternSize = PatternHeight * PatternWidth
-	// E que temos constantes para PatternHeight e PatternWidth, ou elas também estão em simParams.
-	// Por simplicidade, vamos definir PatternHeight e PatternWidth aqui, mas idealmente viriam de config.
-	const expectedPatternHeight = 7 // Deve corresponder a simParams ou ser global
-	const expectedPatternWidth = 5  // Deve corresponder a simParams ou ser global
+	if simParams.PatternHeight <= 0 || simParams.PatternWidth <= 0 {
+		return nil, fmt.Errorf("PatternHeight (%d) e PatternWidth (%d) em simParams devem ser positivos", simParams.PatternHeight, simParams.PatternWidth)
+	}
 
-	if len(pattern2D) != expectedPatternHeight {
-		return nil, fmt.Errorf("padrão para dígito %d tem altura incorreta %d, esperado %d", digit, len(pattern2D), expectedPatternHeight)
+	expectedSize := simParams.PatternHeight * simParams.PatternWidth
+	if simParams.PatternSize != expectedSize {
+		// Esta é uma verificação de consistência interna da configuração.
+		return nil, fmt.Errorf(
+			"PatternSize (%d) em simParams não corresponde a PatternHeight (%d) * PatternWidth (%d) = %d",
+			simParams.PatternSize, simParams.PatternHeight, simParams.PatternWidth, expectedSize,
+		)
+	}
+
+	if len(pattern2D) != simParams.PatternHeight {
+		return nil, fmt.Errorf("padrão para dígito %d tem altura incorreta %d, esperado %d (de simParams)", digit, len(pattern2D), simParams.PatternHeight)
 	}
 
 	flattenedPattern := make([]float64, 0, simParams.PatternSize)
 	for r, row := range pattern2D {
-		if len(row) != expectedPatternWidth {
-			return nil, fmt.Errorf("padrão para dígito %d, linha %d tem largura incorreta %d, esperado %d", digit, r, len(row), expectedPatternWidth)
+		if len(row) != simParams.PatternWidth {
+			return nil, fmt.Errorf("padrão para dígito %d, linha %d tem largura incorreta %d, esperado %d (de simParams)", digit, r, len(row), simParams.PatternWidth)
 		}
 		for _, val := range row {
 			if val == 1 {

@@ -21,13 +21,13 @@ type Percentage float64
 // Rate representa uma taxa (ex: taxa de aprendizado, taxa de decaimento).
 type Rate float64
 
-// Factor representa um fator de multiplicação.
+// Factor representa um fator de multiplicação, geralmente positivo.
 type Factor float64
 
 // Threshold representa um valor de limiar.
 type Threshold float64
 
-// Level representa o nível de uma substância química.
+// Level representa o nível de uma substância química, tipicamente não-negativo.
 type Level float64
 
 // Point representa um ponto no espaço N-dimensional (especificamente 16D para CrowNet).
@@ -35,4 +35,5 @@ type Level float64
 type Point [16]Coordinate
 
 // Vector representa um vetor no espaço N-dimensional, usado para velocidade ou força.
-type Vector [16]float64
+// Usa Coordinate para consistência com Point.
+type Vector [16]Coordinate

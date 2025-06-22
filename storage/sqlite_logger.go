@@ -45,6 +45,25 @@ func NewSQLiteLogger(dataSourceName string) (*SQLiteLogger, error) {
 	return logger, nil
 }
 
+const pointDimension = 16 // Assumindo a mesma dimensionalidade de common.Point
+
+// getDimensionSQLParts gera as strings SQL para nomes de colunas e placeholders
+// para um dado prefixo e dimensão.
+// Ex: prefix="Position", dimension=16 -> "Position0 REAL, Position1 REAL...", "?,?,..."
+func getDimensionSQLParts(prefix string, dimension int, forTableCreation bool) (colNamesSQL string, placeholdersSQL string) {
+	colNames := make([]string, dimension)
+	placeholders := make([]string, dimension)
+	for i := 0; i < dimension; i++ {
+		if forTableCreation {
+			colNames[i] = fmt.Sprintf("%s%d REAL", prefix, i)
+		} else {
+			colNames[i] = fmt.Sprintf("%s%d", prefix, i)
+		}
+		placeholders[i] = "?"
+	}
+	return strings.Join(colNames, ", "), strings.Join(placeholders, ", ")
+}
+
 // createTables define e executa o SQL para a criação das tabelas.
 func (sl *SQLiteLogger) createTables() error {
 	networkSnapshotsTableSQL := `
@@ -61,14 +80,8 @@ func (sl *SQLiteLogger) createTables() error {
 		return fmt.Errorf("falha ao criar tabela NetworkSnapshots: %w", err)
 	}
 
-	posCols := make([]string, 16)
-	velCols := make([]string, 16)
-	for i := 0; i < 16; i++ {
-		posCols[i] = fmt.Sprintf("Position%d REAL", i)
-		velCols[i] = fmt.Sprintf("Velocity%d REAL", i)
-	}
-	positionColumnsSQL := strings.Join(posCols, ", ")
-	velocityColumnsSQL := strings.Join(velCols, ", ")
+	positionSchemaSQL, _ := getDimensionSQLParts("Position", pointDimension, true)
+	velocitySchemaSQL, _ := getDimensionSQLParts("Velocity", pointDimension, true)
 
 	neuronStatesTableSQL := fmt.Sprintf(`
     CREATE TABLE IF NOT EXISTS NeuronStates (
@@ -85,12 +98,18 @@ func (sl *SQLiteLogger) createTables() error {
         LastFiredCycle INTEGER,
         CyclesInCurrentState INTEGER,
         FOREIGN KEY (SnapshotID) REFERENCES NetworkSnapshots (SnapshotID) ON DELETE CASCADE
-    );`, positionColumnsSQL, velocityColumnsSQL)
+    );`, positionSchemaSQL, velocitySchemaSQL)
 
 	if _, err := sl.db.Exec(neuronStatesTableSQL); err != nil {
 		return fmt.Errorf("falha ao criar tabela NeuronStates: %w", err)
 	}
 	return nil
+}
+
+// DBForTest retorna a instância do banco de dados para uso em testes.
+// Este método só deve ser usado em contextos de teste.
+func (sl *SQLiteLogger) DBForTest() *sql.DB {
+	return sl.db
 }
 
 // LogNetworkState salva o estado atual da rede no banco de dados.
@@ -157,12 +176,13 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 	defer stmt.Close()
 
 	for _, n := range net.Neurons {
-		args := make([]interface{}, 0, 2+32+7) // SnapshotID, NeuronID + 16 Pos + 16 Vel + 7 outros
+		// Args: SnapshotID, NeuronID, P0..P15, V0..V15, Type, State, AccPot, BaseThr, CurrThr, LastFired, CyclesInState
+		args := make([]interface{}, 0, 2+pointDimension*2+7)
 		args = append(args, snapshotID, n.ID)
-		for i := 0; i < 16; i++ {
+		for i := 0; i < pointDimension; i++ {
 			args = append(args, float64(n.Position[i]))
 		}
-		for i := 0; i < 16; i++ {
+		for i := 0; i < pointDimension; i++ {
 			args = append(args, float64(n.Velocity[i]))
 		}
 		args = append(args, int(n.Type), int(n.CurrentState), float64(n.AccumulatedPotential),
@@ -177,7 +197,6 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("falha ao commitar transação SQLite: %w", err)
 	}
-	// fmt.Printf("Estado da rede para o ciclo %d salvo no SQLite (SnapshotID: %d).\n", net.CycleCount, snapshotID)
 	return nil
 }
 

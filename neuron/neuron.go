@@ -57,6 +57,8 @@ func (n *Neuron) IntegrateIncomingPotential(potential common.PulseValue, current
 	return true
 }
 
+const nearZeroThreshold = 1e-5
+
 // AdvanceState progride o estado do neurônio para o próximo ciclo.
 // Deve ser chamado uma vez por ciclo para cada neurônio, após todos os inputs terem sido integrados.
 // O cicloAtual é usado para registrar o LastFiredCycle corretamente.
@@ -73,7 +75,8 @@ func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.
 	}
 
 	if n.CurrentState == AbsoluteRefractory {
-		if n.CyclesInCurrentState >= common.CycleCount(simParams.AbsoluteRefractoryCycles) {
+		// simParams.AbsoluteRefractoryCycles agora é common.CycleCount, sem necessidade de cast.
+		if n.CyclesInCurrentState >= simParams.AbsoluteRefractoryCycles {
 			n.CurrentState = RelativeRefractory
 			n.CyclesInCurrentState = 0
 			// O limiar em RelativeRefractory pode ser maior; por enquanto, CurrentFiringThreshold é
@@ -84,7 +87,8 @@ func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.
 	}
 
 	if n.CurrentState == RelativeRefractory {
-		if n.CyclesInCurrentState >= common.CycleCount(simParams.RelativeRefractoryCycles) {
+		// simParams.RelativeRefractoryCycles agora é common.CycleCount, sem necessidade de cast.
+		if n.CyclesInCurrentState >= simParams.RelativeRefractoryCycles {
 			n.CurrentState = Resting
 			n.CyclesInCurrentState = 0
 			// Restaura o limiar para o valor base (se não estiver sendo modulado por químicos)
@@ -101,7 +105,7 @@ func (n *Neuron) DecayPotential(simParams *config.SimulationParameters) {
 	decayRate := common.Rate(simParams.AccumulatedPulseDecayRate)
 	if n.AccumulatedPotential > 0 {
 		n.AccumulatedPotential -= common.PulseValue(float64(n.AccumulatedPotential) * float64(decayRate))
-		if n.AccumulatedPotential < 0.00001 { // Evitar underflow ou valores insignificantes
+		if n.AccumulatedPotential < nearZeroThreshold { // Usar constante
 			n.AccumulatedPotential = 0
 		}
 		return // Decaimento aplicado
@@ -109,7 +113,7 @@ func (n *Neuron) DecayPotential(simParams *config.SimulationParameters) {
 	// Se o potencial for negativo (devido a inputs inibitórios), também decai em direção a zero.
 	if n.AccumulatedPotential < 0 {
 		n.AccumulatedPotential += common.PulseValue(float64(n.AccumulatedPotential) * float64(decayRate) * -1.0) // decayRate é positivo
-		if n.AccumulatedPotential > -0.00001 {
+		if n.AccumulatedPotential > -nearZeroThreshold { // Usar constante
 			n.AccumulatedPotential = 0
 		}
 	}
