@@ -107,3 +107,5 @@ Esta tabela rastreia as tarefas de desenvolvimento de alto nível para o projeto
 *   **3 (Média):** Tarefa com complexidade moderada, pode envolver múltiplas etapas.
 *   **4 (Alta):** Requer esforço significativo, pesquisa ou design.
 *   **5 (Muito Alta):** Tarefa muito complexa, pode precisar ser subdividida.
+
+[end of .jules/TASKS.md]
