@@ -5,6 +5,7 @@
 *.so
 *.dylib
 *.test
+crownet
 crownet-mvp
 crownet-mvp-test
 
