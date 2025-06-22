@@ -12,11 +12,11 @@ Demonstrar um fluxo de trabalho completo:
 
 ## 2. Configuração Geral (Suposições)
 
-Para este exemplo, vamos assumir os seguintes parâmetros CLI comuns onde aplicável (os valores exatos podem ser ajustados):
-*   `-neurons 70`: Uma rede com um número razoável de neurônios (ex: 35 para input 7x5, 10 para output 0-9, e 25 internos).
-*   `-seed 123`: Para reprodutibilidade.
+Para este exemplo, vamos usar alguns parâmetros CLI específicos para ilustrar o fluxo. Note que os valores padrão no sistema podem ser diferentes (consulte `guia_interface_linha_comando.md`). Os valores aqui são escolhidos para este exemplo específico.
+*   `-neurons 70`: Uma rede com 35 neurônios de input (para um padrão 7x5), 10 de output (para dígitos 0-9), e 25 internos.
+*   `-seed 123`: Para reprodutibilidade do exemplo.
 
-Os parâmetros de simulação (`SimulationParameters`) serão os definidos em `config.DefaultSimulationParameters()`, a menos que especificado de outra forma (ex: `BaseLearningRate` pode ser ajustado).
+Os parâmetros de simulação (`SimulationParameters`) serão os definidos em `config.DefaultSimulationParameters()` no código, a menos que um parâmetro específico da CLI o substitua (ex: `lrBase`).
 
 ## 3. Passo 1: Treinamento da Rede (Modo `expose`)
 
