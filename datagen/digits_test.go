@@ -10,9 +10,9 @@ import (
 func TestGetDigitPattern_ValidDigit(t *testing.T) {
 	simParams := config.DefaultSimulationParameters() // Usa PatternHeight=7, PatternWidth=5, PatternSize=35
 
-	pattern, err := datagen.GetDigitPattern(0, &simParams)
+	pattern, err := datagen.GetDigitPatternFn(0, &simParams)
 	if err != nil {
-		t.Fatalf("GetDigitPattern(0) returned error: %v", err)
+		t.Fatalf("GetDigitPatternFn(0) returned error: %v", err)
 	}
 
 	if len(pattern) != simParams.PatternSize {
@@ -38,12 +38,12 @@ func TestGetDigitPattern_ValidDigit(t *testing.T) {
 func TestGetDigitPattern_InvalidDigit(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 
-	_, err := datagen.GetDigitPattern(10, &simParams)
+	_, err := datagen.GetDigitPatternFn(10, &simParams)
 	if err == nil {
 		t.Errorf("Expected error for invalid digit 10, got nil")
 	}
 
-	_, err = datagen.GetDigitPattern(-1, &simParams)
+	_, err = datagen.GetDigitPatternFn(-1, &simParams)
 	if err == nil {
 		t.Errorf("Expected error for invalid digit -1, got nil")
 	}
@@ -53,7 +53,7 @@ func TestGetDigitPattern_DimensionMismatch(t *testing.T) {
 	// Caso 1: PatternHeight em simParams não corresponde aos dados
 	simParams1 := config.DefaultSimulationParameters()
 	simParams1.PatternHeight = 6 // Dados são 7
-	_, err1 := datagen.GetDigitPattern(0, &simParams1)
+	_, err1 := datagen.GetDigitPatternFn(0, &simParams1)
 	if err1 == nil {
 		t.Errorf("Expected error when simParams.PatternHeight mismatches data, got nil")
 	} else {
@@ -63,7 +63,7 @@ func TestGetDigitPattern_DimensionMismatch(t *testing.T) {
 	// Caso 2: PatternWidth em simParams não corresponde aos dados
 	simParams2 := config.DefaultSimulationParameters()
 	simParams2.PatternWidth = 4 // Dados são 5
-	_, err2 := datagen.GetDigitPattern(0, &simParams2)
+	_, err2 := datagen.GetDigitPatternFn(0, &simParams2)
 	if err2 == nil {
 		t.Errorf("Expected error when simParams.PatternWidth mismatches data, got nil")
 	} else {
@@ -73,7 +73,7 @@ func TestGetDigitPattern_DimensionMismatch(t *testing.T) {
 	// Caso 3: PatternSize em simParams não é PatternHeight * PatternWidth
 	simParams3 := config.DefaultSimulationParameters() // H=7, W=5, Size=35
 	simParams3.PatternSize = 30 // Inconsistente
-	_, err3 := datagen.GetDigitPattern(0, &simParams3)
+	_, err3 := datagen.GetDigitPatternFn(0, &simParams3)
 	if err3 == nil {
 		t.Errorf("Expected error when simParams.PatternSize is inconsistent, got nil")
 	} else {
@@ -83,7 +83,7 @@ func TestGetDigitPattern_DimensionMismatch(t *testing.T) {
 	// Caso 4: PatternHeight ou PatternWidth em simParams é zero ou negativo
 	simParams4 := config.DefaultSimulationParameters()
 	simParams4.PatternHeight = 0
-	_, err4 := datagen.GetDigitPattern(0, &simParams4)
+	_, err4 := datagen.GetDigitPatternFn(0, &simParams4)
 	if err4 == nil {
 		t.Errorf("Expected error for zero PatternHeight, got nil")
 	}
@@ -140,4 +140,3 @@ func TestGetAllDigitPatterns_ErrorPropagation(t *testing.T) {
 		// t.Logf("Got expected propagated error: %v", err) // Log opcional
 	}
 }
-```

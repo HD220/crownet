@@ -123,6 +123,3 @@ func TestLoadNetworkWeightsFromJSON_InvalidNeuronID(t *testing.T) {
 		t.Errorf("Expected error to contain '%s', got: %v", expectedSubString, err)
 	}
 }
-
-// Adicionar import "strings" e "errors"
-```

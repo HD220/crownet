@@ -1,138 +1,146 @@
 package cli_test
 
 import (
-	"bytes"       // Adicionado para capturar stdout
-	"io"          // Adicionado para capturar stdout
-	"log"         // Adicionado para restaurar log.SetOutput
-	"os"          // Adicionado para capturar stdout
-	"strings"     // Adicionado para tc.errorContains e verificação de output
-	"testing"
+	"bytes"
 	"crownet/cli"
 	"crownet/common"
 	"crownet/config"
+	"crownet/datagen"
 	"crownet/network"
-	"crownet/synaptic" // Necessário para synaptic.NetworkWeights nos setters
+	"crownet/neuron"
+	"crownet/storage"
+	"crownet/synaptic"
 	"fmt"
-	// "math/rand"
-	"path/filepath" // Adicionado para t.TempDir()
-	"crownet/datagen" // Adicionado para mockar GetDigitPatternFn
-	"crownet/storage" // Adicionado para SaveNetworkWeightsToJSON
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
-// Helper para capturar stdout
-func captureStdout(f func()) string {
-	oldStdout := os.Stdout
-	oldLogOutput := log.Writer() // Salvar a saída atual do log
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	log.SetOutput(w) // Redirecionar também a saída do log padrão
+// setupTestOrchestrator creates a new Orchestrator with a basic AppConfig for testing.
+// It allows for overriding CLIConfig and SimParams.
+func setupTestOrchestrator(t *testing.T, cliCfgOverride *config.CLIConfig, simParamsOverride *config.SimulationParameters) (*cli.Orchestrator, *config.AppConfig) {
+	cliCfg := config.CLIConfig{ // Basic defaults, can be overridden
+		Mode:         config.ModeSim,
+		TotalNeurons: 10,
+		Seed:         1, // Fixed seed for reproducibility
+	}
+	if cliCfgOverride != nil {
+		cliCfg = *cliCfgOverride
+	}
 
-	f() // Executar a função que imprime
+	simParams := config.DefaultSimulationParameters()
+	if simParamsOverride != nil {
+		simParams = *simParamsOverride
+	}
 
-	w.Close()
-	os.Stdout = oldStdout     // Restaurar stdout
-	log.SetOutput(oldLogOutput) // Restaurar saída do log
+	appCfg := &config.AppConfig{
+		Cli:       cliCfg,
+		SimParams: simParams,
+	}
 
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
+	// Validate the constructed AppConfig
+	if err := appCfg.Validate(); err != nil {
+		t.Fatalf("Failed to create valid AppConfig for test: %v", err)
+	}
+
+	return cli.NewOrchestrator(appCfg), appCfg
 }
 
-// TestSetupContinuousInputStimulus_ErrorCases testa a lógica de validação de ID
-// e o tratamento de erro de ConfigureFrequencyInput dentro de setupContinuousInputStimulus.
+// captureOutput executes a function and captures its stdout and stderr.
+// It also captures output sent to the standard log package.
+func captureOutput(action func() error) (output string, err error) {
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	oldLogOutput := log.Writer()
+
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+
+	os.Stdout = wOut
+	os.Stderr = wErr
+	log.SetOutput(wErr) // Redirect log to stderr pipe to capture it along with other errors
+
+	actionErr := action()
+
+	wOut.Close()
+	wErr.Close()
+
+	var bufOut bytes.Buffer
+	var bufErr bytes.Buffer
+
+	io.Copy(&bufOut, rOut)
+	io.Copy(&bufErr, rErr)
+
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+	log.SetOutput(oldLogOutput)
+
+	fullOutput := "STDOUT:\n" + bufOut.String() + "\nSTDERR / LOG:\n" + bufErr.String()
+	return fullOutput, actionErr
+}
+
 func TestSetupContinuousInputStimulus_ErrorCases(t *testing.T) {
-	simParamsDefault := config.DefaultSimulationParameters() // Renomeado para evitar conflito
-	cliCfgBase := config.CLIConfig{
+	simParamsDefault := config.DefaultSimulationParameters()
+	baseCliCfg := config.CLIConfig{
 		StimInputFreqHz: 10.0,
-		Mode:            config.ModeSim, // Para que setupContinuousInputStimulus seja chamado
+		Mode:            config.ModeSim,
+		TotalNeurons:    20, // Ensure enough neurons for various test cases
+		Seed:            123,
 	}
 
 	testCases := []struct {
-		name                  string
-		cliCfg                config.CLIConfig
-		networkInputIDs       []common.NeuronID
-		configureFreqInputErr error // Erro a ser retornado por mockNet.ConfigureFrequencyInput
-		expectedError         bool
-		errorContains         string
+		name            string
+		modifyCliCfg    func(cfg *config.CLIConfig)
+		networkInputIDs []common.NeuronID
+		expectedError   bool
+		errorContains   string
 	}{
 		{
-			name: "ID válido",
-			cliCfg: func() config.CLIConfig { cfg := cliCfgBase; cfg.StimInputID = 10; return cfg }(),
-			networkInputIDs:       []common.NeuronID{10, 11},
-			expectedError:         false,
+			name:            "Valid ID",
+			modifyCliCfg:    func(cfg *config.CLIConfig) { cfg.StimInputID = 10 },
+			networkInputIDs: []common.NeuronID{10, 11},
+			expectedError:   false,
 		},
 		{
-			name: "ID -1 (primeiro disponível)",
-			cliCfg: func() config.CLIConfig { cfg := cliCfgBase; cfg.StimInputID = -1; return cfg }(),
-			networkInputIDs:       []common.NeuronID{10, 11},
-			expectedError:         false,
+			name:            "ID -1 (first available)",
+			modifyCliCfg:    func(cfg *config.CLIConfig) { cfg.StimInputID = -1 },
+			networkInputIDs: []common.NeuronID{10, 11},
+			expectedError:   false,
 		},
 		{
-			name: "ID inválido (não existe na lista de InputNeuronIDs da rede)",
-			cliCfg: func() config.CLIConfig { cfg := cliCfgBase; cfg.StimInputID = 99; return cfg }(),
-			networkInputIDs:       []common.NeuronID{10, 11},
-			expectedError:         true,
-			errorContains:         "não encontrado ou inválido",
+			name:            "Invalid ID (not in network input IDs)",
+			modifyCliCfg:    func(cfg *config.CLIConfig) { cfg.StimInputID = 99 },
+			networkInputIDs: []common.NeuronID{10, 11},
+			expectedError:   true,
+			errorContains:   "não encontrado ou inválido",
 		},
 		{
-			name: "Falha simulada em net.ConfigureFrequencyInput",
-			cliCfg: func() config.CLIConfig { cfg := cliCfgBase; cfg.StimInputID = 10; return cfg }(),
-			networkInputIDs:       []common.NeuronID{10, 11},
-			configureFreqInputErr: fmt.Errorf("erro simulado em ConfigureFrequencyInput"),
-			expectedError:         true,
-			errorContains:         "falha ao configurar estímulo",
+			name:            "ID -1 with no input neurons in network",
+			modifyCliCfg:    func(cfg *config.CLIConfig) { cfg.StimInputID = -1 },
+			networkInputIDs: []common.NeuronID{},
+			expectedError:   false, // Should not error, just won't configure anything
 		},
-		{
-			name: "ID -1, mas sem neurônios de input na rede (não deve dar erro, apenas não configura)",
-			cliCfg: func() config.CLIConfig { cfg := cliCfgBase; cfg.StimInputID = -1; return cfg }(),
-			networkInputIDs:       []common.NeuronID{},
-			expectedError:         false,
-		},
+		// Note: Testing ConfigureFrequencyInput error directly is harder without network interface mocking.
+		// This test primarily covers orchestrator's logic for ID validation.
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			appCfg := &config.AppConfig{Cli: tc.cliCfg, SimParams: simParamsDefault}
-
-			// Usar uma instância real de network.CrowNet, mas podemos controlar seus InputNeuronIDs
-			// e, para o caso de erro, podemos mockar a função ConfigureFrequencyInput se necessário.
-			// Para este teste, o mock de ConfigureFrequencyInput é mais complexo de injetar sem alterar
-			// a struct network.CrowNet ou usar uma interface.
-			// Vamos focar nos erros gerados pela lógica do próprio orchestrator.
-			// A semente não é crítica aqui, mas NewCrowNet a exige.
-			net := network.NewCrowNet(len(tc.networkInputIDs)+5, 0.01, &simParamsDefault, 0)
-			net.InputNeuronIDs = tc.networkInputIDs
-			// Se um ID de neurônio é válido, mas ConfigureFrequencyInput falha, precisamos simular isso.
-			// Isso é difícil sem uma interface de rede ou capacidade de mockar o método Net.
-			// Por ora, o teste "Falha simulada em net.ConfigureFrequencyInput" não pode ser implementado
-			// completamente sem tal mock. No entanto, a função ConfigureFrequencyInput em network.go
-			// já retorna erro se o ID não for um InputNeuronID válido, o que é coberto.
-			// Para o caso de erro simulado, vamos assumir que a validação de ID no orchestrator falharia primeiro
-			// se o ID não estivesse em net.InputNeuronIDs.
-
-			// A maneira de simular o erro de ConfigureFrequencyInput sem mudar o código de produção
-			// seria ter um tipo de rede mockável no Orchestrator, o que é uma refatoração maior.
-			// Para o teste "Falha simulada em net.ConfigureFrequencyInput", vamos assumir que
-			// o erro é retornado por network.CrowNet.ConfigureFrequencyInput.
-			// Este teste, portanto, depende do comportamento de network.CrowNet.
-			if tc.name == "Falha simulada em net.ConfigureFrequencyInput" {
-				// Para realmente testar este caminho, precisaríamos de uma forma de fazer
-				// net.ConfigureFrequencyInput retornar um erro específico.
-				// Poderíamos criar um tipo de rede mock localmente no teste:
-				type TestableNet struct { *network.CrowNet; ConfigureFrequencyInputError error }
-				mockableNet := &TestableNet{CrowNet: net, ConfigureFrequencyInputError: tc.configureFreqInputErr}
-
-				// No entanto, Orchestrator.Net é *network.CrowNet, não uma interface.
-				// Então, não podemos simplesmente atribuir mockableNet.
-				// Este caso de teste permanece difícil de isolar perfeitamente.
-				// Vamos prosseguir, e o erro virá da validação de ID se não for encontrado.
-				// Se o ID for encontrado, e ConfigureFrequencyInput não tiver como ser induzido a erro
-				// (além de ID não ser input, o que já é coberto), então este caso é limitado.
+			currentCliCfg := baseCliCfg
+			if tc.modifyCliCfg != nil {
+				tc.modifyCliCfg(&currentCliCfg)
 			}
 
+			appCfg := &config.AppConfig{Cli: currentCliCfg, SimParams: simParamsDefault}
+			// We need a real network to test ConfigureFrequencyInput's ID validation path
+			net := network.NewCrowNet(currentCliCfg.TotalNeurons, common.Rate(currentCliCfg.BaseLearningRate), &simParamsDefault, currentCliCfg.Seed)
+			net.InputNeuronIDs = tc.networkInputIDs // Override for the test case
 
 			orchestrator := cli.NewOrchestrator(appCfg)
-			orchestrator.Net = net
+			orchestrator.Net = net // Assign the specifically configured network
 
 			err := orchestrator.SetupContinuousInputStimulusForTest()
 
@@ -142,377 +150,298 @@ func TestSetupContinuousInputStimulus_ErrorCases(t *testing.T) {
 				} else if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
 					t.Errorf("Expected error to contain '%s', got: %v", tc.errorContains, err)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("Expected no error, but got: %v", err)
 			}
 		})
 	}
 }
 
-func TestUseCase_ExposeMode_BasicRunAndSave(t *testing.T) {
+func TestExposeMode_RunAndSave(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
-	// Ajustar PatternSize para algo pequeno para datagen não falhar se usarmos o real
+	// Simplify pattern params for easier mocking if datagen is not the focus
 	simParams.PatternHeight = 1
 	simParams.PatternWidth = 1
 	simParams.PatternSize = 1
-	simParams.MinInputNeurons = 1
-	simParams.MinOutputNeurons = 1 // Precisa de pelo menos um output para que a rede seja válida
-
+	simParams.MinInputNeurons = 1 // Critical for PresentPattern
+	simParams.MinOutputNeurons = 1
 
 	tempDir := t.TempDir()
-	weightsFilePath := filepath.Join(tempDir, "expose_uc_weights.json")
+	weightsFilePath := filepath.Join(tempDir, "expose_test_weights.json")
 
 	cliCfg := config.CLIConfig{
 		Mode:             config.ModeExpose,
 		WeightsFile:      weightsFilePath,
 		Epochs:           1,
 		CyclesPerPattern: 1,
-		TotalNeurons:     2, // 1 input, 1 output
+		TotalNeurons:     2, // Min 1 input, 1 output
 		BaseLearningRate: 0.01,
 		Seed:             777,
 	}
-	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
-	orchestrator := cli.NewOrchestrator(appCfg)
+	orchestrator, appCfg := setupTestOrchestrator(t, &cliCfg, &simParams)
 
+	// Mock persistence and data generation
 	saveWeightsCalled := false
 	var savedFilePath string
 	orchestrator.SetSaveWeightsFn(func(weights synaptic.NetworkWeights, filepathStr string) error {
 		saveWeightsCalled = true
 		savedFilePath = filepathStr
-		// Não criar arquivo real, apenas verificar chamada
-		return nil
+		return nil // Simulate successful save
 	})
-
 	orchestrator.SetLoadWeightsFn(func(filepathStr string) (synaptic.NetworkWeights, error) {
-		return nil, fmt.Errorf("mock: arquivo de pesos não encontrado intencionalmente para expose")
+		return nil, fmt.Errorf("mock load: weights file not found (expected for new training)")
 	})
-
 	originalGetDigitPatternFn := datagen.GetDigitPatternFn
 	datagen.GetDigitPatternFn = func(digit int, sp *config.SimulationParameters) ([]float64, error) {
-		return []float64{1.0}, nil // Padrão simples de 1x1
+		if sp.PatternSize != 1 { // Ensure params are passed down
+			return nil, fmt.Errorf("mock GetDigitPatternFn: PatternSize expected 1, got %d", sp.PatternSize)
+		}
+		return []float64{1.0}, nil // Simple 1x1 pattern
 	}
 	defer func() { datagen.GetDigitPatternFn = originalGetDigitPatternFn }()
 
+	// Orchestrator.Run() calls createNetwork(), so o.Net will be initialized.
+	// We need to ensure the created network has correct Input/Output neuron IDs for PresentPattern.
+	// This is tricky as NewCrowNet internally sets these up.
+	// For more control, tests might need to directly create and assign a pre-configured network.
+	// However, RunExposeModeForTest calls createNetwork.
 
-	// Criar a rede manualmente para o teste, como em TestRunObserveMode_OutputVerification
-	orchestrator.Net = network.NewCrowNet(cliCfg.TotalNeurons, common.Rate(cliCfg.BaseLearningRate), &simParams, cliCfg.Seed)
-	if len(orchestrator.Net.Neurons) < 2 { // Esperamos pelo menos 1 input e 1 output
-		t.Fatalf("Rede não tem neurônios suficientes (esperado %d, got %d)", cliCfg.TotalNeurons, len(orchestrator.Net.Neurons))
+	// To ensure PresentPattern works, we let createNetwork run, then adjust Input/Output IDs if necessary
+	// This is a bit of a workaround for not mocking the network interface.
+	orchestrator.CreateNetworkForTest() // Manually call to allow modification before RunExposeMode
+	if len(orchestrator.Net.Neurons) > 0 && simParams.MinInputNeurons > 0 {
+		orchestrator.Net.InputNeuronIDs = []common.NeuronID{orchestrator.Net.Neurons[0].ID}
+		orchestrator.Net.Neurons[0].Type = neuron.Input
 	}
-	// Configurar InputNeuronIDs e OutputNeuronIDs para que PresentPattern funcione
-	// e para que a rede seja minimamente funcional para o teste.
-	// Os IDs reais são atribuídos por NewCrowNet.
-	if simParams.MinInputNeurons > 0 && len(orchestrator.Net.Neurons) >= simParams.MinInputNeurons {
-		inputIDs := make([]common.NeuronID, simParams.MinInputNeurons)
-		for i := 0; i < simParams.MinInputNeurons; i++ {
-			orchestrator.Net.Neurons[i].Type = neuron.Input
-			inputIDs[i] = orchestrator.Net.Neurons[i].ID
-		}
-		orchestrator.Net.InputNeuronIDs = inputIDs
-	}
-	if simParams.MinOutputNeurons > 0 && len(orchestrator.Net.Neurons) >= simParams.MinInputNeurons + simParams.MinOutputNeurons {
-		outputIDs := make([]common.NeuronID, simParams.MinOutputNeurons)
-		for i := 0; i < simParams.MinOutputNeurons; i++ {
-			idx := simParams.MinInputNeurons + i
-			orchestrator.Net.Neurons[idx].Type = neuron.Output
-			outputIDs[i] = orchestrator.Net.Neurons[idx].ID
-		}
-		orchestrator.Net.OutputNeuronIDs = outputIDs
+	if len(orchestrator.Net.Neurons) > 1 && simParams.MinOutputNeurons > 0 {
+		orchestrator.Net.OutputNeuronIDs = []common.NeuronID{orchestrator.Net.Neurons[1].ID}
+		orchestrator.Net.Neurons[1].Type = neuron.Output
 	}
 
 
-	err := orchestrator.RunExposeModeForTest()
+	_, err := captureOutput(orchestrator.RunExposeModeForTest)
 	if err != nil {
-		t.Fatalf("RunExposeModeForTest retornou erro inesperado: %v", err)
+		t.Fatalf("RunExposeModeForTest returned an unexpected error: %v", err)
 	}
 
 	if !saveWeightsCalled {
-		t.Errorf("saveWeightsFn não foi chamado durante RunExposeModeForTest")
+		t.Errorf("Expected saveWeightsFn to be called, but it wasn't")
 	}
 	if savedFilePath != weightsFilePath {
-		t.Errorf("saveWeightsFn foi chamado com o caminho de arquivo incorreto: esperado '%s', got '%s'", weightsFilePath, savedFilePath)
+		t.Errorf("saveWeightsFn called with incorrect filepath: expected '%s', got '%s'", weightsFilePath, savedFilePath)
 	}
 }
 
-func TestUseCase_SimMode_DBCreation(t *testing.T) {
+func TestSimMode_DBCreation(t *testing.T) {
 	tempDir := t.TempDir()
-	dbFilePath := filepath.Join(tempDir, "sim_test_db_creation.db")
+	dbFilePath := filepath.Join(tempDir, "sim_mode_test.db")
+	// Ensure DB doesn't exist from a previous failed run
+	os.Remove(dbFilePath)
 
-	// Garantir que o arquivo não existe antes do teste
-	os.Remove(dbFilePath) // Ignorar erro se não existir
-
-	simParams := config.DefaultSimulationParameters()
 	cliCfg := config.CLIConfig{
 		Mode:         config.ModeSim,
-		Cycles:       1,
+		Cycles:       1, // Minimal cycles
 		TotalNeurons: 10,
 		DbPath:       dbFilePath,
-		SaveInterval: 1,
+		SaveInterval: 1, // Save on every cycle for this test
 		Seed:         123,
 	}
-	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
-	orchestrator := cli.NewOrchestrator(appCfg)
+	orchestrator, _ := setupTestOrchestrator(t, &cliCfg, nil)
 
-	var errRun error
-	// Capturar stdout para evitar poluir logs de teste, e verificar se houve erro fatal
-	// que seria impresso antes do os.Exit() de um log.Fatalf.
-	// No entanto, o Run() do orchestrator agora propaga erros dos runModes,
-	// e ele mesmo chama log.Fatalf.
-	// Para testar a criação do DB, precisamos que o fluxo de sucesso seja executado.
-	// Se NewAppConfig ou initializeLogger falharem, não chegaremos a criar a rede ou rodar o modo.
+	// Run the sim mode which should trigger logger initialization and logging.
+	// The test wrappers are used to isolate parts of Run() if needed,
+	// but here we test the integrated path leading to DB creation.
 
-	// Esta é a forma mais próxima de simular o main.go sem realmente executar um sub-processo.
-	// Se NewAppConfig (que chama Validate) estivesse mockado ou soubéssemos que esta config é válida:
-	// appCfg, _ = config.NewAppConfig() // Supondo que esta config específica passaria na validação.
-	// appCfg.Cli = cliCfg // Sobrescrever com nossa config de teste.
-
-	// Vamos chamar os componentes de Run() que levam à criação do DB.
-	// Assumindo que a configuração é válida.
-
-	runErr = orchestrator.InitializeLoggerForTest() // Usa wrapper
-	if runErr != nil {
-		t.Fatalf("Falha ao inicializar logger para teste de DB: %v", runErr)
+	// Initialize components as done in Orchestrator.Run() before mode execution
+	err := orchestrator.InitializeLoggerForTest()
+	if err != nil {
+		t.Fatalf("InitializeLoggerForTest() failed: %v", err)
 	}
-	defer orchestrator.CloseLoggerForTest() // Usa wrapper
+	defer orchestrator.CloseLoggerForTest()
+	orchestrator.CreateNetworkForTest()
 
-	orchestrator.CreateNetworkForTest() // Usa wrapper
 
-	// Chamar runSimMode e esperar que não haja erro
-	runErr = orchestrator.RunSimModeForTest() // Usa wrapper
-	if runErr != nil {
-		t.Fatalf("Execução do modo sim falhou inesperadamente: %v", runErr)
+	_, err = captureOutput(orchestrator.RunSimModeForTest)
+	if err != nil {
+		t.Fatalf("RunSimModeForTest returned an unexpected error: %v", err)
 	}
 
-	// Verificar se o arquivo de banco de dados foi criado
-	if _, errStat := os.Stat(dbFilePath); os.IsNotExist(errStat) {
-		t.Errorf("Arquivo de banco de dados %s não foi criado", dbFilePath)
-	} else if errStat != nil {
-		t.Errorf("Erro ao verificar o arquivo de banco de dados %s: %v", dbFilePath, errStat)
+	// Verify DB file creation
+	if _, statErr := os.Stat(dbFilePath); os.IsNotExist(statErr) {
+		t.Errorf("SQLite database file %s was not created", dbFilePath)
+	} else if statErr != nil {
+		t.Errorf("Error stating DB file %s: %v", dbFilePath, statErr)
 	}
-	// Limpeza do arquivo DB é feita por t.TempDir()
-}
-
-// captureStdoutReturnError é como captureStdout mas para funções que retornam erro.
-func captureStdoutReturnError(f func() error) (string, error) {
-	oldStdout := os.Stdout
-	oldLogOutput := log.Writer()
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	log.SetOutput(w)
-
-	err := f()
-
-	w.Close()
-	os.Stdout = oldStdout
-	log.SetOutput(oldLogOutput)
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String(), err
+	// Further checks could involve querying the DB for expected tables/data.
 }
 
 
-func TestRunObserveMode_OutputVerification(t *testing.T) {
-	// --- Setup ---
+func TestObserveMode_OutputVerification(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 	simParams.MinOutputNeurons = 2
 	simParams.MinInputNeurons = 3
-	simParams.PatternSize = 3
+	simParams.PatternSize = 3 // Matches pattern [1,1,0]
 	simParams.PatternHeight = 1
 	simParams.PatternWidth = 3
-	simParams.AccumulatedPulseDecayRate = 0.0 // Sem decaimento para simplificar a verificação do potencial
+	simParams.AccumulatedPulseDecayRate = 0.0 // No decay for predictable potential sum
+	simParams.BaseFiringThreshold = 100.0 // High threshold to prevent firing during observation
 
-	// Criar um arquivo de pesos temporário com valores conhecidos
 	tempDir := t.TempDir()
 	weightsFilePath := filepath.Join(tempDir, "observe_test_weights.json")
 
+	// Create mock weights: Input 0 -> Output 0 (ID 3), Input 1 -> Output 1 (ID 4)
 	mockWeights := synaptic.NewNetworkWeights()
-	// Neurônios de Input: 0, 1, 2
-	// Neurônios de Output: 3, 4 (assumindo que NewCrowNet os cria com estes IDs após os inputs)
-	mockWeights.SetWeight(common.NeuronID(0), common.NeuronID(3), 1.0, &simParams)
-	mockWeights.SetWeight(common.NeuronID(0), common.NeuronID(4), 0.5, &simParams)
-	mockWeights.SetWeight(common.NeuronID(1), common.NeuronID(3), 0.2, &simParams)
-	mockWeights.SetWeight(common.NeuronID(1), common.NeuronID(4), 1.0, &simParams)
-	mockWeights.SetWeight(common.NeuronID(2), common.NeuronID(3), 0.0, &simParams)
-	mockWeights.SetWeight(common.NeuronID(2), common.NeuronID(4), 0.8, &simParams)
+	// Neuron IDs: Input 0,1,2; Output 3,4 (assuming sequential assignment by NewCrowNet)
+	mockWeights.SetWeight(common.NeuronID(0), common.NeuronID(3), 1.0, &simParams) // I0 -> O0
+	mockWeights.SetWeight(common.NeuronID(0), common.NeuronID(4), 0.5, &simParams) // I0 -> O1
+	mockWeights.SetWeight(common.NeuronID(1), common.NeuronID(3), 0.2, &simParams) // I1 -> O0
+	mockWeights.SetWeight(common.NeuronID(1), common.NeuronID(4), 1.0, &simParams) // I1 -> O1
+	// Input 2 is not connected to Output 0 or 1 in this mock setup for simplicity.
 
 	if err := storage.SaveNetworkWeightsToJSON(mockWeights, weightsFilePath); err != nil {
-		t.Fatalf("Falha ao salvar arquivo de pesos mock: %v", err)
+		t.Fatalf("Failed to save mock weights file: %v", err)
 	}
 
 	cliCfg := config.CLIConfig{
 		Mode:           config.ModeObserve,
 		WeightsFile:    weightsFilePath,
-		Digit:          0,
-		CyclesToSettle: 1,
-		TotalNeurons:   5, // 3 input + 2 output
-		Seed:           12345, // Semente fixa
+		Digit:          0, // Digit to observe (mocked pattern will be [1,1,0])
+		CyclesToSettle: 1, // Minimal settling
+		TotalNeurons:   simParams.MinInputNeurons + simParams.MinOutputNeurons, // 3 input + 2 output
+		Seed:           12345,
 	}
-	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
-	orchestrator := cli.NewOrchestrator(appCfg)
+	orchestrator, appCfg := setupTestOrchestrator(t, &cliCfg, &simParams)
 
+	// Mock GetDigitPatternFn to return a specific pattern
 	originalGetDigitPatternFn := datagen.GetDigitPatternFn
 	datagen.GetDigitPatternFn = func(digit int, sp *config.SimulationParameters) ([]float64, error) {
 		if sp.PatternSize != 3 {
-			return nil, fmt.Errorf("mock GetDigitPatternFn: PatternSize esperada 3, got %d", sp.PatternSize)
+			return nil, fmt.Errorf("mock GetDigitPatternFn: PatternSize expected 3, got %d", sp.PatternSize)
 		}
-		return []float64{1.0, 1.0, 0.0}, nil // Input 0 e 1 ativos, Input 2 inativo
+		return []float64{1.0, 1.0, 0.0}, nil // Input neurons 0 and 1 active
 	}
 	defer func() { datagen.GetDigitPatternFn = originalGetDigitPatternFn }()
 
-	// --- Execução ---
-	var capturedOutput string
-	var runErr error
+	// Orchestrator.Run() would call createNetwork and loadWeights.
+	// For RunObserveModeForTest, we need to ensure these are done.
+	orchestrator.CreateNetworkForTest() // Populates o.Net
 
-	// Precisamos garantir que a rede é criada e os pesos são carregados antes de chamar runObserveModeForTest
-	// A função Run() do orchestrator faz isso.
-	// No entanto, Run() usa log.Fatalf. Para capturar a saída, precisamos evitar o Fatalf.
-	// Vamos chamar os passos de Run() manualmente.
-
-	// 1. Inicializar Logger (opcional para este teste, pois não verificamos o DB)
-	// if err := orchestrator.InitializeLoggerForTest(); err != nil {
-	//    t.Fatalf("initializeLogger failed: %v", err)
-	// }
-
-	// 2. Criar Rede (é interno ao orchestrator, chamado por Run)
-	// Para ter o .Net populado, precisamos de uma forma de chamar createNetwork
-	// ou ter NewOrchestrator fazendo isso, ou Run fazendo isso antes do switch.
-	// Por agora, vamos criar a rede e carregas os pesos manualmente no teste.
-
-	orchestrator.Net = network.NewCrowNet(cliCfg.TotalNeurons, common.Rate(cliCfg.BaseLearningRate), &simParams, cliCfg.Seed)
-	// Forçar os IDs de input e output para serem determinísticos no teste
-	// Assumindo que os primeiros MinInputNeurons são input, e os próximos MinOutputNeurons são output
-	if len(orchestrator.Net.Neurons) < simParams.MinInputNeurons + simParams.MinOutputNeurons {
-		t.Fatalf("Rede não tem neurônios suficientes para os IDs de input/output esperados")
-	}
-	inputIDs := make([]common.NeuronID, simParams.MinInputNeurons)
-	for i := 0; i < simParams.MinInputNeurons; i++ {
+	// Manually assign neuron IDs if NewCrowNet's assignment is not perfectly predictable for test
+	// This ensures that neuron IDs 0,1,2 are inputs and 3,4 are outputs.
+	for i := 0; i < appCfg.SimParams.MinInputNeurons; i++ {
+		orchestrator.Net.Neurons[i].ID = common.NeuronID(i)
 		orchestrator.Net.Neurons[i].Type = neuron.Input
-		inputIDs[i] = orchestrator.Net.Neurons[i].ID
 	}
-	orchestrator.Net.InputNeuronIDs = inputIDs
-
-	outputIDs := make([]common.NeuronID, simParams.MinOutputNeurons)
-	for i := 0; i < simParams.MinOutputNeurons; i++ {
-		idx := simParams.MinInputNeurons + i
-		orchestrator.Net.Neurons[idx].Type = neuron.Output
-		outputIDs[i] = orchestrator.Net.Neurons[idx].ID
+	orchestrator.Net.InputNeuronIDs = []common.NeuronID{0,1,2}
+	for i := 0; i < appCfg.SimParams.MinOutputNeurons; i++ {
+		offsetIdx := appCfg.SimParams.MinInputNeurons + i
+		orchestrator.Net.Neurons[offsetIdx].ID = common.NeuronID(offsetIdx)
+		orchestrator.Net.Neurons[offsetIdx].Type = neuron.Output
 	}
-	orchestrator.Net.OutputNeuronIDs = outputIDs
+	orchestrator.Net.OutputNeuronIDs = []common.NeuronID{3,4}
 
-	// Carregar os pesos mockados na rede do orchestrator
-	if errLoad := orchestrator.LoadWeightsForTest(weightsFilePath); errLoad != nil {
-		t.Fatalf("Falha ao carregar pesos para o teste: %v", errLoad)
+
+	if err := orchestrator.LoadWeightsForTest(weightsFilePath); err != nil {
+		t.Fatalf("LoadWeightsForTest failed: %v", err)
 	}
 
-
-	capturedOutput, runErr = captureStdoutReturnError(func() error {
-		return orchestrator.RunObserveModeForTest()
-	})
-
-	// --- Verificação ---
-	if runErr != nil {
-		t.Fatalf("runObserveModeForTest retornou um erro inesperado: %v. Output: %s", runErr, capturedOutput)
+	output, err := captureOutput(orchestrator.RunObserveModeForTest)
+	if err != nil {
+		t.Fatalf("RunObserveModeForTest failed: %v\nOutput: %s", err, output)
 	}
 
-	if !strings.Contains(capturedOutput, "Dígito Apresentado: 0") {
-		t.Errorf("Saída não contém 'Dígito Apresentado: 0'. Saída: %s", capturedOutput)
+	// Expected activations based on pattern [1,1,0] and weights:
+	// OutputNeuron[0] (ID 3): (Input 0 active * weight I0->O0) + (Input 1 active * weight I1->O0)
+	//                      = (1.0 * 1.0) + (1.0 * 0.2) = 1.2
+	// OutputNeuron[1] (ID 4): (Input 0 active * weight I0->O1) + (Input 1 active * weight I1->O1)
+	//                      = (1.0 * 0.5) + (1.0 * 1.0) = 1.5
+	expectedOutputID0 := orchestrator.Net.OutputNeuronIDs[0] // Should be ID 3
+	expectedOutputID1 := orchestrator.Net.OutputNeuronIDs[1] // Should be ID 4
+
+	expectedPatternStrings := []string{
+		fmt.Sprintf("OutNeurônio[0] (ID %d): %.4f", expectedOutputID0, 1.2000),
+		fmt.Sprintf("OutNeurônio[1] (ID %d): %.4f", expectedOutputID1, 1.5000),
+		"Dígito Apresentado: 0",
 	}
-	if !strings.Contains(capturedOutput, "Padrão de Ativação dos Neurônios de Saída") {
-		t.Errorf("Saída não contém 'Padrão de Ativação dos Neurônios de Saída'. Saída: %s", capturedOutput)
-	}
-
-	// Padrão de input: [1.0, 1.0, 0.0] -> Inputs com ID 0 e 1 ativos
-	// Pesos:
-	// I0->O0 (ID real net.OutputNeuronIDs[0]): 1.0
-	// I0->O1 (ID real net.OutputNeuronIDs[1]): 0.5
-	// I1->O0: 0.2
-	// I1->O1: 1.0
-	// I2->O0: 0.0
-	// I2->O1: 0.8
-	// Ativação O0 = 1.0*1.0 (de I0) + 1.0*0.2 (de I1) = 1.2
-	// Ativação O1 = 1.0*0.5 (de I0) + 1.0*1.0 (de I1) = 1.5
-	// Com CyclesToSettle=1 e AccumulatedPulseDecayRate=0.0, o potencial é a soma.
-
-	outputID_0_actual := orchestrator.Net.OutputNeuronIDs[0]
-	outputID_1_actual := orchestrator.Net.OutputNeuronIDs[1]
-
-	expectedOut0Str := fmt.Sprintf("OutNeurônio[0] (ID %d): %.4f", outputID_0_actual, 1.2000)
-	expectedOut1Str := fmt.Sprintf("OutNeurônio[1] (ID %d): %.4f", outputID_1_actual, 1.5000)
-
-	if !strings.Contains(capturedOutput, expectedOut0Str) {
-		t.Errorf("Saída para Output 0 incorreta. Esperado conter '%s'. Saída: %s", expectedOut0Str, capturedOutput)
-	}
-	if !strings.Contains(capturedOutput, expectedOut1Str) {
-		t.Errorf("Saída para Output 1 incorreta. Esperado conter '%s'. Saída: %s", expectedOut1Str, capturedOutput)
+	for _, substr := range expectedPatternStrings {
+		if !strings.Contains(output, substr) {
+			t.Errorf("Output missing expected string '%s'. Full output:\n%s", substr, output)
+		}
 	}
 }
 
-func TestRunObserveMode_LoadWeightsError(t *testing.T) {
-	simParams := config.DefaultSimulationParameters()
+func TestObserveMode_LoadWeightsError(t *testing.T) {
 	cliCfg := config.CLIConfig{
-		Mode:           config.ModeObserve,
-		WeightsFile:    "non_existent_weights.json",
-		Digit:          0,
-		CyclesToSettle: 1,
+		Mode:        config.ModeObserve,
+		WeightsFile: "non_existent_weights.json", // This file won't exist
+		Digit:       0,
+		Seed:        1,
 	}
-	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
+	orchestrator, appCfg := setupTestOrchestrator(t, &cliCfg, nil)
 
-	orchestrator := cli.NewOrchestrator(appCfg)
-	// Sobrescrever loadWeightsFn para simular erro
-	mockLoadError := fmt.Errorf("mocked loadWeights error: arquivo não encontrado")
-	orchestrator.SetLoadWeightsFn(func(filepath string) (synaptic.NetworkWeights, error) {
-		return nil, mockLoadError
-	})
-
-	// A rede precisa ser criada para que o.Net não seja nil dentro de runObserveMode
-	orchestrator.Net = network.NewCrowNet(10, 0.01, &simParams, 0)
+	// Orchestrator.Run() calls createNetwork.
+	// For RunObserveModeForTest, ensure network exists.
+	orchestrator.Net = network.NewCrowNet(appCfg.Cli.TotalNeurons, 0.01, &appCfg.SimParams, appCfg.Cli.Seed)
 
 
 	err := orchestrator.RunObserveModeForTest()
 	if err == nil {
-		t.Errorf("Expected runObserveMode to return an error due to loadWeights failure, but got nil")
+		t.Errorf("Expected RunObserveModeForTest to fail due to missing weights file, but it succeeded.")
 	} else {
-		// Verificar se o erro retornado contém o erro mockado
-		if !strings.Contains(err.Error(), "mocked loadWeights error") && !strings.Contains(err.Error(), "não encontrado") {
-			t.Errorf("Error message mismatch. Expected to contain 'mocked loadWeights error' or 'não encontrado', got: %v", err)
+		if !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "Exponha a rede primeiro") {
+			t.Errorf("Expected error message to indicate missing weights, got: %v", err)
 		}
 	}
 }
 
-func TestRunExposeMode_SaveWeightsError(t *testing.T) {
-	simParams := config.DefaultSimulationParameters()
-	cliCfg := config.CLIConfig{
-		Mode:             config.ModeExpose,
-		WeightsFile:      "test_save_weights.json",
-		Epochs:           0, // 0 épocas para pular runExposureEpochs e ir direto para saveWeights
-		CyclesPerPattern: 1,
-		BaseLearningRate: 0.01,
-	}
-	appCfg := &config.AppConfig{Cli: cliCfg, SimParams: simParams}
+func TestExposeMode_SaveWeightsError(t *testing.T) {
+	tempDir := t.TempDir()
+	// Attempt to save to a read-only path or similar to trigger error (hard to do reliably cross-platform)
+	// Instead, we'll mock saveWeightsFn to return an error.
+	weightsFilePath := filepath.Join(tempDir, "save_error_test.json")
 
-	orchestrator := cli.NewOrchestrator(appCfg)
-	mockSaveError := fmt.Errorf("mocked saveWeights error")
-	orchestrator.SetSaveWeightsFn(func(weights synaptic.NetworkWeights, filepath string) error {
+	cliCfg := config.CLIConfig{
+		Mode:        config.ModeExpose,
+		WeightsFile: weightsFilePath,
+		Epochs:      1, // Minimal epochs
+		TotalNeurons: 2,  // Minimal neurons
+		Seed:        1,
+	}
+	orchestrator, appCfg := setupTestOrchestrator(t, &cliCfg, nil)
+
+	mockSaveError := fmt.Errorf("simulated saveWeights error")
+	orchestrator.SetSaveWeightsFn(func(weights synaptic.NetworkWeights, filepathStr string) error {
 		return mockSaveError
 	})
-
-	// Configurar uma rede mínima
-	orchestrator.Net = network.NewCrowNet(10, 0.01, &simParams, 0)
-	// Simular que o carregamento de pesos (opcional para expose) não deu erro ou não aconteceu
-	orchestrator.SetLoadWeightsFn(func(filepath string) (synaptic.NetworkWeights, error) {
-		return synaptic.NewNetworkWeights(), nil // Sucesso no carregamento (ou nenhum arquivo)
+	// Mock load to succeed or not be called, as focus is on save error
+	orchestrator.SetLoadWeightsFn(func(filepathStr string) (synaptic.NetworkWeights, error) {
+		return synaptic.NewNetworkWeights(), nil
 	})
+	// Mock datagen to avoid issues with pattern generation if it's not robust
+	originalGetDigitPatternFn := datagen.GetDigitPatternFn
+	datagen.GetDigitPatternFn = func(digit int, sp *config.SimulationParameters) ([]float64, error) {
+		return []float64{1.0}, nil // Assuming MinInputNeurons=1, PatternSize=1 for simplicity
+	}
+	defer func() { datagen.GetDigitPatternFn = originalGetDigitPatternFn }()
+
+	// Ensure network is created with minimal setup for expose mode to run
+	appCfg.SimParams.MinInputNeurons = 1
+	appCfg.SimParams.MinOutputNeurons = 1
+	appCfg.SimParams.PatternSize = 1
+	orchestrator.AppCfg = appCfg // Update orchestrator's appCfg if modified
+	orchestrator.CreateNetworkForTest()
+	if len(orchestrator.Net.Neurons) > 0 { // Ensure input neuron exists for PresentPattern
+		orchestrator.Net.InputNeuronIDs = []common.NeuronID{orchestrator.Net.Neurons[0].ID}
+		orchestrator.Net.Neurons[0].Type = neuron.Input
+	}
+
 
 	err := orchestrator.RunExposeModeForTest()
 	if err == nil {
-		t.Errorf("Expected runExposeMode to return an error due to saveWeights failure, but got nil")
+		t.Errorf("Expected RunExposeModeForTest to fail due to saveWeights error, but it succeeded.")
 	} else {
-		if !strings.Contains(err.Error(), "mocked saveWeights error") {
-			t.Errorf("Error message mismatch. Expected 'mocked saveWeights error', got: %v", err)
+		if !strings.Contains(err.Error(), "simulated saveWeights error") {
+			t.Errorf("Expected error message to indicate save failure, got: %v", err)
 		}
 	}
-} // Ensure this is the final closing brace and newline
-```
+}

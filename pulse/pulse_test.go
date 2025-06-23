@@ -158,13 +158,12 @@ func TestPulseList_ProcessCycle_PropagationAndRemoval(t *testing.T) {
 	simParams.PulsePropagationSpeed = 0.5
 
 	pl := pulse.NewPulseList()
-	pActive := pulse.New(1, common.Point{0,0}, 1.0, 0, 1.0) // MaxRadius 1.0, Speed 0.5. Ativo após 1 ciclo, dissipado após 3.
-	pDissipate := pulse.New(2, common.Point{0,0}, 1.0, 0, 0.2) // MaxRadius 0.2, dissipará na primeira propagação (dist 0.5)
+	pActive := pulse.New(1, common.Point{0,0}, 1.0, 0, 1.0)
+	pDissipate := pulse.New(2, common.Point{0,0}, 1.0, 0, 0.2)
 
 	pl.Add(pActive)
 	pl.Add(pDissipate)
 
-	// Teste sem neurônios, focando apenas na propagação e remoção de pulsos
 	testNeurons := []*neuron.Neuron{}
 	testWeights := synaptic.NewNetworkWeights()
 
@@ -184,8 +183,7 @@ func TestPulseList_ProcessCycle_PropagationAndRemoval(t *testing.T) {
 		t.Errorf("Active pulse distance: expected 0.5, got %f", pl.GetAll()[0].CurrentDistance)
 	}
 
-	// Propagar pActive novamente, deve continuar ativo
-	pl.ProcessCycle(testNeurons, testWeights, common.CycleCount(2), &simParams) // pActive distance = 1.0
+	pl.ProcessCycle(testNeurons, testWeights, common.CycleCount(2), &simParams)
 	if pl.Count() != 1 {
 		t.Errorf("Expected pActive to still be active after 2nd propagation, got count %d", pl.Count())
 	}
@@ -193,37 +191,24 @@ func TestPulseList_ProcessCycle_PropagationAndRemoval(t *testing.T) {
 		t.Errorf("pActive distance after 2nd propagation: expected 1.0, got %f", pl.GetAll()[0].CurrentDistance)
 	}
 
-	// Propagar pActive mais uma vez, agora deve dissipar
-	pl.ProcessCycle(testNeurons, testWeights, common.CycleCount(3), &simParams) // pActive distance = 1.5
+	pl.ProcessCycle(testNeurons, testWeights, common.CycleCount(3), &simParams)
 	if pl.Count() != 0 {
 		t.Errorf("Expected pActive to dissipate after 3rd propagation, got count %d. Distance: %f", pl.Count(), pActive.CurrentDistance)
 	}
 }
-
 
 func TestPulseList_ProcessCycle_EffectAndNewPulseGeneration(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 	simParams.PulsePropagationSpeed = 0.6
 	simParams.BaseFiringThreshold = 0.9
 	simParams.SpaceMaxDimension = 10.0
-	// Garantir que AbsoluteRefractoryCycles seja realisticamente > 0 para evitar disparos múltiplos no mesmo ciclo se não tratado
-	simParams.AbsoluteRefractoryCycles = 2 // common.CycleCount
+	simParams.AbsoluteRefractoryCycles = 2
 
 	emitterNeuron := neuron.New(1, neuron.Excitatory, common.Point{0,0,0}, &simParams)
-
-	// Neurônio Alvo - posicionado para ser afetado e disparar
-	// Usar neuron.New diretamente, pois o MockNeuron não intercepta chamadas como esperado sem interfaces.
-	targetNeuronAffected := neuron.New(2, neuron.Excitatory, common.Point{0.5, 0,0}, &simParams) // Distância 0.5
-
-	// Neurônio Alvo - posicionado para NÃO ser afetado (longe demais)
-	targetNeuronFar := neuron.New(3, neuron.Excitatory, common.Point{5,0,0}, &simParams) // Distância 5.0
-
-	// Neurônio Alvo - posicionado para ser afetado mas não disparar (potencial insuficiente)
-	targetNeuronNoFire := neuron.New(4, neuron.Excitatory, common.Point{0.4,0,0}, &simParams) // Distância 0.4
-
-	// Neurônio Alvo - para testar peso zero
-	targetNeuronZeroWeight := neuron.New(5, neuron.Excitatory, common.Point{0.3,0,0}, &simParams) // Distância 0.3
-
+	targetNeuronAffected := neuron.New(2, neuron.Excitatory, common.Point{0.5, 0,0}, &simParams)
+	targetNeuronFar := neuron.New(3, neuron.Excitatory, common.Point{5,0,0}, &simParams)
+	targetNeuronNoFire := neuron.New(4, neuron.Excitatory, common.Point{0.4,0,0}, &simParams)
+	targetNeuronZeroWeight := neuron.New(5, neuron.Excitatory, common.Point{0.3,0,0}, &simParams)
 
 	neuronsForCycle := []*neuron.Neuron{
 		emitterNeuron,
@@ -234,25 +219,18 @@ func TestPulseList_ProcessCycle_EffectAndNewPulseGeneration(t *testing.T) {
 	}
 
 	weights := synaptic.NewNetworkWeights()
-	// Peso forte para targetNeuronAffected para garantir disparo
 	weights.SetWeight(emitterNeuron.ID, targetNeuronAffected.ID, 1.0)
-	// Peso para targetNeuronFar (não deve ser alcançado)
 	weights.SetWeight(emitterNeuron.ID, targetNeuronFar.ID, 1.0)
-	// Peso fraco para targetNeuronNoFire
-	weights.SetWeight(emitterNeuron.ID, targetNeuronNoFire.ID, 0.5) // Sinal 1.0 * Peso 0.5 = 0.5 (abaixo do limiar 0.9)
-	// Peso zero para targetNeuronZeroWeight
+	weights.SetWeight(emitterNeuron.ID, targetNeuronNoFire.ID, 0.5)
 	weights.SetWeight(emitterNeuron.ID, targetNeuronZeroWeight.ID, 0.0)
 
-
 	pl := pulse.NewPulseList()
-	// Pulso se origina em emitterNeuron (0,0,0), viaja 0.6 no primeiro ciclo. Casca de efeito [0, 0.6)
 	initialPulse := pulse.New(emitterNeuron.ID, emitterNeuron.Position, emitterNeuron.EmittedPulseSign(), 0, 5.0)
 	pl.Add(initialPulse)
 
 	currentSimCycle := common.CycleCount(1)
 	newlyGenerated := pl.ProcessCycle(neuronsForCycle, weights, currentSimCycle, &simParams)
 
-	// 1. Verificar targetNeuronAffected (deve ter sido afetado e disparado)
 	if targetNeuronAffected.CurrentState != neuron.Firing {
 		t.Errorf("targetNeuronAffected: expected state Firing, got %s. Potential: %f", targetNeuronAffected.CurrentState, targetNeuronAffected.AccumulatedPotential)
 	}
@@ -267,8 +245,6 @@ func TestPulseList_ProcessCycle_EffectAndNewPulseGeneration(t *testing.T) {
 		t.Errorf("Expected a new pulse from targetNeuronAffected, but none found. Generated: %d", len(newlyGenerated))
 	}
 
-
-	// 2. Verificar targetNeuronFar (não deve ter sido afetado)
 	if targetNeuronFar.AccumulatedPotential != 0 {
 		t.Errorf("targetNeuronFar potential: expected 0, got %f", targetNeuronFar.AccumulatedPotential)
 	}
@@ -276,15 +252,13 @@ func TestPulseList_ProcessCycle_EffectAndNewPulseGeneration(t *testing.T) {
 		t.Errorf("targetNeuronFar should not have fired.")
 	}
 
-	// 3. Verificar targetNeuronNoFire (afetado, mas não disparou)
-	if !floatEquals(float64(targetNeuronNoFire.AccumulatedPotential), 0.5, 1e-9) { // Sinal 1.0 * Peso 0.5
+	if !floatEquals(float64(targetNeuronNoFire.AccumulatedPotential), 0.5, 1e-9) {
 		t.Errorf("targetNeuronNoFire potential: expected 0.5, got %f", targetNeuronNoFire.AccumulatedPotential)
 	}
 	if targetNeuronNoFire.CurrentState == neuron.Firing {
 		t.Errorf("targetNeuronNoFire should not have fired.")
 	}
 
-	// 4. Verificar targetNeuronZeroWeight (afetado, mas potencial efetivo zero, não disparou)
 	if targetNeuronZeroWeight.AccumulatedPotential != 0 {
 		t.Errorf("targetNeuronZeroWeight potential: expected 0, got %f", targetNeuronZeroWeight.AccumulatedPotential)
 	}
@@ -292,18 +266,7 @@ func TestPulseList_ProcessCycle_EffectAndNewPulseGeneration(t *testing.T) {
 		t.Errorf("targetNeuronZeroWeight should not have fired.")
 	}
 
-	// 5. Verificar número total de pulsos gerados
-	// Apenas targetNeuronAffected deve ter disparado e gerado um pulso.
 	if len(newlyGenerated) != 1 {
 		t.Errorf("Expected 1 new pulse to be generated in total, got %d", len(newlyGenerated))
 	}
 }
-
-
-// Mais testes podem ser adicionados para cobrir:
-// - Múltiplos pulsos afetando o mesmo neurônio
-// - Pulsos inibitórios
-// - Pesos sinápticos zero ou negativos (além do que já é coberto pela lógica de effectivePotential == 0)
-// - Efeitos em neurônios em diferentes estados refratários (o mock simplificado não lida com isso bem,
-//   mas o neurônio real sim, então testar com neurônios reais é importante).
-```

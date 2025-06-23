@@ -10,7 +10,7 @@ import (
 func TestNewNeuron(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 	id := common.NeuronID(1)
-	pos := common.Point{1, 2, 3} // Apenas 3D para simplificar o teste, mas é 16D
+	pos := common.Point{1, 2, 3}
 	n := neuron.New(id, neuron.Excitatory, pos, &simParams)
 
 	if n.ID != id {
@@ -40,7 +40,6 @@ func TestNeuronIntegrateIncomingPotential(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 	n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
 
-	// Teste: Não dispara se abaixo do limiar
 	fired := n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold-0.1), 0)
 	if fired {
 		t.Errorf("Neurônio disparou com potencial abaixo do limiar")
@@ -48,32 +47,29 @@ func TestNeuronIntegrateIncomingPotential(t *testing.T) {
 	if n.AccumulatedPotential != common.PulseValue(simParams.BaseFiringThreshold-0.1) {
 		t.Errorf("Potencial acumulado incorreto: esperado %f, obteve %f", simParams.BaseFiringThreshold-0.1, n.AccumulatedPotential)
 	}
-	if n.CurrentState != neuron.Resting { // Deve permanecer Resting
+	if n.CurrentState != neuron.Resting {
 		t.Errorf("Estado incorreto após potencial abaixo do limiar: esperado Resting, obteve %s", n.CurrentState)
 	}
 
-	// Teste: Dispara se igual ou acima do limiar
-	n.AccumulatedPotential = 0 // Reset
+	n.AccumulatedPotential = 0
 	fired = n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold), 1)
 	if !fired {
 		t.Errorf("Neurônio não disparou com potencial no limiar")
 	}
-	if n.CurrentState != neuron.Firing { // Deve mudar para Firing
+	if n.CurrentState != neuron.Firing {
 		t.Errorf("Estado incorreto após disparo: esperado Firing, obteve %s", n.CurrentState)
 	}
-	// LastFiredCycle é atualizado em AdvanceState
 }
 
 func TestNeuronAdvanceState(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 	n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
 
-	// Cenário 1: Firing -> AbsoluteRefractory
 	n.CurrentState = neuron.Firing
 	n.CyclesInCurrentState = 0
-	n.AccumulatedPotential = common.PulseValue(simParams.BaseFiringThreshold + 0.1) // Simula que acabou de disparar
+	n.AccumulatedPotential = common.PulseValue(simParams.BaseFiringThreshold + 0.1)
 
-	n.AdvanceState(0, &simParams) // Avança para ciclo 0 (o disparo ocorreu "antes" do ciclo 0)
+	n.AdvanceState(0, &simParams)
 
 	if n.CurrentState != neuron.AbsoluteRefractory {
 		t.Errorf("Esperado estado AbsoluteRefractory após Firing, obteve %s", n.CurrentState)
@@ -81,20 +77,18 @@ func TestNeuronAdvanceState(t *testing.T) {
 	if n.LastFiredCycle != 0 {
 		t.Errorf("Esperado LastFiredCycle 0, obteve %d", n.LastFiredCycle)
 	}
-	if n.AccumulatedPotential != 0.0 { // Potencial deve ser resetado após disparo
+	if n.AccumulatedPotential != 0.0 {
 		t.Errorf("Esperado Potencial Acumulado 0.0 após Firing, obteve %f", n.AccumulatedPotential)
 	}
 	if n.CyclesInCurrentState != 0 {
 		t.Errorf("Esperado CyclesInCurrentState 0 para novo estado AbsoluteRefractory, obteve %d", n.CyclesInCurrentState)
 	}
 
-	// Cenário 2: AbsoluteRefractory -> RelativeRefractory
 	n.CurrentState = neuron.AbsoluteRefractory
 	n.LastFiredCycle = 0
-	// simParams.AbsoluteRefractoryCycles já é common.CycleCount
-	n.CyclesInCurrentState = simParams.AbsoluteRefractoryCycles - 1 // No último ciclo de Absolute
+	n.CyclesInCurrentState = simParams.AbsoluteRefractoryCycles - 1
 
-	n.AdvanceState(simParams.AbsoluteRefractoryCycles, &simParams) // Avança para o ciclo onde a transição ocorre
+	n.AdvanceState(simParams.AbsoluteRefractoryCycles, &simParams)
 
 	if n.CurrentState != neuron.RelativeRefractory {
 		t.Errorf("Esperado estado RelativeRefractory após AbsoluteRefractory, obteve %s", n.CurrentState)
@@ -103,11 +97,9 @@ func TestNeuronAdvanceState(t *testing.T) {
 		t.Errorf("Esperado CyclesInCurrentState 0 para novo estado RelativeRefractory, obteve %d", n.CyclesInCurrentState)
 	}
 
-	// Cenário 3: RelativeRefractory -> Resting
 	n.CurrentState = neuron.RelativeRefractory
 	n.LastFiredCycle = 0
-	// simParams.RelativeRefractoryCycles já é common.CycleCount
-	n.CyclesInCurrentState = simParams.RelativeRefractoryCycles - 1 // No último ciclo de Relative
+	n.CyclesInCurrentState = simParams.RelativeRefractoryCycles - 1
 
 	n.AdvanceState(simParams.AbsoluteRefractoryCycles + simParams.RelativeRefractoryCycles, &simParams)
 
@@ -123,7 +115,6 @@ func TestNeuronDecayPotential(t *testing.T) {
 	simParams := config.DefaultSimulationParameters()
 	n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
 
-	// Teste com potencial positivo
 	n.AccumulatedPotential = 1.0
 	expectedPotential := 1.0 * (1.0 - simParams.AccumulatedPulseDecayRate)
 	n.DecayPotential(&simParams)
@@ -131,7 +122,6 @@ func TestNeuronDecayPotential(t *testing.T) {
 		t.Errorf("Decaimento positivo incorreto: esperado %f, obteve %f", expectedPotential, n.AccumulatedPotential)
 	}
 
-	// Teste com potencial negativo
 	n.AccumulatedPotential = -1.0
 	expectedPotentialNegative := -1.0 * (1.0 - simParams.AccumulatedPulseDecayRate)
 	n.DecayPotential(&simParams)
@@ -139,7 +129,6 @@ func TestNeuronDecayPotential(t *testing.T) {
 		t.Errorf("Decaimento negativo incorreto: esperado %f, obteve %f", expectedPotentialNegative, n.AccumulatedPotential)
 	}
 
-	// Teste decaimento para zero
 	n.AccumulatedPotential = 0.000001
 	n.DecayPotential(&simParams)
 	if n.AccumulatedPotential != 0.0 {
@@ -179,46 +168,42 @@ func TestEmittedPulseSign(t *testing.T) {
 	}
 }
 
-// Teste para não disparar em AbsoluteRefractory
 func TestNeuronNoFireInAbsoluteRefractory(t *testing.T) {
     simParams := config.DefaultSimulationParameters()
     n := neuron.New(1, neuron.Excitatory, common.Point{}, &simParams)
 
-    // Colocar neurônio em AbsoluteRefractory
-    n.CurrentState = neuron.Firing // Dispara
-    n.AdvanceState(0, &simParams) // Avança para AbsoluteRefractory (LastFiredCycle = 0)
+    n.CurrentState = neuron.Firing
+    n.AdvanceState(0, &simParams)
 
     if n.CurrentState != neuron.AbsoluteRefractory {
         t.Fatalf("Falha ao colocar neurônio em AbsoluteRefractory para o teste.")
     }
 
-    // Tentar disparar com potencial alto
-    n.AccumulatedPotential = 0 // Resetar para garantir
-    fired := n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold*2), 1) // Ciclo 1
+    n.AccumulatedPotential = 0
+    fired := n.IntegrateIncomingPotential(common.PulseValue(simParams.BaseFiringThreshold*2), 1)
 
     if fired {
         t.Errorf("Neurônio disparou enquanto em AbsoluteRefractory state.")
     }
-    if n.CurrentState != neuron.AbsoluteRefractory { // Deve permanecer em AbsoluteRefractory
+    if n.CurrentState != neuron.AbsoluteRefractory {
         t.Errorf("Estado do neurônio mudou de AbsoluteRefractory indevidamente.")
     }
-    if n.LastFiredCycle != 0 { // Não deve ter disparado novamente
-	t.Errorf("LastFiredCycle mudou, indicando novo disparo em AbsoluteRefractory. Esperado 0, obteve %d", n.LastFiredCycle)
+    if n.LastFiredCycle != 0 {
+	    t.Errorf("LastFiredCycle mudou, indicando novo disparo em AbsoluteRefractory. Esperado 0, obteve %d", n.LastFiredCycle)
     }
 }
 
 func TestNeuronUpdatePosition(t *testing.T) {
-	simParams := config.DefaultSimulationParameters() // Necessário para neuron.New, mas não usado diretamente aqui
+	simParams := config.DefaultSimulationParameters()
 	n := neuron.New(1, neuron.Excitatory, common.Point{1.0, 2.0, 3.0}, &simParams)
 	n.Velocity = common.Vector{0.5, -0.5, 0.1}
 
-	// Preencher o restante das 16 dimensões para evitar valores não inicializados afetando o teste
 	for i := 3; i < 16; i++ {
-		n.Position[i] = common.Coordinate(float64(i + 1)) // Ex: 4.0, 5.0 ...
-		n.Velocity[i] = 0.0 // Sem movimento nas outras dimensões para este teste
+		n.Position[i] = common.Coordinate(float64(i + 1))
+		n.Velocity[i] = 0.0
 	}
 
-	expectedPosition := n.Position // Copiar para calcular o esperado
+	expectedPosition := n.Position
 	for i := 0; i < 16; i++ {
 		expectedPosition[i] += common.Coordinate(n.Velocity[i])
 	}
@@ -229,7 +214,6 @@ func TestNeuronUpdatePosition(t *testing.T) {
 		t.Errorf("UpdatePosition falhou: esperado %v, obteve %v", expectedPosition, n.Position)
 	}
 
-	// Teste com velocidade zero
 	n.Position = common.Point{1.0, 1.0}
 	n.Velocity = common.Vector{0.0, 0.0}
 	expectedPositionZeroVel := n.Position

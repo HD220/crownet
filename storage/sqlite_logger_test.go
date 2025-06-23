@@ -28,9 +28,9 @@ func tableExistsAndHasColumns(db *sql.DB, tableName string, expectedCols []strin
 	for rows.Next() {
 		var cid int
 		var name string
-		var typeStr string // Renomeado de type para typeStr
+		var typeStr string
 		var notnull int
-		var dflt_value sql.NullString // Alterado para sql.NullString
+		var dflt_value sql.NullString
 		var pk int
 		if err := rows.Scan(&cid, &name, &typeStr, &notnull, &dflt_value, &pk); err != nil {
 			return false, fmt.Errorf("falha ao escanear linha de PRAGMA table_info para %s: %w", tableName, err)
@@ -41,10 +41,9 @@ func tableExistsAndHasColumns(db *sql.DB, tableName string, expectedCols []strin
 		return false, fmt.Errorf("erro após iteração de PRAGMA table_info para %s: %w", tableName, err)
 	}
 
-	if len(foundCols) == 0 && len(expectedCols) > 0 { // Se não encontrou colunas mas esperava, tabela provavelmente não existe
+	if len(foundCols) == 0 && len(expectedCols) > 0 {
 		return false, nil
 	}
-
 
 	for _, col := range expectedCols {
 		if !foundCols[col] {
@@ -54,7 +53,6 @@ func tableExistsAndHasColumns(db *sql.DB, tableName string, expectedCols []strin
 	return true, nil
 }
 
-
 func TestNewSQLiteLogger_InMemory(t *testing.T) {
 	logger, err := storage.NewSQLiteLogger(":memory:")
 	if err != nil {
@@ -62,11 +60,10 @@ func TestNewSQLiteLogger_InMemory(t *testing.T) {
 	}
 	defer logger.Close()
 
-	if logger.DBForTest() == nil { // Método DBForTest() precisaria ser adicionado ao SQLiteLogger
+	if logger.DBForTest() == nil {
 		t.Fatalf("Logger DB não foi inicializado")
 	}
 
-	// Verificar se as tabelas foram criadas
 	expectedSnapshotCols := []string{"SnapshotID", "CycleCount", "Timestamp", "CortisolLevel", "DopamineLevel"}
 	exists, err := tableExistsAndHasColumns(logger.DBForTest(), "NetworkSnapshots", expectedSnapshotCols)
 	if err != nil {
@@ -76,7 +73,6 @@ func TestNewSQLiteLogger_InMemory(t *testing.T) {
 		t.Errorf("Tabela NetworkSnapshots não foi criada ou não tem colunas esperadas")
 	}
 
-	// Para NeuronStates, verificar algumas colunas chave além das dinâmicas de posição/velocidade
 	expectedNeuronCols := []string{"StateID", "SnapshotID", "NeuronID", "Type", "CurrentState", "Position0", "Velocity0"}
 	exists, err = tableExistsAndHasColumns(logger.DBForTest(), "NeuronStates", expectedNeuronCols)
 	if err != nil {
@@ -95,8 +91,6 @@ func TestSQLiteLogger_LogNetworkState(t *testing.T) {
 	defer logger.Close()
 
 	simParams := config.DefaultSimulationParameters()
-	// Criar uma rede de teste simples
-	// A semente é importante para posições/velocidades se elas forem aleatórias na inicialização
 	net := network.NewCrowNet(2, 0.01, &simParams, 123)
 	net.CycleCount = 100
 	net.ChemicalEnv.CortisolLevel = 0.5
@@ -107,7 +101,6 @@ func TestSQLiteLogger_LogNetworkState(t *testing.T) {
 	if len(net.Neurons) < 2 {
 		t.Fatalf("Rede de teste não tem neurônios suficientes.")
 	}
-	// Modificar alguns neurônios para ter dados distintos
 	net.Neurons[0].ID = 101
 	net.Neurons[0].Type = neuron.Input
 	net.Neurons[0].CurrentState = neuron.Firing
@@ -123,7 +116,6 @@ func TestSQLiteLogger_LogNetworkState(t *testing.T) {
 		t.Fatalf("LogNetworkState failed: %v", err)
 	}
 
-	// Verificar dados em NetworkSnapshots
 	var cycleCount int
 	var cortisol float64
 	err = logger.DBForTest().QueryRow("SELECT CycleCount, CortisolLevel FROM NetworkSnapshots WHERE SnapshotID = 1").Scan(&cycleCount, &cortisol)
@@ -137,7 +129,6 @@ func TestSQLiteLogger_LogNetworkState(t *testing.T) {
 		t.Errorf("Snapshot CortisolLevel: esperado 0.5, got %f", cortisol)
 	}
 
-	// Verificar dados em NeuronStates para o primeiro neurônio
 	var neuronID int
 	var neuronType int
 	var position0 float64
@@ -158,7 +149,6 @@ func TestSQLiteLogger_LogNetworkState(t *testing.T) {
 }
 
 func TestSQLiteLogger_Close(t *testing.T) {
-	// Teste com DB em memória
 	loggerMem, err := storage.NewSQLiteLogger(":memory:")
 	if err != nil {
 		t.Fatalf("NewSQLiteLogger(\":memory:\") failed: %v", err)
@@ -166,12 +156,10 @@ func TestSQLiteLogger_Close(t *testing.T) {
 	if err := loggerMem.Close(); err != nil {
 		t.Errorf("Close() para DB em memória falhou: %v", err)
 	}
-	// Tentar fechar de novo (deve ser seguro)
 	if err := loggerMem.Close(); err != nil {
 		t.Errorf("Close() repetido para DB em memória falhou: %v", err)
 	}
 
-	// Teste com DB em arquivo
 	tempDir := t.TempDir()
 	dbFilePath := filepath.Join(tempDir, "test_close.db")
 
@@ -179,7 +167,6 @@ func TestSQLiteLogger_Close(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteLogger (arquivo) failed: %v", err)
 	}
-	// Verificar se o arquivo foi criado
 	if _, errStat := os.Stat(dbFilePath); os.IsNotExist(errStat) {
 		t.Fatalf("Arquivo de DB %s não foi criado", dbFilePath)
 	}
@@ -187,14 +174,12 @@ func TestSQLiteLogger_Close(t *testing.T) {
 	if err := loggerFile.Close(); err != nil {
 		t.Errorf("Close() para DB em arquivo falhou: %v", err)
 	}
-	// O arquivo ainda existe após Close, mas a conexão deve estar fechada.
-	// Tentar reabrir pode ser um teste, ou simplesmente verificar se não há pânico.
 }
 
-
-// Nota: Para que os testes compilem, SQLiteLogger precisa de um método DBForTest() *sql.DB
-// que retorne o *sql.DB interno. Isso é comum para permitir que os testes inspecionem o DB.
-// Exemplo em sqlite_logger.go:
-// func (sl *SQLiteLogger) DBForTest() *sql.DB { return sl.db }
-// Vou assumir que este método será adicionado.
-```
+// Helper para comparar floats com tolerância (duplicado, mas ok para teste)
+func floatEquals(a, b, tolerance float64) bool {
+	if a == b {
+		return true
+	}
+	return math.Abs(a-b) < tolerance
+}

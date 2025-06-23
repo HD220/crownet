@@ -6,10 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-)
-
-	"os"
-	"strconv" // Adicionado para conversão de ID
+	"strconv" // Consolidado e "os" duplicado removido
 )
 
 // SaveNetworkWeightsToJSON serializa a estrutura NetworkWeights para um arquivo JSON.

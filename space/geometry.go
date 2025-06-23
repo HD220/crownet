@@ -127,4 +127,3 @@ func GenerateRandomPositionInHyperSphere(maxRadius float64, randomSource func() 
 		// Caso contrário, tenta novamente (rejeição)
 	}
 }
-```

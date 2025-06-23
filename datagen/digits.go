@@ -113,14 +113,12 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 		return nil, fmt.Errorf("padrão de dígito para %d não encontrado", digit)
 	}
 
-	// Validar dimensões com base em simParams
 	if simParams.PatternHeight <= 0 || simParams.PatternWidth <= 0 {
 		return nil, fmt.Errorf("PatternHeight (%d) e PatternWidth (%d) em simParams devem ser positivos", simParams.PatternHeight, simParams.PatternWidth)
 	}
 
 	expectedSize := simParams.PatternHeight * simParams.PatternWidth
 	if simParams.PatternSize != expectedSize {
-		// Esta é uma verificação de consistência interna da configuração.
 		return nil, fmt.Errorf(
 			"PatternSize (%d) em simParams não corresponde a PatternHeight (%d) * PatternWidth (%d) = %d",
 			simParams.PatternSize, simParams.PatternHeight, simParams.PatternWidth, expectedSize,
@@ -146,7 +144,6 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 	}
 
 	if len(flattenedPattern) != simParams.PatternSize {
-		// Isso não deveria acontecer se as validações de altura/largura e os dados estiverem corretos.
 		return nil, fmt.Errorf("erro interno: tamanho do padrão achatado (%d) não corresponde ao PatternSize esperado (%d)", len(flattenedPattern), simParams.PatternSize)
 	}
 
@@ -158,13 +155,11 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 func GetAllDigitPatterns(simParams *config.SimulationParameters) (map[int][]float64, error) {
 	allPatterns := make(map[int][]float64)
 	for i := 0; i <= 9; i++ {
-		pattern, err := GetDigitPattern(i, simParams)
+		pattern, err := GetDigitPatternFn(i, simParams)
 		if err != nil {
-			// Isso indica um problema com a definição dos padrões internos, o que não deveria acontecer.
 			return nil, fmt.Errorf("erro ao obter padrão para o dígito %d: %w", i, err)
 		}
 		allPatterns[i] = pattern
 	}
 	return allPatterns, nil
 }
-```

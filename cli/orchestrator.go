@@ -5,123 +5,51 @@ import (
 	"crownet/config"
 	"crownet/datagen"
 	"crownet/network"
-	"crownet/storage" // Para persistência JSON e SQLite
+	"crownet/storage" // For JSON persistence and SQLite logging
+	"crownet/synaptic" // For synaptic.NetworkWeights type in function signatures
 	"fmt"
 	"log"
 	"os"
 	"time"
-	// "math/rand" // Para seed, se necessário
 )
 
-// Orchestrator gerencia a execução da simulação com base na configuração da CLI.
+// Orchestrator manages the simulation execution based on CLI configuration.
 type Orchestrator struct {
 	AppCfg *config.AppConfig
 	Net    *network.CrowNet
 	Logger *storage.SQLiteLogger
 
-	// Funções para dependências externas, facilitando o mock em testes.
+	// loadWeightsFn and saveWeightsFn allow for mocking persistence operations in tests.
 	loadWeightsFn func(filepath string) (synaptic.NetworkWeights, error)
 	saveWeightsFn func(weights synaptic.NetworkWeights, filepath string) error
 }
 
-// NewOrchestrator cria um novo orquestrador.
+// NewOrchestrator creates a new orchestrator with the given application configuration.
+// It defaults to using actual file system operations for loading/saving weights.
 func NewOrchestrator(appCfg *config.AppConfig) *Orchestrator {
 	return &Orchestrator{
-		AppCfg: appCfg,
-		// Inicializa com as funções reais do pacote storage
+		AppCfg:        appCfg,
 		loadWeightsFn: storage.LoadNetworkWeightsFromJSON,
 		saveWeightsFn: storage.SaveNetworkWeightsToJSON,
 	}
 }
 
-func (o *Orchestrator) initializeLogger() error {
-	if o.AppCfg.Cli.DbPath != "" &&
-		(o.AppCfg.Cli.Mode == config.ModeSim ||
-			(o.AppCfg.Cli.Mode == config.ModeExpose && o.AppCfg.Cli.SaveInterval > 0)) {
-		var err error
-		o.Logger, err = storage.NewSQLiteLogger(o.AppCfg.Cli.DbPath)
-		if err != nil {
-			return fmt.Errorf("falha ao inicializar logger SQLite: %w", err)
-		}
-		fmt.Printf("Logging SQLite ativado para: %s\n", o.AppCfg.Cli.DbPath)
-	}
-	return nil
-}
-
-func (o *Orchestrator) createNetwork() {
-	// Extrair os parâmetros necessários do AppCfg
-	totalNeurons := o.AppCfg.Cli.TotalNeurons
-	baseLearningRate := common.Rate(o.AppCfg.Cli.BaseLearningRate) // Converter para common.Rate
-	simParams := &o.AppCfg.SimParams
-	seed := o.AppCfg.Cli.Seed
-
-	// Chamar NewCrowNet com os parâmetros individualizados, incluindo a semente
-	o.Net = network.NewCrowNet(totalNeurons, baseLearningRate, simParams, seed)
-
-	fmt.Printf("Rede criada: %d neurônios. IDs Input: %v..., IDs Output: %v...\n",
-		len(o.Net.Neurons), o.Net.InputNeuronIDs[:min(5, len(o.Net.InputNeuronIDs))], o.Net.OutputNeuronIDs[:min(10, len(o.Net.OutputNeuronIDs))])
-	fmt.Printf("Estado Inicial: Cortisol=%.3f, Dopamina=%.3f\n",
-		o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
-}
-
-func (o *Orchestrator) loadWeights(filepath string) error {
-	if _, err := os.Stat(filepath); err == nil { // os.Stat ainda é usado para verificar a existência do arquivo
-		loadedWeights, errLoad := o.loadWeightsFn(filepath) // Usa a função injetada/mockável
-		if errLoad == nil {
-			o.Net.SynapticWeights = loadedWeights
-			fmt.Printf("Pesos existentes carregados de %s\n", filepath)
-			return nil
-		}
-		// Se o arquivo existe mas o carregamento falha, isso é um erro.
-		return fmt.Errorf("falha ao carregar pesos de %s: %w", filepath, errLoad)
-	}
-	// Se o arquivo não existe, não é necessariamente um erro para todos os modos (ex: expose pode começar do zero)
-	// A função chamadora decidirá se isso é um erro fatal.
-	return fmt.Errorf("arquivo de pesos %s não encontrado", filepath) // Mensagem mais simples
-}
-
-func (o *Orchestrator) saveWeights(filepath string) error {
-	if err := o.saveWeightsFn(o.Net.SynapticWeights, filepath); err != nil { // Usa a função injetada/mockável
-		return fmt.Errorf("falha ao salvar pesos treinados em %s: %w", filepath, err)
-	}
-	fmt.Printf("Pesos treinados salvos em %s\n", filepath)
-	return nil
-}
-
-func (o *Orchestrator) printModeSpecificConfig() {
-	switch o.AppCfg.Cli.Mode {
-	case config.ModeExpose:
-		fmt.Printf("  %s: Épocas=%d, TaxaAprendizadoBase=%.4f, CiclosPorPadrão=%d\n",
-			config.ModeExpose, o.AppCfg.Cli.Epochs, o.AppCfg.Cli.BaseLearningRate, o.AppCfg.Cli.CyclesPerPattern)
-	case config.ModeObserve:
-		fmt.Printf("  %s: Dígito=%d, CiclosParaAcomodar=%d\n",
-			config.ModeObserve, o.AppCfg.Cli.Digit, o.AppCfg.Cli.CyclesToSettle)
-	case config.ModeSim:
-		fmt.Printf("  %s: TotalCiclos=%d, CaminhoDB='%s', IntervaloSaveDB=%d\n",
-			config.ModeSim, o.AppCfg.Cli.Cycles, o.AppCfg.Cli.DbPath, o.AppCfg.Cli.SaveInterval)
-		if o.AppCfg.Cli.StimInputFreqHz > 0 && o.AppCfg.Cli.StimInputID != -2 {
-			fmt.Printf("  %s: EstímuloGeral: InputID=%d a %.1f Hz\n",
-				config.ModeSim, o.AppCfg.Cli.StimInputID, o.AppCfg.Cli.StimInputFreqHz)
-		}
-	}
-}
-
-// Run inicia a execução do modo selecionado.
+// Run executes the selected simulation mode. It's the main entry point for the orchestrator.
 func (o *Orchestrator) Run() error {
-	fmt.Println("CrowNet Inicializando...")
-	fmt.Printf("Modo Selecionado: %s\n", o.AppCfg.Cli.Mode)
-	fmt.Printf("Configuração Base: Neurônios=%d, ArquivoDePesos='%s'\n",
+	fmt.Println("CrowNet Initializing...")
+	fmt.Printf("Selected Mode: %s\n", o.AppCfg.Cli.Mode)
+	fmt.Printf("Base Configuration: Neurons=%d, WeightsFile='%s'\n",
 		o.AppCfg.Cli.TotalNeurons, o.AppCfg.Cli.WeightsFile)
-
 	o.printModeSpecificConfig()
 
 	if err := o.initializeLogger(); err != nil {
-		return fmt.Errorf("erro na inicialização do logger: %w", err)
+		return fmt.Errorf("logger initialization failed: %w", err)
 	}
 	if o.Logger != nil {
 		defer func() {
 			if errClose := o.Logger.Close(); errClose != nil {
-				log.Printf("Erro ao fechar logger SQLite: %v", errClose)
+				// Log error but don't override a primary error from Run()
+				log.Printf("Error closing SQLite logger: %v", errClose)
 			}
 		}()
 	}
@@ -129,7 +57,7 @@ func (o *Orchestrator) Run() error {
 	o.createNetwork()
 
 	startTime := time.Now()
-	var errRun error // Declarar errRun fora do switch para que seja acessível depois
+	var errRun error
 
 	switch o.AppCfg.Cli.Mode {
 	case config.ModeSim:
@@ -139,237 +67,357 @@ func (o *Orchestrator) Run() error {
 	case config.ModeObserve:
 		errRun = o.runObserveMode()
 	default:
-		// A validação em config.NewAppConfig() deve pegar isso, mas um fallback é bom.
-		return fmt.Errorf("modo desconhecido ou não suportado encontrado em Orchestrator.Run: %s", o.AppCfg.Cli.Mode)
+		// This case should ideally be caught by AppConfig.Validate()
+		return fmt.Errorf("unknown or unsupported mode in Orchestrator.Run: %s", o.AppCfg.Cli.Mode)
 	}
 
 	if errRun != nil {
-		return fmt.Errorf("erro durante a execução do modo '%s': %w", o.AppCfg.Cli.Mode, errRun)
+		return fmt.Errorf("error during execution of mode '%s': %w", o.AppCfg.Cli.Mode, errRun)
 	}
 
 	duration := time.Since(startTime)
-	fmt.Printf("\nSessão CrowNet finalizada. Duração total: %s.\n", duration)
+	fmt.Printf("\nCrowNet session finished. Total duration: %s.\n", duration)
 	return nil
 }
 
-// setupContinuousInputStimulus configura o estímulo de input para o modo sim.
-// Retorna erro se a configuração falhar de forma crítica (ex: ID de neurônio inválido).
-func (o *Orchestrator) setupContinuousInputStimulus() error {
-	if o.AppCfg.Cli.StimInputFreqHz > 0.0 && o.AppCfg.Cli.StimInputID != -2 && len(o.Net.InputNeuronIDs) > 0 {
-		stimID := o.AppCfg.Cli.StimInputID
-		if stimID == -1 && len(o.Net.InputNeuronIDs) > 0 { // -1 para primeiro disponível
-			stimID = int(o.Net.InputNeuronIDs[0])
+// initializeLogger sets up the SQLite logger if configured.
+func (o *Orchestrator) initializeLogger() error {
+	cfg := &o.AppCfg.Cli
+	// Logging is active for 'sim' mode, or 'expose' mode if periodic saving to DB is enabled.
+	if cfg.DbPath != "" &&
+		(cfg.Mode == config.ModeSim || (cfg.Mode == config.ModeExpose && cfg.SaveInterval > 0)) {
+		var err error
+		o.Logger, err = storage.NewSQLiteLogger(cfg.DbPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize SQLite logger at %s: %w", cfg.DbPath, err)
 		}
-
-		isValidStimID := false
-		for _, id := range o.Net.InputNeuronIDs {
-			if int(id) == stimID {
-				isValidStimID = true
-				break
-			}
-		}
-		if isValidStimID {
-			if err := o.Net.ConfigureFrequencyInput(common.NeuronID(stimID), o.AppCfg.Cli.StimInputFreqHz); err != nil {
-				return fmt.Errorf("falha ao configurar estímulo de input para neurônio %d a %.1f Hz: %w", stimID, o.AppCfg.Cli.StimInputFreqHz, err)
-			}
-			fmt.Printf("Estímulo geral: Neurônio de Input %d a %.1f Hz.\n", stimID, o.AppCfg.Cli.StimInputFreqHz)
-		} else {
-			return fmt.Errorf("ID do neurônio de input para estímulo geral (%d) não encontrado ou inválido", stimID)
-		}
+		fmt.Printf("SQLite logging enabled: %s\n", cfg.DbPath)
 	}
 	return nil
 }
 
+// createNetwork initializes the CrowNet neural network instance.
+func (o *Orchestrator) createNetwork() {
+	cliCfg := &o.AppCfg.Cli
+	o.Net = network.NewCrowNet(
+		cliCfg.TotalNeurons,
+		common.Rate(cliCfg.BaseLearningRate),
+		&o.AppCfg.SimParams,
+		cliCfg.Seed,
+	)
+
+	// Log initial network state.
+	// Showing only the first few input/output neuron IDs for brevity.
+	maxInputToShow := 5
+	maxOutputToShow := 10
+	numInputs := len(o.Net.InputNeuronIDs)
+	numOutputs := len(o.Net.OutputNeuronIDs)
+
+	fmt.Printf("Network created: %d neurons. Input IDs: %v..., Output IDs: %v...\n",
+		len(o.Net.Neurons),
+		o.Net.InputNeuronIDs[:min(maxInputToShow, numInputs)],
+		o.Net.OutputNeuronIDs[:min(maxOutputToShow, numOutputs)],
+	)
+	fmt.Printf("Initial State: Cortisol=%.3f, Dopamine=%.3f\n",
+		o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
+}
+
+// loadWeights loads synaptic weights from the specified file.
+// Uses the injected loadWeightsFn for testability.
+func (o *Orchestrator) loadWeights(filepath string) error {
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		// File not existing is not an error here; expose mode can start with random weights.
+		// The calling mode (e.g., observe) will determine if this is a fatal condition.
+		return fmt.Errorf("weights file %s not found", filepath)
+	}
+
+	loadedWeights, errLoad := o.loadWeightsFn(filepath)
+	if errLoad != nil {
+		return fmt.Errorf("failed to load weights from %s: %w", filepath, errLoad)
+	}
+	o.Net.SynapticWeights = loadedWeights
+	fmt.Printf("Existing weights loaded from %s\n", filepath)
+	return nil
+}
+
+// saveWeights saves the current synaptic weights to the specified file.
+// Uses the injected saveWeightsFn for testability.
+func (o *Orchestrator) saveWeights(filepath string) error {
+	if err := o.saveWeightsFn(o.Net.SynapticWeights, filepath); err != nil {
+		return fmt.Errorf("failed to save trained weights to %s: %w", filepath, err)
+	}
+	fmt.Printf("Trained weights saved to %s\n", filepath)
+	return nil
+}
+
+// printModeSpecificConfig outputs configuration details relevant to the current execution mode.
+func (o *Orchestrator) printModeSpecificConfig() {
+	cliCfg := o.AppCfg.Cli
+	switch cliCfg.Mode {
+	case config.ModeExpose:
+		fmt.Printf("  ModeExpose: Epochs=%d, BaseLearningRate=%.4f, CyclesPerPattern=%d\n",
+			cliCfg.Epochs, cliCfg.BaseLearningRate, cliCfg.CyclesPerPattern)
+	case config.ModeObserve:
+		fmt.Printf("  ModeObserve: Digit=%d, CyclesToSettle=%d\n",
+			cliCfg.Digit, cliCfg.CyclesToSettle)
+	case config.ModeSim:
+		fmt.Printf("  ModeSim: TotalCycles=%d, DBPath='%s', DBSaveInterval=%d\n",
+			cliCfg.Cycles, cliCfg.DbPath, cliCfg.SaveInterval)
+		if cliCfg.StimInputFreqHz > 0 && cliCfg.StimInputID != -2 { // -2 means stimulus disabled
+			fmt.Printf("  ModeSim: ContinuousStimulus: InputID=%d at %.1f Hz\n",
+				cliCfg.StimInputID, cliCfg.StimInputFreqHz)
+		}
+	}
+}
+
+// setupContinuousInputStimulus configures a continuous input stimulus for simulation mode.
+func (o *Orchestrator) setupContinuousInputStimulus() error {
+	cliCfg := o.AppCfg.Cli
+	if cliCfg.StimInputFreqHz <= 0.0 || cliCfg.StimInputID == -2 || len(o.Net.InputNeuronIDs) == 0 {
+		return nil // No stimulus configured or no input neurons to stimulate
+	}
+
+	stimID := cliCfg.StimInputID
+	if stimID == -1 { // -1 means use the first available input neuron
+		stimID = int(o.Net.InputNeuronIDs[0])
+	}
+
+	// Validate that stimID is a valid input neuron ID
+	isValidStimID := false
+	for _, id := range o.Net.InputNeuronIDs {
+		if int(id) == stimID {
+			isValidStimID = true
+			break
+		}
+	}
+
+	if !isValidStimID {
+		return fmt.Errorf("stimulus input neuron ID %d not found or invalid", stimID)
+	}
+
+	if err := o.Net.ConfigureFrequencyInput(common.NeuronID(stimID), cliCfg.StimInputFreqHz); err != nil {
+		return fmt.Errorf("failed to configure frequency input for neuron %d at %.1f Hz: %w", stimID, cliCfg.StimInputFreqHz, err)
+	}
+	fmt.Printf("Continuous stimulus: Input Neuron %d at %.1f Hz.\n", stimID, cliCfg.StimInputFreqHz)
+	return nil
+}
+
+// runSimulationLoop executes the main simulation cycles.
 func (o *Orchestrator) runSimulationLoop() error {
-	for i := 0; i < o.AppCfg.Cli.Cycles; i++ {
+	cycles := o.AppCfg.Cli.Cycles
+	saveInterval := o.AppCfg.Cli.SaveInterval
+
+	for i := 0; i < cycles; i++ {
 		o.Net.RunCycle()
-		if i%10 == 0 || i == o.AppCfg.Cli.Cycles-1 { // Log a cada 10 ciclos e no último
-			fmt.Printf("Ciclo %d/%d: C:%.3f D:%.3f LRMod:%.3f SynMod:%.3f Pulsos:%d\n",
-				o.Net.CycleCount-1, o.AppCfg.Cli.Cycles,
+		// Log progress periodically
+		if i%10 == 0 || i == cycles-1 {
+			fmt.Printf("Cycle %d/%d: Cortisol:%.3f Dopamine:%.3f LRMod:%.3f SynMod:%.3f Pulses:%d\n",
+				o.Net.CycleCount-1, cycles, // CycleCount is incremented at the end of RunCycle
 				o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel,
 				o.Net.ChemicalEnv.LearningRateModulationFactor, o.Net.ChemicalEnv.SynaptogenesisModulationFactor,
-				len(o.Net.ActivePulses))
+				len(o.Net.ActivePulses.GetAll())) // Use GetAll() for length
 		}
-		if o.Logger != nil && o.AppCfg.Cli.SaveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%o.AppCfg.Cli.SaveInterval == 0 {
+
+		// Log network state to DB if enabled and interval is met
+		if o.Logger != nil && saveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%saveInterval == 0 {
 			if err := o.Logger.LogNetworkState(o.Net); err != nil {
-				// Propagar erro em vez de apenas logar
-				return fmt.Errorf("falha ao logar estado da rede no DB (periódico) no ciclo %d: %w", o.Net.CycleCount, err)
+				return fmt.Errorf("failed to log network state to DB (periodic) at cycle %d: %w", o.Net.CycleCount, err)
 			}
+		}
+	}
+
+	// Final log if DB is enabled and the last cycle wasn't a save interval point
+	if o.Logger != nil && cycles > 0 && (saveInterval == 0 || cycles%saveInterval != 0) {
+		if err := o.Logger.LogNetworkState(o.Net); err != nil {
+			return fmt.Errorf("failed to log final network state to DB: %w", err)
 		}
 	}
 	return nil
-
-	// Log final se não coincidir com o intervalo de salvamento
-	if o.Logger != nil && (o.AppCfg.Cli.SaveInterval == 0 || (o.AppCfg.Cli.Cycles > 0 && o.AppCfg.Cli.Cycles%o.AppCfg.Cli.SaveInterval != 0)) {
-		if o.AppCfg.Cli.Cycles > 0 { // Apenas salvar se algum ciclo rodou
-			if err := o.Logger.LogNetworkState(o.Net); err != nil {
-				// Propagar erro em vez de apenas logar
-				return fmt.Errorf("falha ao logar estado da rede no DB (final): %w", err)
-			}
-		}
-	}
 }
 
+// reportMonitoredOutputFrequency prints the firing frequency of a monitored output neuron.
 func (o *Orchestrator) reportMonitoredOutputFrequency() error {
-	if o.AppCfg.Cli.MonitorOutputID != -2 && len(o.Net.OutputNeuronIDs) > 0 {
-		monitorID := o.AppCfg.Cli.MonitorOutputID
-		if monitorID == -1 && len(o.Net.OutputNeuronIDs) > 0 { // -1 para primeiro disponível
-			monitorID = int(o.Net.OutputNeuronIDs[0])
-		}
+	cliCfg := o.AppCfg.Cli
+	if cliCfg.MonitorOutputID == -2 || len(o.Net.OutputNeuronIDs) == 0 { // -2 means monitoring disabled
+		return nil
+	}
 
-		// Validar monitorID
-		isValidMonitorID := false
-		for _, outID := range o.Net.OutputNeuronIDs {
-			if int(outID) == monitorID {
-				isValidMonitorID = true
-				break
-			}
-		}
+	monitorID := cliCfg.MonitorOutputID
+	if monitorID == -1 { // -1 means use the first available output neuron
+		monitorID = int(o.Net.OutputNeuronIDs[0])
+	}
 
-		if isValidMonitorID {
-			freq, err := o.Net.GetOutputFrequency(common.NeuronID(monitorID))
-			if err == nil {
-				fmt.Printf("Frequência para Neurônio de Output %d: %.2f Hz (sobre os últimos %.0f ciclos).\n",
-					monitorID, freq, o.AppCfg.SimParams.OutputFrequencyWindowCycles)
-			} else {
-				return fmt.Errorf("falha ao obter frequência para neurônio de output %d: %w", monitorID, err)
-			}
-		} else {
-			return fmt.Errorf("ID do neurônio de output para monitoramento (%d) não encontrado ou inválido", monitorID)
+	// Validate that monitorID is a valid output neuron ID
+	isValidMonitorID := false
+	for _, outID := range o.Net.OutputNeuronIDs {
+		if int(outID) == monitorID {
+			isValidMonitorID = true
+			break
 		}
 	}
+
+	if !isValidMonitorID {
+		return fmt.Errorf("output neuron ID for monitoring (%d) not found or invalid", monitorID)
+	}
+
+	freq, err := o.Net.GetOutputFrequency(common.NeuronID(monitorID))
+	if err != nil {
+		return fmt.Errorf("failed to get frequency for output neuron %d: %w", monitorID, err)
+	}
+	fmt.Printf("Frequency for Output Neuron %d: %.2f Hz (over last %.0f cycles).\n",
+		monitorID, freq, o.AppCfg.SimParams.OutputFrequencyWindowCycles)
 	return nil
 }
 
+// runSimMode handles the 'sim' execution mode.
 func (o *Orchestrator) runSimMode() error {
-	fmt.Printf("\nIniciando Simulação Geral por %d ciclos...\n", o.AppCfg.Cli.Cycles)
+	fmt.Printf("\nStarting General Simulation for %d cycles...\n", o.AppCfg.Cli.Cycles)
 	if err := o.setupContinuousInputStimulus(); err != nil {
-		return fmt.Errorf("erro em setupContinuousInputStimulus: %w", err)
+		return fmt.Errorf("error in stimulus setup: %w", err)
 	}
-	o.Net.SetDynamicState(true, true, true) // Todas as dinâmicas ativas para 'sim'
+
+	o.Net.SetDynamicState(true, true, true) // Neurochemicals, learning, synaptogenesis active
+
 	if err := o.runSimulationLoop(); err != nil {
-		return fmt.Errorf("erro durante o loop de simulação: %w", err)
+		return fmt.Errorf("error during simulation loop: %w", err)
 	}
 	if err := o.reportMonitoredOutputFrequency(); err != nil {
-		return fmt.Errorf("erro ao reportar frequência de output monitorado: %w", err)
+		return fmt.Errorf("error reporting monitored output frequency: %w", err)
 	}
-	fmt.Printf("Estado Final: Cortisol=%.3f, Dopamina=%.3f\n", o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
+
+	fmt.Printf("Final State: Cortisol=%.3f, Dopamine=%.3f\n", o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
 	return nil
 }
 
+// runExposureEpochs handles the core loop for the 'expose' mode.
 func (o *Orchestrator) runExposureEpochs() error {
 	allPatterns, err := datagen.GetAllDigitPatterns(&o.AppCfg.SimParams)
 	if err != nil {
-		return fmt.Errorf("falha ao carregar padrões de dígitos: %w", err)
+		return fmt.Errorf("failed to load digit patterns: %w", err)
 	}
 
-	for epoch := 0; epoch < o.AppCfg.Cli.Epochs; epoch++ {
-		fmt.Printf("Época %d/%d iniciando...\n", epoch+1, o.AppCfg.Cli.Epochs)
+	cliCfg := o.AppCfg.Cli
+	for epoch := 0; epoch < cliCfg.Epochs; epoch++ {
+		fmt.Printf("Epoch %d/%d starting...\n", epoch+1, cliCfg.Epochs)
 		patternsProcessedThisEpoch := 0
-		for digit := 0; digit <= 9; digit++ { // Assumindo dígitos 0-9
+		// Consider randomizing pattern order or using a defined sequence if needed.
+		// For now, iterating 0-9.
+		for digit := 0; digit <= 9; digit++ {
 			pattern, ok := allPatterns[digit]
 			if !ok {
-				// Considerar isso um erro, pois se espera que GetAllDigitPatterns retorne todos.
-				return fmt.Errorf("padrão para o dígito %d não encontrado no conjunto de padrões carregados (época %d)", digit, epoch+1)
+				return fmt.Errorf("pattern for digit %d not found in loaded set (epoch %d)", digit, epoch+1)
 			}
 
 			o.Net.ResetNetworkStateForNewPattern()
 			if errPres := o.Net.PresentPattern(pattern); errPres != nil {
-				return fmt.Errorf("falha ao apresentar padrão para dígito %d na época %d: %w", digit, epoch+1, errPres)
+				return fmt.Errorf("failed to present pattern for digit %d in epoch %d: %w", digit, epoch+1, errPres)
 			}
 
-			for cycleInPattern := 0; cycleInPattern < o.AppCfg.Cli.CyclesPerPattern; cycleInPattern++ {
+			for cycleInPattern := 0; cycleInPattern < cliCfg.CyclesPerPattern; cycleInPattern++ {
 				o.Net.RunCycle()
-				if o.Logger != nil && o.AppCfg.Cli.SaveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%o.AppCfg.Cli.SaveInterval == 0 {
+				// Log to DB if enabled and interval is met
+				if o.Logger != nil && cliCfg.SaveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%cliCfg.SaveInterval == 0 {
 					if errLog := o.Logger.LogNetworkState(o.Net); errLog != nil {
-						return fmt.Errorf("falha ao logar estado da rede na DB (época %d, dígito %d, ciclo %d): %w", epoch+1, digit, o.Net.CycleCount, errLog)
+						return fmt.Errorf("failed to log network state (epoch %d, digit %d, cycle %d): %w", epoch+1, digit, o.Net.CycleCount, errLog)
 					}
 				}
 			}
 			patternsProcessedThisEpoch++
 		}
-		fmt.Printf("Época %d/%d concluída. Processados %d padrões. Cortisol: %.3f, Dopamina: %.3f, FatorLR Efetivo: %.4f\n",
-			epoch+1, o.AppCfg.Cli.Epochs, patternsProcessedThisEpoch,
+		fmt.Printf("Epoch %d/%d completed. Processed %d patterns. Cortisol: %.3f, Dopamine: %.3f, EffectiveLRFactor: %.4f\n",
+			epoch+1, cliCfg.Epochs, patternsProcessedThisEpoch,
 			o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel, o.Net.ChemicalEnv.LearningRateModulationFactor)
 	}
 	return nil
 }
 
+// runExposeMode handles the 'expose' execution mode for training the network.
 func (o *Orchestrator) runExposeMode() error {
-	fmt.Printf("\nIniciando Fase de Exposição por %d épocas (TaxaAprendizadoBase: %.4f, CiclosPorPadrão: %d)...\n",
-		o.AppCfg.Cli.Epochs, o.AppCfg.Cli.BaseLearningRate, o.AppCfg.Cli.CyclesPerPattern)
+	cliCfg := o.AppCfg.Cli
+	fmt.Printf("\nStarting Exposure Phase for %d epochs (BaseLearningRate: %.4f, CyclesPerPattern: %d)...\n",
+		cliCfg.Epochs, cliCfg.BaseLearningRate, cliCfg.CyclesPerPattern)
 
-	if err := o.loadWeights(o.AppCfg.Cli.WeightsFile); err != nil {
-		fmt.Println(err) // Loga o erro mas continua, a rede usa pesos aleatórios
+	// Attempt to load weights; if not found, network uses random weights (normal for initial training).
+	if err := o.loadWeights(cliCfg.WeightsFile); err != nil {
+		// Log the error but continue, as starting from random weights is acceptable.
+		fmt.Printf("Note: Could not load weights from %s (%v), starting with new/random weights.\n", cliCfg.WeightsFile, err)
 	}
 
-	o.Net.SetDynamicState(true, true, true) // Todas as dinâmicas ativas para 'expose'
+	o.Net.SetDynamicState(true, true, true) // Neurochemicals, learning, synaptogenesis active
+
 	if err := o.runExposureEpochs(); err != nil {
-		return fmt.Errorf("erro durante as épocas de exposição: %w", err)
+		return fmt.Errorf("error during exposure epochs: %w", err)
 	}
 
-	fmt.Println("Fase de exposição concluída.")
-	if err := o.saveWeights(o.AppCfg.Cli.WeightsFile); err != nil {
-		return err // Retorna o erro em vez de log.Fatalf
+	fmt.Println("Exposure phase completed.")
+	if err := o.saveWeights(cliCfg.WeightsFile); err != nil {
+		return err // Error saving weights is critical after training
 	}
 	return nil
 }
 
+// runObservationPattern presents a single pattern and runs the network for settling cycles.
 func (o *Orchestrator) runObservationPattern() ([]float64, error) {
-	patternToObserve, err := datagen.GetDigitPatternFn(o.AppCfg.Cli.Digit, &o.AppCfg.SimParams) // Usa GetDigitPatternFn
+	cliCfg := o.AppCfg.Cli
+	patternToObserve, err := datagen.GetDigitPatternFn(cliCfg.Digit, &o.AppCfg.SimParams)
 	if err != nil {
-		return nil, fmt.Errorf("falha ao obter padrão para o dígito %d: %w", o.AppCfg.Cli.Digit, err)
+		return nil, fmt.Errorf("failed to get pattern for digit %d: %w", cliCfg.Digit, err)
 	}
 
 	o.Net.ResetNetworkStateForNewPattern()
 	if errPres := o.Net.PresentPattern(patternToObserve); errPres != nil {
-		return nil, fmt.Errorf("falha ao apresentar padrão para observação: %w", errPres)
+		return nil, fmt.Errorf("failed to present pattern for observation: %w", errPres)
 	}
 
-	for i := 0; i < o.AppCfg.Cli.CyclesToSettle; i++ {
+	for i := 0; i < cliCfg.CyclesToSettle; i++ {
 		o.Net.RunCycle()
 	}
 
 	outputActivation, errAct := o.Net.GetOutputActivation()
 	if errAct != nil {
-		return nil, fmt.Errorf("falha ao obter ativação de saída: %w", errAct)
+		return nil, fmt.Errorf("failed to get output activation: %w", errAct)
 	}
 	return outputActivation, nil
 }
 
+// displayOutputActivation prints the activation levels of output neurons.
 func (o *Orchestrator) displayOutputActivation(outputActivation []float64) {
-	fmt.Printf("Dígito Apresentado: %d\n", o.AppCfg.Cli.Digit)
-	fmt.Println("Padrão de Ativação dos Neurônios de Saída (Potencial Acumulado):")
+	fmt.Printf("Digit Presented: %d\n", o.AppCfg.Cli.Digit)
+	fmt.Println("Output Neuron Activation Pattern (Accumulated Potential):")
 	for i, val := range outputActivation {
-		neuronIDStr := "N/A"
+		neuronIDStr := "N/A" // Fallback if ID mapping is off
 		if i < len(o.Net.OutputNeuronIDs) {
 			neuronIDStr = fmt.Sprintf("%d", o.Net.OutputNeuronIDs[i])
 		}
-		fmt.Printf("  OutNeurônio[%d] (ID %s): %.4f\n", i, neuronIDStr, val)
+		fmt.Printf("  OutputNeuron[%d] (ID %s): %.4f\n", i, neuronIDStr, val)
 	}
 }
 
+// runObserveMode handles the 'observe' execution mode.
 func (o *Orchestrator) runObserveMode() error {
-	fmt.Printf("\nObservando Resposta da Rede para o dígito %d (%d ciclos de acomodação)...\n",
-		o.AppCfg.Cli.Digit, o.AppCfg.Cli.CyclesToSettle)
+	cliCfg := o.AppCfg.Cli
+	fmt.Printf("\nObserving Network Response for digit %d (%d settling cycles)...\n",
+		cliCfg.Digit, cliCfg.CyclesToSettle)
 
-	if err := o.loadWeights(o.AppCfg.Cli.WeightsFile); err != nil {
-		return fmt.Errorf("para o modo %s: %w. Exponha a rede primeiro", config.ModeObserve, err)
+	// Loading weights is critical for observe mode.
+	if err := o.loadWeights(cliCfg.WeightsFile); err != nil {
+		return fmt.Errorf("failed to load weights for observe mode from %s: %w. Expose/train the network first", cliCfg.WeightsFile, err)
 	}
 
-	o.Net.SetDynamicState(false, false, false) // Dinâmicas alteradoras desligadas para observação
+	// Disable dynamics that would alter the network state during observation.
+	o.Net.SetDynamicState(false, false, false)
 
 	outputActivation, err := o.runObservationPattern()
 	if err != nil {
-		return fmt.Errorf("falha ao rodar padrão de observação: %w", err)
+		return fmt.Errorf("failed to run observation pattern: %w", err)
 	}
 
 	o.displayOutputActivation(outputActivation)
-	o.Net.SetDynamicState(true, true, true) // Restaurar estado dinâmico padrão
+	o.Net.SetDynamicState(true, true, true) // Restore default dynamic states
 	return nil
 }
 
-// Helper para evitar pânico com slices vazias
+// min is a simple helper to find the minimum of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -377,59 +425,57 @@ func min(a, b int) int {
 	return b
 }
 
-// Fim do arquivo
+// --- Test Wrappers (Exported for use in _test package) ---
+// These allow tests to call unexported methods or specific parts of the orchestrator's logic.
 
-// --- Métodos de Teste (Exportados para uso no pacote _test) ---
-
-// SetupContinuousInputStimulusForTest é um wrapper de teste para setupContinuousInputStimulus.
+// SetupContinuousInputStimulusForTest wraps setupContinuousInputStimulus for testing.
 func (o *Orchestrator) SetupContinuousInputStimulusForTest() error {
 	return o.setupContinuousInputStimulus()
 }
 
-// RunObserveModeForTest é um wrapper de teste para runObserveMode.
+// RunObserveModeForTest wraps runObserveMode for testing.
 func (o *Orchestrator) RunObserveModeForTest() error {
 	return o.runObserveMode()
 }
 
-// RunExposeModeForTest é um wrapper de teste para runExposeMode.
+// RunExposeModeForTest wraps runExposeMode for testing.
 func (o *Orchestrator) RunExposeModeForTest() error {
 	return o.runExposeMode()
 }
 
-// SetLoadWeightsFn é um setter de teste para a função de carregar pesos.
+// SetLoadWeightsFn allows tests to inject a mock loadWeightsFn.
 func (o *Orchestrator) SetLoadWeightsFn(fn func(filepath string) (synaptic.NetworkWeights, error)) {
 	o.loadWeightsFn = fn
 }
 
-// SetSaveWeightsFn é um setter de teste para a função de salvar pesos.
+// SetSaveWeightsFn allows tests to inject a mock saveWeightsFn.
 func (o *Orchestrator) SetSaveWeightsFn(fn func(weights synaptic.NetworkWeights, filepath string) error) {
 	o.saveWeightsFn = fn
 }
 
-// InitializeLoggerForTest é um wrapper de teste para initializeLogger.
+// InitializeLoggerForTest wraps initializeLogger for testing.
 func (o *Orchestrator) InitializeLoggerForTest() error {
 	return o.initializeLogger()
 }
 
-// CreateNetworkForTest é um wrapper de teste para createNetwork.
+// CreateNetworkForTest wraps createNetwork for testing.
 func (o *Orchestrator) CreateNetworkForTest() {
 	o.createNetwork()
 }
 
-// RunSimModeForTest é um wrapper de teste para runSimMode.
+// RunSimModeForTest wraps runSimMode for testing.
 func (o *Orchestrator) RunSimModeForTest() error {
 	return o.runSimMode()
 }
 
-// CloseLoggerForTest é um wrapper de teste para fechar o logger.
+// CloseLoggerForTest wraps closing the logger, for testing.
 func (o *Orchestrator) CloseLoggerForTest() {
 	if o.Logger != nil {
-		o.Logger.Close()
+		o.Logger.Close() // Assuming Logger has a Close method
 	}
 }
 
-// LoadWeightsForTest é um wrapper de teste para loadWeights.
+// LoadWeightsForTest wraps loadWeights for testing.
 func (o *Orchestrator) LoadWeightsForTest(filepath string) error {
 	return o.loadWeights(filepath)
 }
-```
