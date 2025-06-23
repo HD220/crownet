@@ -266,8 +266,8 @@ func (o *Orchestrator) runExposureEpochs() error {
 		for digit := 0; digit <= 9; digit++ { // Assumindo dígitos 0-9
 			pattern, ok := allPatterns[digit]
 			if !ok {
-				log.Printf("Aviso: Padrão para o dígito %d não encontrado, pulando.", digit)
-				continue
+				// Considerar isso um erro, pois se espera que GetAllDigitPatterns retorne todos.
+				return fmt.Errorf("padrão para o dígito %d não encontrado no conjunto de padrões carregados (época %d)", digit, epoch+1)
 			}
 
 			o.Net.ResetNetworkStateForNewPattern()
@@ -279,7 +279,7 @@ func (o *Orchestrator) runExposureEpochs() error {
 				o.Net.RunCycle()
 				if o.Logger != nil && o.AppCfg.Cli.SaveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%o.AppCfg.Cli.SaveInterval == 0 {
 					if errLog := o.Logger.LogNetworkState(o.Net); errLog != nil {
-						log.Printf("Aviso durante salvamento periódico no DB (época %d, dígito %d): %v", epoch+1, digit, errLog)
+						return fmt.Errorf("falha ao logar estado da rede na DB (época %d, dígito %d, ciclo %d): %w", epoch+1, digit, o.Net.CycleCount, errLog)
 					}
 				}
 			}
@@ -302,7 +302,7 @@ func (o *Orchestrator) runExposeMode() error {
 
 	o.Net.SetDynamicState(true, true, true) // Todas as dinâmicas ativas para 'expose'
 	if err := o.runExposureEpochs(); err != nil {
-		return err
+		return fmt.Errorf("erro durante as épocas de exposição: %w", err)
 	}
 
 	fmt.Println("Fase de exposição concluída.")
