@@ -50,8 +50,8 @@ func TestSaveAndLoadNetworkWeights(t *testing.T) {
 	expectedWeights := synaptic.NewNetworkWeights()
 	expectedWeights.SetWeight(id1, id2, 0.5, &simParams)
 	expectedWeights.SetWeight(id1, id3, 0.75, &simParams)
-	// Usar o valor que GetWeight retornaria após o clamp em SetWeight
-	expectedWeights[id2][id3] = clampedValId2Id3
+	// Use SetWeight for expectedWeights as well to ensure proper initialization of inner maps
+	expectedWeights.SetWeight(id2, id3, clampedValId2Id3, &simParams)
 
 
 	if !reflect.DeepEqual(loadedWeights, expectedWeights) {

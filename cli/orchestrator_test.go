@@ -246,7 +246,7 @@ func TestSimMode_DBCreation(t *testing.T) {
 		SaveInterval: 1, // Save on every cycle for this test
 		Seed:         123,
 	}
-	orchestrator, _ := setupTestOrchestrator(t, &cliCfg, nil)
+	orchestrator, _ := setupTestOrchestrator(t, &cliCfg, nil) // appCfg is not directly used further in this test
 
 	// Run the sim mode which should trigger logger initialization and logging.
 	// The test wrappers are used to isolate parts of Run() if needed,

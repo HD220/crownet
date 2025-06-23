@@ -270,21 +270,24 @@ func updateNeuronMovement(n *neuron.Neuron, netForce common.Vector, simParams *c
 	updatedVelocity := common.Vector{}
 	velocityMagnitudeSq := 0.0
 	for i := 0; i < 16; i++ {
-		updatedVelocity[i] = currentVelocity[i]*simParams.DampeningFactor + netForce[i]
-		velocityMagnitudeSq += updatedVelocity[i] * updatedVelocity[i]
+		// Apply casts for arithmetic operations
+		updatedVelocity[i] = common.Coordinate(float64(currentVelocity[i])*simParams.DampeningFactor + float64(netForce[i]))
+		velocityMagnitudeSq += float64(updatedVelocity[i]) * float64(updatedVelocity[i])
 	}
+
 	velocityMagnitude := math.Sqrt(velocityMagnitudeSq)
-	if velocityMagnitude > simParams.MaxMovementPerCycle {
+	if velocityMagnitude > simParams.MaxMovementPerCycle && velocityMagnitude > 1e-9 { // Avoid division by zero if magnitude is tiny
 		scaleFactor := simParams.MaxMovementPerCycle / velocityMagnitude
 		for i := 0; i < 16; i++ {
-			updatedVelocity[i] *= scaleFactor
+			updatedVelocity[i] = common.Coordinate(float64(updatedVelocity[i]) * scaleFactor)
 		}
 	}
 	newVelocity = updatedVelocity
+
 	currentPosition := n.Position
 	calculatedPosition := currentPosition
 	for i := 0; i < 16; i++ {
-		calculatedPosition[i] += common.Coordinate(newVelocity[i])
+		calculatedPosition[i] += newVelocity[i] // Both are common.Coordinate
 	}
 	clampedPosition, _ := space.ClampToHyperSphere(calculatedPosition, simParams.SpaceMaxDimension)
 	newPosition = clampedPosition

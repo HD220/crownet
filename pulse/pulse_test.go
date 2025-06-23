@@ -5,7 +5,7 @@ import (
 	"crownet/config"
 	"crownet/neuron"
 	"crownet/pulse"
-	"crownet/space" // Para EuclideanDistance, se necessário em mocks ou setups
+	// "crownet/space" // Removed as unused
 	"crownet/synaptic"
 	"testing"
 	"math" // Para comparações de float
@@ -219,10 +219,10 @@ func TestPulseList_ProcessCycle_EffectAndNewPulseGeneration(t *testing.T) {
 	}
 
 	weights := synaptic.NewNetworkWeights()
-	weights.SetWeight(emitterNeuron.ID, targetNeuronAffected.ID, 1.0)
-	weights.SetWeight(emitterNeuron.ID, targetNeuronFar.ID, 1.0)
-	weights.SetWeight(emitterNeuron.ID, targetNeuronNoFire.ID, 0.5)
-	weights.SetWeight(emitterNeuron.ID, targetNeuronZeroWeight.ID, 0.0)
+	weights.SetWeight(emitterNeuron.ID, targetNeuronAffected.ID, 1.0, &simParams)
+	weights.SetWeight(emitterNeuron.ID, targetNeuronFar.ID, 1.0, &simParams)
+	weights.SetWeight(emitterNeuron.ID, targetNeuronNoFire.ID, 0.5, &simParams)
+	weights.SetWeight(emitterNeuron.ID, targetNeuronZeroWeight.ID, 0.0, &simParams)
 
 	pl := pulse.NewPulseList()
 	initialPulse := pulse.New(emitterNeuron.ID, emitterNeuron.Position, emitterNeuron.EmittedPulseSign(), 0, 5.0)

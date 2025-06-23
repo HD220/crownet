@@ -1,17 +1,18 @@
 package storage_test
 
 import (
-	"crownet/common"
-	"crownet/config"
+	// "crownet/common" // Unused
+	"crownet/config" // Used by simParams
 	"crownet/network"
-	"crownet/neuron"
+	"crownet/neuron" // Used by net.Neurons[0].Type
 	"crownet/storage"
 	"database/sql"
 	"fmt"
+	"math" // For floatEquals
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
+	// "time" // Unused
 
 	_ "github.com/mattn/go-sqlite3" // Driver SQLite
 )

@@ -1,9 +1,6 @@
 package storage
 
 import (
-	"crownet/common"
-	"crownet/config"
-	"crownet/neuron"
 	"crownet/network"
 	"database/sql"
 	"fmt"

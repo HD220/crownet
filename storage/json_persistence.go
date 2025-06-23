@@ -6,20 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv" // Consolidado e "os" duplicado removido
+	"strconv"
 )
 
-// SaveNetworkWeightsToJSON serializa a estrutura NetworkWeights para um arquivo JSON.
-// A estrutura do JSON será: map[string]map[string]float64
-// onde as chaves string são os NeuronIDs.
 func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) error {
-	// Converter NeuronIDs (int) para string para chaves JSON
 	serializableWeights := make(map[string]map[string]float64)
 	for fromID, toMap := range weights {
-		strFromID := strconv.FormatInt(int64(fromID), 10) // Usa strconv
+		strFromID := strconv.FormatInt(int64(fromID), 10)
 		serializableWeights[strFromID] = make(map[string]float64)
 		for toID, weightVal := range toMap {
-			strToID := strconv.FormatInt(int64(toID), 10) // Usa strconv
+			strToID := strconv.FormatInt(int64(toID), 10)
 			serializableWeights[strFromID][strToID] = float64(weightVal)
 		}
 	}
@@ -36,7 +32,6 @@ func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) 
 	return nil
 }
 
-// LoadNetworkWeightsFromJSON deserializa NetworkWeights de um arquivo JSON.
 func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -52,7 +47,6 @@ func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error
 		return nil, fmt.Errorf("falha ao deserializar pesos de JSON de %s: %w", filePath, err)
 	}
 
-	// Converter chaves string de volta para NeuronID (int)
 	loadedWeights := synaptic.NewNetworkWeights()
 	for strFromID, toMap := range serializableWeights {
 		fromIDVal, err := strconv.ParseInt(strFromID, 10, 64)
@@ -73,4 +67,3 @@ func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error
 	}
 	return loadedWeights, nil
 }
-```
