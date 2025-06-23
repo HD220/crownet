@@ -210,7 +210,7 @@ func (o *Orchestrator) runSimulationLoop() error {
 	}
 }
 
-func (o *Orchestrator) reportMonitoredOutputFrequency() {
+func (o *Orchestrator) reportMonitoredOutputFrequency() error {
 	if o.AppCfg.Cli.MonitorOutputID != -2 && len(o.Net.OutputNeuronIDs) > 0 {
 		monitorID := o.AppCfg.Cli.MonitorOutputID
 		if monitorID == -1 && len(o.Net.OutputNeuronIDs) > 0 { // -1 para primeiro disponível
@@ -232,12 +232,13 @@ func (o *Orchestrator) reportMonitoredOutputFrequency() {
 				fmt.Printf("Frequência para Neurônio de Output %d: %.2f Hz (sobre os últimos %.0f ciclos).\n",
 					monitorID, freq, o.AppCfg.SimParams.OutputFrequencyWindowCycles)
 			} else {
-				fmt.Printf("Aviso ao obter frequência para Neurônio de Output %d: %v\n", monitorID, err)
+				return fmt.Errorf("falha ao obter frequência para neurônio de output %d: %w", monitorID, err)
 			}
 		} else {
-			fmt.Printf("Aviso: ID do neurônio de output para monitoramento (%d) não encontrado ou inválido.\n", monitorID)
+			return fmt.Errorf("ID do neurônio de output para monitoramento (%d) não encontrado ou inválido", monitorID)
 		}
 	}
+	return nil
 }
 
 func (o *Orchestrator) runSimMode() error {
@@ -249,7 +250,9 @@ func (o *Orchestrator) runSimMode() error {
 	if err := o.runSimulationLoop(); err != nil {
 		return fmt.Errorf("erro durante o loop de simulação: %w", err)
 	}
-	o.reportMonitoredOutputFrequency()
+	if err := o.reportMonitoredOutputFrequency(); err != nil {
+		return fmt.Errorf("erro ao reportar frequência de output monitorado: %w", err)
+	}
 	fmt.Printf("Estado Final: Cortisol=%.3f, Dopamina=%.3f\n", o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
 	return nil
 }
