@@ -178,7 +178,7 @@ func TestExposeMode_RunAndSave(t *testing.T) {
 		BaseLearningRate: 0.01,
 		Seed:             777,
 	}
-	orchestrator, appCfg := setupTestOrchestrator(t, &cliCfg, &simParams)
+	orchestrator, _ := setupTestOrchestrator(t, &cliCfg, &simParams)
 
 	// Mock persistence and data generation
 	saveWeightsCalled := false
@@ -257,7 +257,11 @@ func TestSimMode_DBCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitializeLoggerForTest() failed: %v", err)
 	}
-	defer orchestrator.CloseLoggerForTest()
+	defer func() {
+		if errClose := orchestrator.CloseLoggerForTest(); errClose != nil {
+			t.Logf("Warning: error during CloseLoggerForTest in defer: %v", errClose)
+		}
+	}()
 	orchestrator.CreateNetworkForTest()
 
 

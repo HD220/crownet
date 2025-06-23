@@ -469,10 +469,14 @@ func (o *Orchestrator) RunSimModeForTest() error {
 }
 
 // CloseLoggerForTest wraps closing the logger, for testing.
-func (o *Orchestrator) CloseLoggerForTest() {
+// It now returns an error from the underlying Logger.Close() method.
+func (o *Orchestrator) CloseLoggerForTest() error {
 	if o.Logger != nil {
-		o.Logger.Close() // Assuming Logger has a Close method
+		if err := o.Logger.Close(); err != nil {
+			return fmt.Errorf("error closing logger for test: %w", err)
+		}
 	}
+	return nil
 }
 
 // LoadWeightsForTest wraps loadWeights for testing.
