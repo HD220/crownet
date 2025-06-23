@@ -107,7 +107,7 @@ func (o *Orchestrator) printModeSpecificConfig() {
 }
 
 // Run inicia a execução do modo selecionado.
-func (o *Orchestrator) Run() {
+func (o *Orchestrator) Run() error {
 	fmt.Println("CrowNet Inicializando...")
 	fmt.Printf("Modo Selecionado: %s\n", o.AppCfg.Cli.Mode)
 	fmt.Printf("Configuração Base: Neurônios=%d, ArquivoDePesos='%s'\n",
@@ -116,7 +116,7 @@ func (o *Orchestrator) Run() {
 	o.printModeSpecificConfig()
 
 	if err := o.initializeLogger(); err != nil {
-		log.Fatalf("Erro na inicialização: %v", err)
+		return fmt.Errorf("erro na inicialização do logger: %w", err)
 	}
 	if o.Logger != nil {
 		defer func() {
@@ -140,24 +140,16 @@ func (o *Orchestrator) Run() {
 		errRun = o.runObserveMode()
 	default:
 		// A validação em config.NewAppConfig() deve pegar isso, mas um fallback é bom.
-		// Usar log.Fatalf aqui é apropriado pois é um erro de programação/configuração inesperado.
-		log.Fatalf("Modo desconhecido ou não suportado encontrado em Orchestrator.Run: %s.", o.AppCfg.Cli.Mode)
+		return fmt.Errorf("modo desconhecido ou não suportado encontrado em Orchestrator.Run: %s", o.AppCfg.Cli.Mode)
 	}
 
 	if errRun != nil {
-		// Agora main.go trata o erro de Run(), então aqui podemos apenas retornar o erro.
-		// No entanto, o Run() do orchestrator não retorna erro no momento.
-		// Para manter a consistência com a modificação em main.go que espera um erro de Run(),
-		// e para permitir que main.go logue o erro específico do modo:
-		// Esta função Run() deveria retornar 'error'.
-		// Por agora, vamos manter o log.Fatalf, mas idealmente Run() retornaria o erro.
-		// Se REFACTOR-003/REFACTOR-005 for para fazer Run() retornar erro, então esta linha mudaria.
-		// Assumindo que Run() não retorna erro por enquanto, este log.Fatalf é o tratamento final aqui.
-		log.Fatalf("Erro durante a execução do modo '%s': %v", o.AppCfg.Cli.Mode, errRun)
+		return fmt.Errorf("erro durante a execução do modo '%s': %w", o.AppCfg.Cli.Mode, errRun)
 	}
 
 	duration := time.Since(startTime)
 	fmt.Printf("\nSessão CrowNet finalizada. Duração total: %s.\n", duration)
+	return nil
 }
 
 // setupContinuousInputStimulus configura o estímulo de input para o modo sim.
@@ -188,7 +180,7 @@ func (o *Orchestrator) setupContinuousInputStimulus() error {
 	return nil
 }
 
-func (o *Orchestrator) runSimulationLoop() { // Esta função não parece precisar retornar erro, pois os logs são informativos/avisos.
+func (o *Orchestrator) runSimulationLoop() error {
 	for i := 0; i < o.AppCfg.Cli.Cycles; i++ {
 		o.Net.RunCycle()
 		if i%10 == 0 || i == o.AppCfg.Cli.Cycles-1 { // Log a cada 10 ciclos e no último
@@ -200,16 +192,19 @@ func (o *Orchestrator) runSimulationLoop() { // Esta função não parece precis
 		}
 		if o.Logger != nil && o.AppCfg.Cli.SaveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%o.AppCfg.Cli.SaveInterval == 0 {
 			if err := o.Logger.LogNetworkState(o.Net); err != nil {
-				log.Printf("Aviso durante salvamento periódico no DB: %v", err)
+				// Propagar erro em vez de apenas logar
+				return fmt.Errorf("falha ao logar estado da rede no DB (periódico) no ciclo %d: %w", o.Net.CycleCount, err)
 			}
 		}
 	}
+	return nil
 
 	// Log final se não coincidir com o intervalo de salvamento
 	if o.Logger != nil && (o.AppCfg.Cli.SaveInterval == 0 || (o.AppCfg.Cli.Cycles > 0 && o.AppCfg.Cli.Cycles%o.AppCfg.Cli.SaveInterval != 0)) {
 		if o.AppCfg.Cli.Cycles > 0 { // Apenas salvar se algum ciclo rodou
 			if err := o.Logger.LogNetworkState(o.Net); err != nil {
-				log.Printf("Aviso durante salvamento final no DB: %v", err)
+				// Propagar erro em vez de apenas logar
+				return fmt.Errorf("falha ao logar estado da rede no DB (final): %w", err)
 			}
 		}
 	}
@@ -251,7 +246,9 @@ func (o *Orchestrator) runSimMode() error {
 		return fmt.Errorf("erro em setupContinuousInputStimulus: %w", err)
 	}
 	o.Net.SetDynamicState(true, true, true) // Todas as dinâmicas ativas para 'sim'
-	o.runSimulationLoop() // runSimulationLoop não retorna erro atualmente, apenas loga avisos.
+	if err := o.runSimulationLoop(); err != nil {
+		return fmt.Errorf("erro durante o loop de simulação: %w", err)
+	}
 	o.reportMonitoredOutputFrequency()
 	fmt.Printf("Estado Final: Cortisol=%.3f, Dopamina=%.3f\n", o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
 	return nil

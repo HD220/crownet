@@ -245,5 +245,3 @@ func StructToJSONString(data interface{}) string {
 	}
 	return string(jsonData)
 }
-
-```

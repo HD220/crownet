@@ -514,5 +514,5 @@ func TestRunExposeMode_SaveWeightsError(t *testing.T) {
 			t.Errorf("Error message mismatch. Expected 'mocked saveWeights error', got: %v", err)
 		}
 	}
-}
+} // Ensure this is the final closing brace and newline
 ```

@@ -2,7 +2,7 @@ package config
 
 import (
 	"flag"
-	"fmt
+	"fmt"
 	"strings"
 	"time" // Adicionado para time.Now().UnixNano()
 	"crownet/common" // Adicionado para common.CycleCount
