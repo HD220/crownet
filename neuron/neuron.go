@@ -5,6 +5,13 @@ import (
 	"crownet/config"
 )
 
+// Constants for emitted pulse signals
+const (
+	ExcitatoryPulseSignal common.PulseValue = 1.0
+	InhibitoryPulseSignal common.PulseValue = -1.0
+	NeutralPulseSignal    common.PulseValue = 0.0
+)
+
 // Neuron representa uma unidade computacional individual na rede neural.
 type Neuron struct {
 	ID                     common.NeuronID
@@ -44,7 +51,8 @@ func (n *Neuron) IntegrateIncomingPotential(potential common.PulseValue, current
 
 	n.AccumulatedPotential += potential
 
-	if float64(n.AccumulatedPotential) < float64(n.CurrentFiringThreshold) {
+	// Check if the neuron fires
+	if n.AccumulatedPotential < n.CurrentFiringThreshold { // Direct comparison as both are float64 underlying types
 		return false
 	}
 	n.CurrentState = Firing
@@ -84,32 +92,38 @@ func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.
 }
 
 // DecayPotential aplica o decaimento ao potencial acumulado do neurônio.
+// O potencial decai em direção a zero.
 func (n *Neuron) DecayPotential(simParams *config.SimulationParameters) {
-	decayRate := common.Rate(simParams.AccumulatedPulseDecayRate)
-	if n.AccumulatedPotential > 0 {
-		n.AccumulatedPotential -= common.PulseValue(float64(n.AccumulatedPotential) * float64(decayRate))
-		if n.AccumulatedPotential < nearZeroThreshold {
-			n.AccumulatedPotential = 0
-		}
+	decayRate := simParams.AccumulatedPulseDecayRate // This is already a float64 in simParams
+	if decayRate <= 0 { // No decay if rate is zero or negative
 		return
 	}
-	if n.AccumulatedPotential < 0 {
-		n.AccumulatedPotential += common.PulseValue(float64(n.AccumulatedPotential) * float64(decayRate) * -1.0)
-		if n.AccumulatedPotential > -nearZeroThreshold {
-			n.AccumulatedPotential = 0
-		}
+	if decayRate >= 1.0 { // Full decay if rate is 1.0 or more
+		n.AccumulatedPotential = 0.0
+		return
+	}
+
+	// Potential decays towards zero by the decayRate factor
+	n.AccumulatedPotential *= common.PulseValue(1.0 - decayRate)
+
+	// Clamp to zero if very close, to avoid floating point inaccuracies.
+	if n.AccumulatedPotential > -nearZeroThreshold && n.AccumulatedPotential < nearZeroThreshold {
+		n.AccumulatedPotential = 0.0
 	}
 }
 
 // EmittedPulseSign retorna o sinal base do pulso que este neurônio emite ao disparar.
 func (n *Neuron) EmittedPulseSign() common.PulseValue {
-	if n.Type == Excitatory || n.Type == Input || n.Type == Output {
-		return 1.0
+	switch n.Type {
+	case Excitatory, Input, Output:
+		return ExcitatoryPulseSignal
+	case Inhibitory:
+		return InhibitoryPulseSignal
+	case Dopaminergic: // Dopaminergic neurons might not emit direct excitatory/inhibitory signals this way
+		return NeutralPulseSignal
+	default:
+		return NeutralPulseSignal // Default to neutral for any unknown types
 	}
-	if n.Type == Inhibitory {
-		return -1.0
-	}
-	return 0.0
 }
 
 // UpdatePosition atualiza a posição do neurônio com base em sua velocidade.

@@ -34,55 +34,56 @@ func IsWithinRadius(pCenter, pTest common.Point, radius float64) bool {
 	return EuclideanDistance(pCenter, pTest) <= radius
 }
 
-// ClampToHyperSphere garante que um ponto permaneça dentro de uma hiperesfera de um raio_maximo
+// ClampToHyperSphere garante que um ponto permaneça dentro de uma hiperesfera de raio `maxRadius`
 // a partir da origem (0,0,...,0). Se estiver fora, o ponto é projetado para a superfície da esfera.
 // Retorna o novo ponto e um booleano indicando se foi necessário fazer o clamp.
 func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.Point, wasClamped bool) {
-	if maxRadius < 0 { // Não faz sentido ter raio negativo
-		// Poderia retornar erro ou pânico. Por ora, retorna o ponto original.
-		// Ou talvez um ponto na origem se maxRadius for 0 e p não for a origem.
-		// Para simplicidade, se maxRadius < 0, consideramos como se fosse raio infinito (sem clamp).
-		// Se maxRadius == 0, apenas a origem é válida.
-		if maxRadius == 0 {
-			isOrigin := true
-			for i := 0; i < pointDimension; i++ {
-				if p[i] != 0 {
-					isOrigin = false
-					break
-				}
-			}
-			if isOrigin { return p, false}
+	const epsilon = 1e-9 // For floating point comparisons
 
-			// Se não for a origem e maxRadius é 0, clampar para a origem.
-			var originPoint common.Point
-			// originPoint já é {0,0,...}
-			return originPoint, true
-		}
-		// Se maxRadius < 0, não clampar.
+	if maxRadius < 0 {
+		// Negative radius implies no boundary.
 		return p, false
 	}
 
+	// Calculate squared distance from origin.
 	distFromOriginSq := 0.0
+	isOrigin := true
 	for i := 0; i < pointDimension; i++ {
 		coordVal := float64(p[i])
 		distFromOriginSq += coordVal * coordVal
+		if math.Abs(coordVal) > epsilon {
+			isOrigin = false
+		}
 	}
 
-	// Usar uma pequena tolerância para comparações de float
-	epsilon := 1e-9
-	if distFromOriginSq <= maxRadius*maxRadius + epsilon {
-		return p, false // Já está dentro ou na superfície (com tolerância)
-	}
-
-	distFromOrigin := math.Sqrt(distFromOriginSq)
-	if distFromOrigin < epsilon { // Ponto está na origem, mas maxRadius*maxRadius era menor (e.g. maxRadius muito pequeno)
-		// Se maxRadius é > 0 mas o ponto na origem está "fora" (devido a epsilon), algo está estranho
-		// mas matematicamente, se distFromOrigin é ~0, e maxRadius > 0, deveria ter caído no if anterior.
-		// Este caso é mais para se maxRadius for 0 e o ponto não for a origem.
-		// Se maxRadius é 0, já foi tratado acima.
-		// Se distFromOrigin é efetivamente 0, não há direção para escalar. Retorna a origem.
+	if maxRadius < epsilon { // Case: maxRadius is effectively zero.
+		if isOrigin {
+			return p, false // Point is at origin, radius is zero. No clamp needed.
+		}
+		// Point is not at origin, but radius is zero. Clamp to origin.
 		var originP common.Point
-		return originP, true // Clamped para a origem se maxRadius > 0 mas o ponto está na origem e distSq > maxRadiusSq
+		return originP, true
+	}
+
+	// Case: maxRadius is positive.
+	// Check if already within or on the surface (with tolerance for floating point).
+	if distFromOriginSq <= maxRadius*maxRadius+epsilon {
+		return p, false // Point is inside or on the surface.
+	}
+
+	// Point is outside and maxRadius is positive.
+	// If the point was the origin, it would have been inside (distFromOriginSq = 0).
+	// Therefore, distFromOrigin will be > 0 here.
+	distFromOrigin := math.Sqrt(distFromOriginSq)
+
+	// This check should ideally not be needed if logic is correct,
+	// as an origin point (distFromOrigin < epsilon) with maxRadius > epsilon
+	// should be classified as 'inside'. This is a safeguard.
+	if distFromOrigin < epsilon { // Should effectively mean point p is the origin.
+	    // If p is origin and maxRadius > 0, it's inside. This path indicates an unexpected state
+	    // or extremely small maxRadius that wasn't caught by maxRadius < epsilon.
+	    // Safest is to return p as it is effectively the origin and should be inside if maxRadius > 0.
+		return p, false
 	}
 
 

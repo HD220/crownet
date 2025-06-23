@@ -17,72 +17,92 @@ const (
 var SupportedModes = []string{ModeSim, ModeExpose, ModeObserve}
 
 type SimulationParameters struct {
-	SpaceMaxDimension             float64
-	BaseFiringThreshold           float64
-	PulsePropagationSpeed         float64
-	HebbianCoincidenceWindow      int
-	DopaminergicPercent           float64
-	InhibitoryPercent             float64
-	ExcitatoryRadiusFactor        float64
-	DopaminergicRadiusFactor      float64
-	InhibitoryRadiusFactor        float64
-	MinInputNeurons               int
-	MinOutputNeurons              int
-	PatternHeight                 int
-	PatternWidth                  int
-	PatternSize                   int
-	AccumulatedPulseDecayRate     float64
-	AbsoluteRefractoryCycles      common.CycleCount
-	RelativeRefractoryCycles      common.CycleCount
-	SynaptogenesisInfluenceRadius float64
-	AttractionForceFactor         float64
-	RepulsionForceFactor          float64
-	DampeningFactor               float64
-	MaxMovementPerCycle           float64
-	CyclesPerSecond               float64
-	OutputFrequencyWindowCycles   float64
-	InitialSynapticWeightMin      float64
-	InitialSynapticWeightMax      float64
-	MaxSynapticWeight             float64
-	HebbPositiveReinforceFactor   float64
-	HebbNegativeReinforceFactor   float64
-	CortisolProductionRate        float64
-	CortisolDecayRate             float64
-	DopamineProductionRate        float64
-	DopamineDecayRate             float64
-	CortisolInfluenceOnLR         float64
-	DopamineInfluenceOnLR         float64
-	CortisolInfluenceOnSynapto    float64
-	DopamineInfluenceOnSynapto    float64
-	FiringThresholdIncreaseOnDopa float64
-	FiringThresholdIncreaseOnCort float64
-	SynapticWeightDecayRate       float64
+	// Spatial and General Network Parameters
+	SpaceMaxDimension float64 // Defines the boundary of the 16D space.
+	CyclesPerSecond   float64 // Simulation cycles that represent one second of real time.
 
-	CortisolProductionPerHit    float64
-	CortisolMaxLevel            float64
-	DopamineProductionPerEvent  float64
-	DopamineMaxLevel            float64
+	// Neuron Definition and Behavior
+	BaseFiringThreshold      common.Threshold // Base threshold for a neuron to fire.
+	AccumulatedPulseDecayRate common.Rate    // Rate at which accumulated pulse potential decays per cycle.
+	AbsoluteRefractoryCycles common.CycleCount // Cycles a neuron cannot fire after firing.
+	RelativeRefractoryCycles common.CycleCount // Cycles a neuron has increased threshold after firing.
+	PulsePropagationSpeed    common.Rate    // Speed at which pulses travel in the space.
 
-	MinLearningRateFactor         float64
+	// Neuron Type Distribution and Influence Radii
+	DopaminergicPercent      common.Percentage // Percentage of internal neurons that are dopaminergic.
+	InhibitoryPercent        common.Percentage // Percentage of internal neurons that are inhibitory.
+	ExcitatoryRadiusFactor   common.Factor     // Factor for excitatory neuron influence radius relative to a base.
+	DopaminergicRadiusFactor common.Factor     // Factor for dopaminergic neuron influence radius.
+	InhibitoryRadiusFactor   common.Factor     // Factor for inhibitory neuron influence radius.
+
+	// Input/Output and Pattern Definition
+	MinInputNeurons  int // Minimum number of input neurons required.
+	MinOutputNeurons int // Minimum number of output neurons required.
+	PatternHeight    int // Height of the input patterns (e.g., for digits).
+	PatternWidth     int // Width of the input patterns.
+	PatternSize      int // Total size of the input patterns (Height * Width).
+	OutputFrequencyWindowCycles float64 // Number of cycles to average output neuron firing frequency.
+
+	// Synaptic Weights and Learning Parameters
+	InitialSynapticWeightMin    common.SynapticWeight // Minimum initial synaptic weight.
+	InitialSynapticWeightMax    common.SynapticWeight // Maximum initial synaptic weight.
+	MaxSynapticWeight           common.SynapticWeight // Absolute maximum for any synaptic weight.
+	SynapticWeightDecayRate     common.Rate           // Rate at which synaptic weights decay per cycle.
+	HebbianCoincidenceWindow    common.CycleCount     // Time window (cycles) for Hebbian learning co-activation.
+	HebbPositiveReinforceFactor common.Factor         // Factor for strengthening synaptic weights in Hebbian learning.
+	HebbNegativeReinforceFactor common.Factor         // Factor for weakening synaptic weights (if applicable, or for LTD).
+	MinLearningRateFactor       common.Factor         // Minimum modulation factor for learning rate.
+
+	// Synaptogenesis (Neuronal Movement) Parameters
+	SynaptogenesisInfluenceRadius common.Coordinate // Radius within which neurons influence each other for movement.
+	AttractionForceFactor         common.Factor     // Factor for attractive forces between neurons.
+	RepulsionForceFactor          common.Factor     // Factor for repulsive forces between neurons.
+	DampeningFactor               common.Factor     // Dampening factor for neuron movement.
+	MaxMovementPerCycle           common.Coordinate // Maximum distance a neuron can move in one cycle.
+
+	// Neurochemical System Parameters
+	CortisolProductionRate        common.Rate    // Base rate of cortisol production.
+	CortisolDecayRate             common.Rate    // Rate at which cortisol decays.
+	CortisolProductionPerHit    common.Level   // Amount of cortisol produced per 'stress' event.
+	CortisolMaxLevel              common.Level   // Maximum possible cortisol level.
+	DopamineProductionRate        common.Rate    // Base rate of dopamine production.
+	DopamineDecayRate             common.Rate    // Rate at which dopamine decays.
+	DopamineProductionPerEvent  common.Level   // Amount of dopamine produced per 'reward' event.
+	DopamineMaxLevel              common.Level   // Maximum possible dopamine level.
+
+	// Neurochemical Influence Factors
+	CortisolInfluenceOnLR         common.Factor // How cortisol influences the learning rate.
+	DopamineInfluenceOnLR         common.Factor // How dopamine influences the learning rate.
+	CortisolInfluenceOnSynapto    common.Factor // How cortisol influences synaptogenesis.
+	DopamineInfluenceOnSynapto    common.Factor // How dopamine influences synaptogenesis.
+	FiringThresholdIncreaseOnDopa common.Factor // How dopamine influences neuron firing thresholds.
+	FiringThresholdIncreaseOnCort common.Factor // How cortisol influences neuron firing thresholds.
 }
 
 type CLIConfig struct {
-	TotalNeurons     int
-	Cycles           int
-	DbPath           string
-	SaveInterval     int
-	StimInputID      int
-	StimInputFreqHz  float64
-	MonitorOutputID  int
-	DebugChem        bool
-	Mode             string
-	Epochs           int
-	WeightsFile      string
-	Digit            int
-	BaseLearningRate float64
-	CyclesPerPattern int
-	CyclesToSettle   int
-	Seed             int64
+	// General Configuration
+	Mode             string // Operation mode (sim, expose, observe).
+	TotalNeurons     int    // Total number of neurons in the network.
+	Seed             int64  // Seed for random number generator.
+	WeightsFile      string // File to save/load synaptic weights.
+	BaseLearningRate common.Rate // Base learning rate for Hebbian plasticity.
+
+	// Mode 'sim' Specific Configuration
+	Cycles          int    // Total simulation cycles.
+	DbPath          string // Path for the SQLite database file for logging.
+	SaveInterval    int    // Cycle interval for saving to DB.
+	StimInputID     int    // ID of an input neuron for continuous stimulus (-1 for first, -2 to disable).
+	StimInputFreqHz float64 // Frequency (Hz) for stimulus (0.0 to disable).
+	MonitorOutputID int    // ID of an output neuron to monitor frequency (-1 for first, -2 to disable).
+	DebugChem       bool   // Enable debug prints for chemical production.
+
+	// Mode 'expose' Specific Configuration
+	Epochs           int // Number of exposure epochs.
+	CyclesPerPattern int // Number of cycles to run per pattern presentation.
+
+	// Mode 'observe' Specific Configuration
+	Digit          int // Digit (0-9) to present.
+	CyclesToSettle int // Number of cycles for network settling.
 }
 
 type AppConfig struct {
@@ -106,59 +126,66 @@ func DefaultSimulationParameters() SimulationParameters {
 		PatternHeight:                 7,
 		PatternWidth:                  5,
 		PatternSize:                   7 * 5,
-		AccumulatedPulseDecayRate:     0.1,
+		AccumulatedPulseDecayRate:     common.Rate(0.1),
 		AbsoluteRefractoryCycles:      common.CycleCount(2),
 		RelativeRefractoryCycles:      common.CycleCount(3),
-		SynaptogenesisInfluenceRadius: 2.0,
-		AttractionForceFactor:         0.01,
-		RepulsionForceFactor:          0.005,
-		DampeningFactor:               0.5,
-		MaxMovementPerCycle:           0.1,
+		SynaptogenesisInfluenceRadius: common.Coordinate(2.0),
+		AttractionForceFactor:         common.Factor(0.01),
+		RepulsionForceFactor:          common.Factor(0.005),
+		DampeningFactor:               common.Factor(0.5),
+		MaxMovementPerCycle:           common.Coordinate(0.1),
 		CyclesPerSecond:               100.0,
 		OutputFrequencyWindowCycles:   50.0,
-		InitialSynapticWeightMin:      0.1,
-		InitialSynapticWeightMax:      0.5,
-		MaxSynapticWeight:             1.0,
-		HebbPositiveReinforceFactor:   0.1,
-		HebbNegativeReinforceFactor:   0.05,
-		CortisolProductionRate:        0.01,
-		CortisolDecayRate:             0.005,
-		DopamineProductionRate:        0.02,
-		DopamineDecayRate:             0.01,
-		CortisolInfluenceOnLR:         -0.5,
-		DopamineInfluenceOnLR:         0.8,
-		CortisolInfluenceOnSynapto:    -0.3,
-		DopamineInfluenceOnSynapto:    0.5,
-		FiringThresholdIncreaseOnDopa: -0.2,
-		FiringThresholdIncreaseOnCort: 0.3,
-		SynapticWeightDecayRate:       0.0001,
-		CortisolProductionPerHit:    0.05,
-		CortisolMaxLevel:            1.0,
-		DopamineProductionPerEvent:  0.1,
-		DopamineMaxLevel:            1.0,
-		MinLearningRateFactor:         0.1,
+		InitialSynapticWeightMin:      common.SynapticWeight(0.1),
+		InitialSynapticWeightMax:      common.SynapticWeight(0.5),
+		MaxSynapticWeight:             common.SynapticWeight(1.0),
+		HebbPositiveReinforceFactor:   common.Factor(0.1),
+		HebbNegativeReinforceFactor:   common.Factor(0.05),
+		CortisolProductionRate:        common.Rate(0.01),
+		CortisolDecayRate:             common.Rate(0.005),
+		DopamineProductionRate:        common.Rate(0.02),
+		DopamineDecayRate:             common.Rate(0.01),
+		CortisolInfluenceOnLR:         common.Factor(-0.5),
+		DopamineInfluenceOnLR:         common.Factor(0.8),
+		CortisolInfluenceOnSynapto:    common.Factor(-0.3),
+		DopamineInfluenceOnSynapto:    common.Factor(0.5),
+		FiringThresholdIncreaseOnDopa: common.Factor(-0.2),
+		FiringThresholdIncreaseOnCort: common.Factor(0.3),
+		SynapticWeightDecayRate:       common.Rate(0.0001),
+		CortisolProductionPerHit:    common.Level(0.05),
+		CortisolMaxLevel:            common.Level(1.0),
+		DopamineProductionPerEvent:  common.Level(0.1),
+		DopamineMaxLevel:            common.Level(1.0),
+		MinLearningRateFactor:         common.Factor(0.1),
 	}
 }
 
 func LoadCLIConfig() CLIConfig {
 	cfg := CLIConfig{}
 
+	// General Configuration Flags
+	flag.StringVar(&cfg.Mode, "mode", ModeSim, fmt.Sprintf("Operation mode: '%s', '%s', or '%s'.", ModeSim, ModeExpose, ModeObserve))
 	flag.IntVar(&cfg.TotalNeurons, "neurons", 200, "Total number of neurons in the network.")
+	flag.Int64Var(&cfg.Seed, "seed", 0, "Seed for random number generator (0 uses current time, other values are used directly).")
+	flag.StringVar(&cfg.WeightsFile, "weightsFile", "crownet_weights.json", "File to save/load synaptic weights.")
+	flag.Float64Var((*float64)(&cfg.BaseLearningRate), "lrBase", 0.01, "Base learning rate for Hebbian plasticity.") // Cast to *float64 as common.Rate is float64
+
+	// Mode 'sim' Specific Flags
 	flag.IntVar(&cfg.Cycles, "cycles", 1000, "Total simulation cycles for 'sim' mode.")
+	flag.StringVar(&cfg.DbPath, "dbPath", "crownet_sim_run.db", "Path for the SQLite database file for logging.")
+	flag.IntVar(&cfg.SaveInterval, "saveInterval", 100, "Cycle interval for saving to DB (0 to disable periodic saves, only final if any).")
 	flag.IntVar(&cfg.StimInputID, "stimInputID", -1, "ID of an input neuron for general continuous stimulus in 'sim' mode (-1 for first available, -2 to disable).")
 	flag.Float64Var(&cfg.StimInputFreqHz, "stimInputFreqHz", 0.0, "Frequency (Hz) for general stimulus in 'sim' mode (0.0 to disable).")
 	flag.IntVar(&cfg.MonitorOutputID, "monitorOutputID", -1, "ID of an output neuron to monitor for frequency reporting in 'sim' mode (-1 for first available, -2 to disable).")
-	flag.StringVar(&cfg.DbPath, "dbPath", "crownet_sim_run.db", "Path for the SQLite database file.")
-	flag.IntVar(&cfg.SaveInterval, "saveInterval", 100, "Cycle interval for saving to DB (0 to disable periodic saves, only final if any).")
 	flag.BoolVar(&cfg.DebugChem, "debugChem", false, "Enable debug prints for chemical production.")
-	flag.StringVar(&cfg.Mode, "mode", ModeSim, fmt.Sprintf("Operation mode: '%s', '%s', or '%s'.", ModeSim, ModeExpose, ModeObserve))
+
+	// Mode 'expose' Specific Flags
 	flag.IntVar(&cfg.Epochs, "epochs", 50, "Number of exposure epochs (for 'expose' mode).")
-	flag.StringVar(&cfg.WeightsFile, "weightsFile", "crownet_weights.json", "File to save/load synaptic weights.")
-	flag.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
-	flag.Float64Var(&cfg.BaseLearningRate, "lrBase", 0.01, "Base learning rate for Hebbian plasticity.")
 	flag.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20, "Number of cycles to run per pattern presentation during 'expose' mode.")
+
+	// Mode 'observe' Specific Flags
+	flag.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
 	flag.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.")
-	flag.Int64Var(&cfg.Seed, "seed", 0, "Seed for random number generator (0 uses current time, other values are used directly).")
 
 	if !flag.Parsed() {
 		flag.Parse()
@@ -183,12 +210,15 @@ func NewAppConfig() (*AppConfig, error) {
 }
 
 func (ac *AppConfig) Validate() error {
+	// General CLI parameter validation
 	if ac.Cli.TotalNeurons <= 0 {
 		return fmt.Errorf("total neurons must be positive, got %d", ac.Cli.TotalNeurons)
 	}
-	if ac.Cli.Cycles < 0 {
-		return fmt.Errorf("cycles must be non-negative, got %d", ac.Cli.Cycles)
+	if ac.Cli.BaseLearningRate < 0 {
+		return fmt.Errorf("baseLearningRate must be non-negative, got %f", ac.Cli.BaseLearningRate)
 	}
+
+	// Mode validation
 	modeValid := false
 	for _, m := range SupportedModes {
 		if ac.Cli.Mode == m {
@@ -199,20 +229,30 @@ func (ac *AppConfig) Validate() error {
 	if !modeValid {
 		return fmt.Errorf("invalid mode '%s', supported modes are: %s", ac.Cli.Mode, strings.Join(SupportedModes, ", "))
 	}
-	if ac.Cli.Mode == ModeExpose || ac.Cli.Mode == ModeObserve {
+
+	// Mode-specific CLI parameter validation
+	switch ac.Cli.Mode {
+	case ModeSim:
+		if ac.Cli.Cycles < 0 { // Allow 0 for a "setup only" type run, though typically positive.
+			return fmt.Errorf("cycles for sim mode must be non-negative, got %d", ac.Cli.Cycles)
+		}
+		if ac.Cli.SaveInterval < 0 {
+			return fmt.Errorf("saveInterval for sim mode must be non-negative, got %d", ac.Cli.SaveInterval)
+		}
+	case ModeExpose:
 		if ac.Cli.WeightsFile == "" {
 			return fmt.Errorf("weightsFile must be specified for mode '%s'", ac.Cli.Mode)
 		}
-	}
-	if ac.Cli.Mode == ModeExpose {
 		if ac.Cli.Epochs <= 0 {
 			return fmt.Errorf("epochs must be positive for mode '%s', got %d", ac.Cli.Mode, ac.Cli.Epochs)
 		}
 		if ac.Cli.CyclesPerPattern <= 0 {
 			return fmt.Errorf("cyclesPerPattern must be positive for mode '%s', got %d", ac.Cli.Mode, ac.Cli.CyclesPerPattern)
 		}
-	}
-	if ac.Cli.Mode == ModeObserve {
+	case ModeObserve:
+		if ac.Cli.WeightsFile == "" {
+			return fmt.Errorf("weightsFile must be specified for mode '%s'", ac.Cli.Mode)
+		}
 		if ac.Cli.Digit < 0 || ac.Cli.Digit > 9 {
 			return fmt.Errorf("digit must be between 0-9 for mode '%s', got %d", ac.Cli.Mode, ac.Cli.Digit)
 		}
@@ -220,20 +260,16 @@ func (ac *AppConfig) Validate() error {
 			return fmt.Errorf("cyclesToSettle must be positive for mode '%s', got %d", ac.Cli.Mode, ac.Cli.CyclesToSettle)
 		}
 	}
-	if ac.Cli.BaseLearningRate < 0 {
-		return fmt.Errorf("baseLearningRate must be non-negative, got %f", ac.Cli.BaseLearningRate)
-	}
-	if ac.Cli.SaveInterval < 0 {
-		return fmt.Errorf("saveInterval must be non-negative, got %d", ac.Cli.SaveInterval)
-	}
+
+	// SimulationParameters validation
 	if ac.SimParams.MinInputNeurons <= 0 || ac.SimParams.MinOutputNeurons <= 0 {
-		return fmt.Errorf("MinInputNeurons and MinOutputNeurons must be positive")
+		return fmt.Errorf("MinInputNeurons (%d) and MinOutputNeurons (%d) must be positive", ac.SimParams.MinInputNeurons, ac.SimParams.MinOutputNeurons)
 	}
 	if ac.SimParams.PatternSize <= 0 {
-		return fmt.Errorf("PatternSize must be positive")
+		return fmt.Errorf("PatternSize must be positive, got %d", ac.SimParams.PatternSize)
 	}
 	if ac.SimParams.CyclesPerSecond <= 0 {
-		return fmt.Errorf("CyclesPerSecond must be positive")
+		return fmt.Errorf("CyclesPerSecond must be positive, got %f", ac.SimParams.CyclesPerSecond)
 	}
 	if ac.SimParams.DopaminergicPercent < 0 || ac.SimParams.DopaminergicPercent > 1.0 {
 		return fmt.Errorf("DopaminergicPercent must be between 0.0 and 1.0, got %f", ac.SimParams.DopaminergicPercent)
@@ -242,7 +278,12 @@ func (ac *AppConfig) Validate() error {
 		return fmt.Errorf("InhibitoryPercent must be between 0.0 and 1.0, got %f", ac.SimParams.InhibitoryPercent)
 	}
 	if ac.SimParams.DopaminergicPercent+ac.SimParams.InhibitoryPercent > 1.0 {
-		return fmt.Errorf("sum of DopaminergicPercent and InhibitoryPercent cannot exceed 1.0, got %f", ac.SimParams.DopaminergicPercent+ac.SimParams.InhibitoryPercent)
+		return fmt.Errorf("sum of DopaminergicPercent (%f) and InhibitoryPercent (%f) cannot exceed 1.0", ac.SimParams.DopaminergicPercent, ac.SimParams.InhibitoryPercent)
 	}
+	// Add more SimParams checks as needed, e.g., for rates, factors, thresholds to be within logical ranges.
+	// For example, decay rates should likely be non-negative.
+	// MaxLevels should be >= 0.
+	// Coincidence windows should be positive.
+
 	return nil
 }

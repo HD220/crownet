@@ -101,16 +101,19 @@ func processSinglePulseOnTargetNeuron(
 
 	if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
 		weight := weights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
-		// Cast to float64 for multiplication, then back to PulseValue
-		effectivePotential := common.PulseValue(float64(p.BaseSignalValue) * float64(weight))
+		// BaseSignalValue and weight are already float64 underlying types (common.PulseValue, common.SynapticWeight)
+		effectivePotential := p.BaseSignalValue * common.PulseValue(weight)
 
-		if effectivePotential == 0 {
+		if effectivePotential == 0 { // No effect if potential is zero
 			return nil
 		}
 
 		if targetNeuron.IntegrateIncomingPotential(effectivePotential, currentCycle) {
 			emittedSignal := targetNeuron.EmittedPulseSign()
 			if emittedSignal != 0 {
+				// The MaxTravelRadius for a new pulse is set to twice the space dimension.
+				// This allows pulses to potentially cross the entire defined space.
+				// Consider making this a configurable SimulationParameter if more control is needed.
 				return New(
 					targetNeuron.ID,
 					targetNeuron.Position,
