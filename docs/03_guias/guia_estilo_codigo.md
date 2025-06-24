@@ -13,7 +13,7 @@ Todo o código Go no projeto **deve** ser formatado usando as ferramentas padrã
 *   **`gofmt`**: É a ferramenta primária para formatação de código Go. Garante um estilo visual uniforme.
 *   **`goimports`**: É uma extensão do `gofmt` que, além de formatar o código, também gerencia automaticamente as declarações de `import`, adicionando as faltantes e removendo as não utilizadas. Recomenda-se o uso do `goimports`.
 
-Muitos editores e IDEs podem ser configurados para executar `goimports` (ou `gofmt`) automaticamente ao salvar um arquivo. Isso é altamente encorajado.
+Muitos editores e IDEs podem ser configurados para executar `goimports` (ou `gofmt`) automaticamente ao salvar um arquivo. Isso é altamente encorajado. A formatação e organização de imports conforme definido pelo `goimports` é obrigatória e será verificada pelo linter configurado no projeto.
 
 **Exemplo de uso manual:**
 ```bash
@@ -73,11 +73,11 @@ Comentários são importantes, mas o melhor código é aquele que se auto-docume
 
 ## 7. Linters
 
-O uso de um linter abrangente como `golangci-lint` é altamente recomendado para identificar problemas de estilo, bugs potenciais e inconsistências no código.
+O uso de um linter abrangente como `golangci-lint` é **mandatório** para identificar problemas de estilo, bugs potenciais e inconsistências no código.
 
-Atualmente, o projeto não possui um arquivo de configuração dedicado para `golangci-lint` (ex: `.golangci.yml`) versionado no repositório. A execução do `golangci-lint` usaria suas configurações padrão ou aquelas definidas localmente pelo desenvolvedor. Considera-se para o futuro a adição de um arquivo `.golangci.yml` padronizado para o projeto.
+O projeto agora possui um arquivo de configuração dedicado `.golangci.yml` na raiz do repositório. Este arquivo define o conjunto padrão de linters, incluindo formatadores como `goimports` e `gofmt`, que são automaticamente verificados. Todos os desenvolvedores devem garantir que suas contribuições passem pelas verificações do `golangci-lint` usando esta configuração.
 
-**Exemplo de uso (com configuração padrão ou local):**
+**Exemplo de uso (usando a configuração do projeto):**
 ```bash
 golangci-lint run ./...
 ```
