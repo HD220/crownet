@@ -256,10 +256,10 @@ func (cn *CrowNet) RunCycle() {
 	if cn.isLearningEnabled {           // Step 5: Apply Hebbian learning if enabled
 		cn.applyHebbianLearning()
 	}
-	if cn.isSynaptogenesisEnabled {
+	if cn.isSynaptogenesisEnabled {     // Step 6: Apply Synaptogenesis (neuron movement) if enabled
 		cn.applySynaptogenesis()
 	}
-	cn.CycleCount++
+	cn.CycleCount++                     // Step 7: Increment cycle count
 }
 
 // processActivePulses orchestrates the processing of existing pulses and handles newly generated ones.
