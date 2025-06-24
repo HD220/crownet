@@ -8,16 +8,25 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3" // Ensure direct import for clarity, though blank is for side effects
+	"encoding/json"                // Added for LogNetworkState
+	"crownet/common"               // Added for LogNetworkState (n.Type, n.CurrentState etc are common types)
 )
 
+// SQLiteLogger provides functionality to log network snapshots and neuron states
+// to an SQLite database.
 type SQLiteLogger struct {
-	db *sql.DB
+	db *sql.DB // db holds the active database connection.
 }
 
+// NewSQLiteLogger creates or opens an SQLite database file specified by dataSourceName
+// and prepares it for logging network snapshots.
+// It ensures the necessary tables ('NetworkSnapshots', 'NeuronStates') are created if they don't exist.
+// Unlike previous versions, this function will NOT delete an existing database file.
+// It will open an existing one or create a new one if it's not found.
 func NewSQLiteLogger(dataSourceName string) (*SQLiteLogger, error) {
-	_ = os.Remove(dataSourceName)
-
+	// The database file will be created by sql.Open if it doesn't exist.
+	// os.Remove has been removed to allow persistence of logs across runs.
 	dbConn, err := sql.Open("sqlite3", dataSourceName)
 	if err != nil {
 		return nil, fmt.Errorf("falha ao abrir banco de dados SQLite em %s: %w", dataSourceName, err)
@@ -37,22 +46,9 @@ func NewSQLiteLogger(dataSourceName string) (*SQLiteLogger, error) {
 	return logger, nil
 }
 
-const pointDimension = 16
-
-func getDimensionSQLParts(prefix string, dimension int, forTableCreation bool) (colNamesSQL string, placeholdersSQL string) {
-	colNames := make([]string, dimension)
-	placeholders := make([]string, dimension)
-	for i := 0; i < dimension; i++ {
-		if forTableCreation {
-			colNames[i] = fmt.Sprintf("%s%d REAL", prefix, i)
-		} else {
-			colNames[i] = fmt.Sprintf("%s%d", prefix, i)
-		}
-		placeholders[i] = "?"
-	}
-	return strings.Join(colNames, ", "), strings.Join(placeholders, ", ")
-}
-
+// createTables ensures that the necessary tables (NetworkSnapshots, NeuronStates) exist in the database.
+// If they don't exist, they are created.
+// Position and Velocity are now stored as TEXT columns containing JSON arrays.
 func (sl *SQLiteLogger) createTables() error {
 	networkSnapshotsTableSQL := `
     CREATE TABLE IF NOT EXISTS NetworkSnapshots (
@@ -68,16 +64,14 @@ func (sl *SQLiteLogger) createTables() error {
 		return fmt.Errorf("falha ao criar tabela NetworkSnapshots: %w", err)
 	}
 
-	positionSchemaSQL, _ := getDimensionSQLParts("Position", pointDimension, true)
-	velocitySchemaSQL, _ := getDimensionSQLParts("Velocity", pointDimension, true)
-
-	neuronStatesTableSQL := fmt.Sprintf(`
+	// Simplified schema for NeuronStates: Position and Velocity are stored as JSON strings.
+	neuronStatesTableSQL := `
     CREATE TABLE IF NOT EXISTS NeuronStates (
         StateID INTEGER PRIMARY KEY AUTOINCREMENT,
         SnapshotID INTEGER NOT NULL,
         NeuronID INTEGER NOT NULL,
-        %s,
-        %s,
+        Position TEXT,
+        Velocity TEXT,
         Type INTEGER,
         CurrentState INTEGER,
         AccumulatedPotential REAL,
@@ -86,7 +80,7 @@ func (sl *SQLiteLogger) createTables() error {
         LastFiredCycle INTEGER,
         CyclesInCurrentState INTEGER,
         FOREIGN KEY (SnapshotID) REFERENCES NetworkSnapshots (SnapshotID) ON DELETE CASCADE
-    );`, positionSchemaSQL, velocitySchemaSQL)
+    );`
 
 	if _, err := sl.db.Exec(neuronStatesTableSQL); err != nil {
 		return fmt.Errorf("falha ao criar tabela NeuronStates: %w", err)
@@ -94,13 +88,42 @@ func (sl *SQLiteLogger) createTables() error {
 	return nil
 }
 
+// DBForTest returns the underlying *sql.DB object.
+// This method is intended ONLY for use in test suites, for purposes such as:
+//   - Inspecting the database state after operations.
+//   - Performing setup or cleanup tasks on the test database.
+// Caution: Directly manipulating the database via this accessor during normal operation
+// can interfere with the logger's consistency and is strongly discouraged.
 func (sl *SQLiteLogger) DBForTest() *sql.DB {
 	return sl.db
 }
 
+// LogNetworkState logs a complete snapshot of the current state of the provided 'net' (CrowNet instance)
+// into the SQLite database.
+// This involves:
+// 1. Inserting a summary record into the 'NetworkSnapshots' table (cycle count, timestamp, chemical levels, modulation factors).
+// 2. For each neuron in the network, inserting its detailed state into the 'NeuronStates' table,
+//    linking it to the snapshot ID. Position and Velocity are stored as JSON strings.
+// All database operations are performed within a single transaction. If any part fails,
+// the transaction is rolled back.
+//
+// Parameters:
+//   - net: A pointer to the CrowNet instance whose state is to be logged.
+//
+// Returns:
+//   - error: An error if any database operation fails or if the logger is not initialized, nil otherwise.
 func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 	if sl.db == nil {
-		return fmt.Errorf("logger SQLite não inicializado")
+		return fmt.Errorf("SQLiteLogger not initialized (db is nil)")
+	}
+	if net == nil {
+		return fmt.Errorf("cannot log network state: CrowNet instance is nil")
+	}
+	if net.ChemicalEnv == nil { // ChemicalEnv is accessed for logging
+		return fmt.Errorf("cannot log network state: ChemicalEnv in CrowNet is nil")
+	}
+	if net.SimParams == nil { // SimParams is accessed for CortisolGlandPosition
+		return fmt.Errorf("cannot log network state: SimParams in CrowNet is nil")
 	}
 
 	tx, err := sl.db.Begin()
@@ -127,45 +150,44 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 		return fmt.Errorf("falha ao obter LastInsertId para snapshot: %w", err)
 	}
 
-	posColNames := make([]string, 16)
-	velColNames := make([]string, 16)
-	posPlaceholders := make([]string, 16)
-	velPlaceholders := make([]string, 16)
-	for i := 0; i < 16; i++ {
-		posColNames[i] = fmt.Sprintf("Position%d", i)
-		velColNames[i] = fmt.Sprintf("Velocity%d", i)
-		posPlaceholders[i] = "?"
-		velPlaceholders[i] = "?"
-	}
-	sqlQuery := fmt.Sprintf(`INSERT INTO NeuronStates (
-                                SnapshotID, NeuronID, %s, %s,
-                                Type, CurrentState, AccumulatedPotential, BaseFiringThreshold,
-                                CurrentFiringThreshold, LastFiredCycle, CyclesInCurrentState
-                             ) VALUES (?, ?, %s, %s, ?, ?, ?, ?, ?, ?, ?)`,
-		strings.Join(posColNames, ", "), strings.Join(velColNames, ", "),
-		strings.Join(posPlaceholders, ", "), strings.Join(velPlaceholders, ", "),
-	)
+	// SQL query for inserting neuron states. Position and Velocity are now single TEXT columns.
+	neuronStateSQL := `INSERT INTO NeuronStates (
+		SnapshotID, NeuronID, Position, Velocity,
+		Type, CurrentState, AccumulatedPotential, BaseFiringThreshold,
+		CurrentFiringThreshold, LastFiredCycle, CyclesInCurrentState
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	stmt, err := tx.Prepare(sqlQuery)
+	stmt, err := tx.Prepare(neuronStateSQL)
 	if err != nil {
 		return fmt.Errorf("falha ao preparar statement para NeuronStates: %w", err)
 	}
 	defer stmt.Close()
 
 	for _, n := range net.Neurons {
-		args := make([]interface{}, 0, 2+pointDimension*2+7)
-		args = append(args, snapshotID, n.ID)
-		for i := 0; i < pointDimension; i++ {
-			args = append(args, float64(n.Position[i]))
+		// Serialize Position and Velocity to JSON strings.
+		posJSON, err := json.Marshal(n.Position)
+		if err != nil {
+			return fmt.Errorf("falha ao serializar Position para JSON para neurônio %d: %w", n.ID, err)
 		}
-		for i := 0; i < pointDimension; i++ {
-			args = append(args, float64(n.Velocity[i]))
+		velJSON, err := json.Marshal(n.Velocity)
+		if err != nil {
+			return fmt.Errorf("falha ao serializar Velocity para JSON para neurônio %d: %w", n.ID, err)
 		}
-		args = append(args, int(n.Type), int(n.CurrentState), float64(n.AccumulatedPotential),
-			float64(n.BaseFiringThreshold), float64(n.CurrentFiringThreshold),
-			int(n.LastFiredCycle), int(n.CyclesInCurrentState))
 
-		if _, err = stmt.Exec(args...); err != nil {
+		_, err = stmt.Exec(
+			snapshotID,
+			n.ID,
+			string(posJSON), // Store as JSON string
+			string(velJSON), // Store as JSON string
+			int(n.Type),
+			int(n.CurrentState),
+			float64(n.AccumulatedPotential),
+			float64(n.BaseFiringThreshold),
+			float64(n.CurrentFiringThreshold),
+			int(n.LastFiredCycle),
+			int(n.CyclesInCurrentState),
+		)
+		if err != nil {
 			return fmt.Errorf("falha ao inserir estado para neurônio %d: %w", n.ID, err)
 		}
 	}
@@ -176,9 +198,17 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 	return nil
 }
 
+// Close closes the underlying SQLite database connection.
+// It's important to call this when the logger is no longer needed to free resources.
+// Returns an error if closing the database fails. Sets sl.db to nil on successful close.
 func (sl *SQLiteLogger) Close() error {
 	if sl.db != nil {
-		return sl.db.Close()
+		err := sl.db.Close()
+		sl.db = nil // Set to nil even if close fails, to prevent further use of potentially bad connection
+		if err != nil {
+			return fmt.Errorf("failed to close SQLite database: %w", err)
+		}
+		return nil
 	}
-	return nil
+	return nil // No error if db is already nil
 }
