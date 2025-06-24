@@ -123,32 +123,61 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 // Alternatives like Marsaglia's method (for 2D/3D) or Muller's method (normalizing points
 // generated from a Gaussian distribution) are more efficient for higher dimensions but are more complex to implement.
 // For the current scope, rejection sampling is used for its simplicity.
-func GenerateRandomPositionInHyperSphere(maxRadius float64, randomSource func() float64) common.Point {
-	if maxRadius < 0 { // Ensure radius is non-negative.
-		maxRadius = 0
+//
+// The function below is the NEW, OPTIMIZED version.
+// GenerateRandomPositionInHyperSphere cria uma posição aleatória uniformemente distribuída
+// dentro de uma hiperesfera N-dimensional (N-ball) de raio `maxRadius` centrada na origem.
+// Utiliza o método de gerar N variáveis aleatórias de uma distribuição normal padrão,
+// normalizando o vetor resultante para obter um ponto na superfície da N-esfera unitária,
+// e então escalando este ponto por um raio R * u^(1/N) para garantir distribuição uniforme por volume.
+// Esta abordagem é significativamente mais eficiente para altas dimensões do que a amostragem por rejeição.
+//
+// Parameters:
+//   - maxRadius: O raio da hiperesfera. Se negativo ou zero, a origem é retornada.
+//   - rng: Uma fonte de aleatoriedade (`*rand.Rand`) para gerar os números normais e uniformes.
+//
+// Returns:
+//   - common.Point: Um ponto gerado aleatoriamente dentro da hiperesfera N-dimensional especificada.
+func GenerateRandomPositionInHyperSphere(maxRadius float64, rng *rand.Rand) common.Point {
+	var p common.Point // common.Point is [16]float64
+
+	if maxRadius <= 0 { // Handles negative or zero radius by returning the origin.
+		return p // p is {0,0,...,0} by default
 	}
 
-	// Loop indefinitely until a point within the hypersphere is found.
-	for {
-		var p common.Point
-		distSq := 0.0
-		for i := range p { // Iterate over dimensions of the point
-			// Gera coordenada entre -maxRadius e +maxRadius
-			coord := (randomSource()*2*maxRadius - maxRadius)
-			p[i] = common.Coordinate(coord)
-			distSq += coord * coord
-		}
-
-		// Se maxRadius é 0, o único ponto válido é a origem.
-		if maxRadius == 0 {
-			// p já será {0,0,...} devido a coord = (randomSource()*0 - 0) = 0
-			return p
-		}
-
-		// Se o ponto gerado estiver dentro da hiperesfera, retorna
-		if distSq <= maxRadius*maxRadius {
-			return p
-		}
-		// Caso contrário, tenta novamente (rejeição)
+	// 1. Gerar N (pointDimension) variáveis aleatórias de uma distribuição normal padrão.
+	normDeviates := make([]float64, pointDimension)
+	sumSq := 0.0
+	for i := 0; i < pointDimension; i++ {
+		val := rng.NormFloat64() // Gera um desvio normal padrão (média 0, stddev 1)
+		normDeviates[i] = val
+		sumSq += val * val
 	}
+
+	// Se sumSq for zero (extremamente improvável para N > 1), significa que todos os normDeviates foram zero.
+	// Neste caso, o ponto é a origem, que já está dentro da esfera.
+	// Também protege contra divisão por zero se sqrt(sumSq) for zero.
+	if sumSq == 0 { // ou sumSq < epsilon para robustez de ponto flutuante
+		return p // Retorna a origem
+	}
+
+	// 2. Normalizar o vetor para obter um ponto na superfície da N-esfera unitária.
+	invMagnitude := 1.0 / math.Sqrt(sumSq)
+	pointOnUnitSphere := common.Point{}
+	for i := 0; i < pointDimension; i++ {
+		pointOnUnitSphere[i] = common.Coordinate(normDeviates[i] * invMagnitude)
+	}
+
+	// 3. Gerar um raio escalar para o ponto dentro da N-ball.
+	// u^(1/N) é usado para garantir distribuição uniforme por volume.
+	u := rng.Float64() // Uniforme em [0.0, 1.0)
+	// math.Pow(0.0, 1.0/N) é 0.0. math.Pow(u, 1.0/N) para u próximo de 1.0 é próximo de 1.0.
+	scaledRadius := maxRadius * math.Pow(u, 1.0/float64(pointDimension))
+
+	// 4. Escalar o ponto na esfera unitária pelo raio calculado.
+	for i := 0; i < pointDimension; i++ {
+		p[i] = common.Coordinate(float64(pointOnUnitSphere[i]) * scaledRadius)
+	}
+
+	return p
 }

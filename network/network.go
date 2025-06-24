@@ -154,7 +154,7 @@ func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFac
 	for i := 0; i < count; i++ {
 		id := cn.getNextNeuronID()
 		effectiveRadius := radiusFactor * cn.SimParams.SpaceMaxDimension
-		pos := space.GenerateRandomPositionInHyperSphere(effectiveRadius, cn.rng.Float64)
+		pos := space.GenerateRandomPositionInHyperSphere(effectiveRadius, cn.rng) // cn.rng is *rand.Rand
 
 		n := neuron.New(id, neuronType, pos, cn.SimParams)
 		cn.Neurons = append(cn.Neurons, n)
