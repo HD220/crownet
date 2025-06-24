@@ -295,6 +295,17 @@ func (ac *AppConfig) Validate() error {
 	if ac.SimParams.PatternSize <= 0 {
 		return fmt.Errorf("PatternSize must be positive, got %d", ac.SimParams.PatternSize)
 	}
+	if ac.SimParams.PatternHeight <= 0 {
+		return fmt.Errorf("PatternHeight must be positive, got %d", ac.SimParams.PatternHeight)
+	}
+	if ac.SimParams.PatternWidth <= 0 {
+		return fmt.Errorf("PatternWidth must be positive, got %d", ac.SimParams.PatternWidth)
+	}
+	if ac.SimParams.PatternSize != (ac.SimParams.PatternHeight * ac.SimParams.PatternWidth) {
+		return fmt.Errorf("PatternSize (%d) must equal PatternHeight (%d) * PatternWidth (%d) = %d",
+			ac.SimParams.PatternSize, ac.SimParams.PatternHeight, ac.SimParams.PatternWidth,
+			ac.SimParams.PatternHeight*ac.SimParams.PatternWidth)
+	}
 	if ac.SimParams.CyclesPerSecond <= 0 {
 		return fmt.Errorf("CyclesPerSecond must be positive, got %f", ac.SimParams.CyclesPerSecond)
 	}

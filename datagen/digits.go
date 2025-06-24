@@ -113,17 +113,9 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 		return nil, fmt.Errorf("padrão de dígito para %d não encontrado", digit)
 	}
 
-	if simParams.PatternHeight <= 0 || simParams.PatternWidth <= 0 {
-		return nil, fmt.Errorf("PatternHeight (%d) e PatternWidth (%d) em simParams devem ser positivos", simParams.PatternHeight, simParams.PatternWidth)
-	}
-
-	expectedSize := simParams.PatternHeight * simParams.PatternWidth
-	if simParams.PatternSize != expectedSize {
-		return nil, fmt.Errorf(
-			"PatternSize (%d) em simParams não corresponde a PatternHeight (%d) * PatternWidth (%d) = %d",
-			simParams.PatternSize, simParams.PatternHeight, simParams.PatternWidth, expectedSize,
-		)
-	}
+	// Assumes simParams have been validated by config.Validate() regarding positive PatternHeight/Width
+	// and consistency of PatternSize with Height*Width.
+	// We still need to check that the actual pattern data matches these validated simParams.
 
 	if len(pattern2D) != simParams.PatternHeight {
 		return nil, fmt.Errorf("padrão para dígito %d tem altura incorreta %d, esperado %d (de simParams)", digit, len(pattern2D), simParams.PatternHeight)
