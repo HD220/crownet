@@ -81,28 +81,28 @@ type SimulationParameters struct {
 
 type CLIConfig struct {
 	// General Configuration
-	Mode             string // Operation mode (sim, expose, observe).
-	TotalNeurons     int    // Total number of neurons in the network.
-	Seed             int64  // Seed for random number generator.
-	WeightsFile      string // File to save/load synaptic weights.
-	BaseLearningRate common.Rate // Base learning rate for Hebbian plasticity.
+	Mode             string      `json:"mode"`              // Operation mode: "sim", "expose", or "observe".
+	TotalNeurons     int         `json:"total_neurons"`     // Total number of neurons in the network.
+	Seed             int64       `json:"seed"`              // Seed for random number generator (0 for time-based).
+	WeightsFile      string      `json:"weights_file"`      // File to save/load synaptic weights.
+	BaseLearningRate common.Rate `json:"base_learning_rate"` // Base learning rate for Hebbian plasticity.
 
 	// Mode 'sim' Specific Configuration
-	Cycles          int    // Total simulation cycles.
-	DbPath          string // Path for the SQLite database file for logging.
-	SaveInterval    int    // Cycle interval for saving to DB.
-	StimInputID     int    // ID of an input neuron for continuous stimulus (-1 for first, -2 to disable).
-	StimInputFreqHz float64 // Frequency (Hz) for stimulus (0.0 to disable).
-	MonitorOutputID int    // ID of an output neuron to monitor frequency (-1 for first, -2 to disable).
-	DebugChem       bool   // Enable debug prints for chemical production.
+	Cycles          int     `json:"cycles"`            // Total simulation cycles for 'sim' mode.
+	DbPath          string  `json:"db_path"`           // Path for the SQLite database file for logging in 'sim' mode.
+	SaveInterval    int     `json:"save_interval"`     // Cycle interval for saving to DB in 'sim' mode (0 to disable periodic).
+	StimInputID     int     `json:"stim_input_id"`     // ID of input neuron for continuous stimulus in 'sim' mode (-1 for first, -2 to disable).
+	StimInputFreqHz float64 `json:"stim_input_freq_hz"` // Frequency (Hz) for stimulus in 'sim' mode (0.0 to disable).
+	MonitorOutputID int     `json:"monitor_output_id"` // ID of output neuron to monitor frequency in 'sim' mode (-1 for first, -2 to disable).
+	DebugChem       bool    `json:"debug_chem"`        // Enable debug prints for chemical production in 'sim' mode.
 
 	// Mode 'expose' Specific Configuration
-	Epochs           int // Number of exposure epochs.
-	CyclesPerPattern int // Number of cycles to run per pattern presentation.
+	Epochs           int `json:"epochs"`             // Number of exposure epochs for 'expose' mode.
+	CyclesPerPattern int `json:"cycles_per_pattern"` // Number of cycles to run per pattern presentation in 'expose' mode.
 
 	// Mode 'observe' Specific Configuration
-	Digit          int // Digit (0-9) to present.
-	CyclesToSettle int // Number of cycles for network settling.
+	Digit          int `json:"digit"`            // Digit (0-9) to present for 'observe' mode.
+	CyclesToSettle int `json:"cycles_to_settle"` // Number of cycles for network settling in 'observe' mode.
 }
 
 type AppConfig struct {
@@ -160,45 +160,72 @@ func DefaultSimulationParameters() SimulationParameters {
 	}
 }
 
-func LoadCLIConfig() CLIConfig {
+// LoadCLIConfig loads configuration from command-line flags using the provided FlagSet and arguments.
+// This version is more testable as it doesn't rely on the global flag state or os.Args directly.
+func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	cfg := CLIConfig{}
 
 	// General Configuration Flags
-	flag.StringVar(&cfg.Mode, "mode", ModeSim, fmt.Sprintf("Operation mode: '%s', '%s', or '%s'.", ModeSim, ModeExpose, ModeObserve))
-	flag.IntVar(&cfg.TotalNeurons, "neurons", 200, "Total number of neurons in the network.")
-	flag.Int64Var(&cfg.Seed, "seed", 0, "Seed for random number generator (0 uses current time, other values are used directly).")
-	flag.StringVar(&cfg.WeightsFile, "weightsFile", "crownet_weights.json", "File to save/load synaptic weights.")
-	flag.Float64Var((*float64)(&cfg.BaseLearningRate), "lrBase", 0.01, "Base learning rate for Hebbian plasticity.") // Cast to *float64 as common.Rate is float64
+	fSet.StringVar(&cfg.Mode, "mode", ModeSim, fmt.Sprintf("Operation mode: '%s', '%s', or '%s'.", ModeSim, ModeExpose, ModeObserve))
+	fSet.IntVar(&cfg.TotalNeurons, "neurons", 200, "Total number of neurons in the network.")
+	fSet.Int64Var(&cfg.Seed, "seed", 0, "Seed for random number generator (0 uses current time, other values are used directly).")
+	fSet.StringVar(&cfg.WeightsFile, "weightsFile", "crownet_weights.json", "File to save/load synaptic weights.")
+	fSet.Float64Var((*float64)(&cfg.BaseLearningRate), "lrBase", 0.01, "Base learning rate for Hebbian plasticity.")
 
 	// Mode 'sim' Specific Flags
-	flag.IntVar(&cfg.Cycles, "cycles", 1000, "Total simulation cycles for 'sim' mode.")
-	flag.StringVar(&cfg.DbPath, "dbPath", "crownet_sim_run.db", "Path for the SQLite database file for logging.")
-	flag.IntVar(&cfg.SaveInterval, "saveInterval", 100, "Cycle interval for saving to DB (0 to disable periodic saves, only final if any).")
-	flag.IntVar(&cfg.StimInputID, "stimInputID", -1, "ID of an input neuron for general continuous stimulus in 'sim' mode (-1 for first available, -2 to disable).")
-	flag.Float64Var(&cfg.StimInputFreqHz, "stimInputFreqHz", 0.0, "Frequency (Hz) for general stimulus in 'sim' mode (0.0 to disable).")
-	flag.IntVar(&cfg.MonitorOutputID, "monitorOutputID", -1, "ID of an output neuron to monitor for frequency reporting in 'sim' mode (-1 for first available, -2 to disable).")
-	flag.BoolVar(&cfg.DebugChem, "debugChem", false, "Enable debug prints for chemical production.")
+	fSet.IntVar(&cfg.Cycles, "cycles", 1000, "Total simulation cycles for 'sim' mode.")
+	fSet.StringVar(&cfg.DbPath, "dbPath", "crownet_sim_run.db", "Path for the SQLite database file for logging.")
+	fSet.IntVar(&cfg.SaveInterval, "saveInterval", 100, "Cycle interval for saving to DB (0 to disable periodic saves, only final if any).")
+	fSet.IntVar(&cfg.StimInputID, "stimInputID", -1, "ID of an input neuron for general continuous stimulus in 'sim' mode (-1 for first available, -2 to disable).")
+	fSet.Float64Var(&cfg.StimInputFreqHz, "stimInputFreqHz", 0.0, "Frequency (Hz) for general stimulus in 'sim' mode (0.0 to disable).")
+	fSet.IntVar(&cfg.MonitorOutputID, "monitorOutputID", -1, "ID of an output neuron to monitor for frequency reporting in 'sim' mode (-1 for first available, -2 to disable).")
+	fSet.BoolVar(&cfg.DebugChem, "debugChem", false, "Enable debug prints for chemical production.")
 
 	// Mode 'expose' Specific Flags
-	flag.IntVar(&cfg.Epochs, "epochs", 50, "Number of exposure epochs (for 'expose' mode).")
-	flag.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20, "Number of cycles to run per pattern presentation during 'expose' mode.")
+	fSet.IntVar(&cfg.Epochs, "epochs", 50, "Number of exposure epochs (for 'expose' mode).")
+	fSet.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20, "Number of cycles to run per pattern presentation during 'expose' mode.")
 
 	// Mode 'observe' Specific Flags
-	flag.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
-	flag.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.")
+	fSet.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
+	fSet.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.")
 
-	if !flag.Parsed() {
-		flag.Parse()
+	// Filter out Ginkgo-specific flags before parsing if they exist
+	// to prevent "flag provided but not defined" errors when running tests
+	// with `go test ./...` if Ginkgo is indirectly included or its flags are passed.
+	var nonGinkgoArgs []string
+	if args != nil { // args could be nil if called directly without specific test arguments
+		for _, arg := range args {
+			if !strings.HasPrefix(arg, "-ginkgo.") && !strings.HasPrefix(arg, "-test.") {
+				nonGinkgoArgs = append(nonGinkgoArgs, arg)
+			}
+		}
+	}
+
+
+	// Only parse if not already parsed. In tests, fSet might be parsed multiple times
+	// if not careful, but Parse is idempotent for defined flags.
+	// However, calling Parse on an already parsed FlagSet with new arguments can lead to issues.
+	// For production, os.Args[1:] would be passed. For tests, specific arg slices.
+	if err := fSet.Parse(nonGinkgoArgs); err != nil {
+		return cfg, fmt.Errorf("error parsing flags: %w", err)
 	}
 
 	if cfg.Seed == 0 {
 		cfg.Seed = time.Now().UnixNano()
 	}
-	return cfg
+	return cfg, nil
 }
 
-func NewAppConfig() (*AppConfig, error) {
-	cliCfg := LoadCLIConfig()
+// NewAppConfig loads configuration from CLI flags (via os.Args) and defaults, then validates.
+// This is the main entry point for configuration in production.
+func NewAppConfig(args []string) (*AppConfig, error) {
+	// Create a new FlagSet for command-line parsing.
+	// os.Args[0] is the program name, actual flags start from os.Args[1:]
+	cliCfg, err := LoadCLIConfig(flag.NewFlagSet("crownet", flag.ContinueOnError), args)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load CLI config: %w", err)
+	}
+
 	appCfg := &AppConfig{
 		SimParams: DefaultSimulationParameters(),
 		Cli:       cliCfg,
@@ -280,10 +307,72 @@ func (ac *AppConfig) Validate() error {
 	if ac.SimParams.DopaminergicPercent+ac.SimParams.InhibitoryPercent > 1.0 {
 		return fmt.Errorf("sum of DopaminergicPercent (%f) and InhibitoryPercent (%f) cannot exceed 1.0", ac.SimParams.DopaminergicPercent, ac.SimParams.InhibitoryPercent)
 	}
-	// Add more SimParams checks as needed, e.g., for rates, factors, thresholds to be within logical ranges.
-	// For example, decay rates should likely be non-negative.
-	// MaxLevels should be >= 0.
-	// Coincidence windows should be positive.
+
+	// Validate non-negative or positive constraints for SimParams
+	if ac.SimParams.SpaceMaxDimension <= 0 {
+		return fmt.Errorf("SpaceMaxDimension must be positive, got %f", ac.SimParams.SpaceMaxDimension)
+	}
+	if ac.SimParams.BaseFiringThreshold <= 0 { // Assuming threshold should be positive
+		return fmt.Errorf("BaseFiringThreshold must be positive, got %f", ac.SimParams.BaseFiringThreshold)
+	}
+	if ac.SimParams.AccumulatedPulseDecayRate < 0 {
+		return fmt.Errorf("AccumulatedPulseDecayRate must be non-negative, got %f", ac.SimParams.AccumulatedPulseDecayRate)
+	}
+	if ac.SimParams.AbsoluteRefractoryCycles < 0 { // Should likely be >= 0
+		return fmt.Errorf("AbsoluteRefractoryCycles must be non-negative, got %d", ac.SimParams.AbsoluteRefractoryCycles)
+	}
+	if ac.SimParams.RelativeRefractoryCycles < 0 { // Should likely be >= 0
+		return fmt.Errorf("RelativeRefractoryCycles must be non-negative, got %d", ac.SimParams.RelativeRefractoryCycles)
+	}
+	if ac.SimParams.PulsePropagationSpeed <= 0 {
+		return fmt.Errorf("PulsePropagationSpeed must be positive, got %f", ac.SimParams.PulsePropagationSpeed)
+	}
+	if ac.SimParams.OutputFrequencyWindowCycles <= 0 {
+		return fmt.Errorf("OutputFrequencyWindowCycles must be positive, got %f", ac.SimParams.OutputFrequencyWindowCycles)
+	}
+	if ac.SimParams.InitialSynapticWeightMin < 0 { // Assuming weights can be 0 but not negative
+		return fmt.Errorf("InitialSynapticWeightMin must be non-negative, got %f", ac.SimParams.InitialSynapticWeightMin)
+	}
+	if ac.SimParams.InitialSynapticWeightMax < ac.SimParams.InitialSynapticWeightMin {
+		return fmt.Errorf("InitialSynapticWeightMax (%f) must be >= InitialSynapticWeightMin (%f)", ac.SimParams.InitialSynapticWeightMax, ac.SimParams.InitialSynapticWeightMin)
+	}
+    if ac.SimParams.MaxSynapticWeight < ac.SimParams.InitialSynapticWeightMax {
+        return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)", ac.SimParams.MaxSynapticWeight, ac.SimParams.InitialSynapticWeightMax)
+    }
+	if ac.SimParams.SynapticWeightDecayRate < 0 {
+		return fmt.Errorf("SynapticWeightDecayRate must be non-negative, got %f", ac.SimParams.SynapticWeightDecayRate)
+	}
+	if ac.SimParams.HebbianCoincidenceWindow <= 0 { // Should be positive for a window to exist
+		return fmt.Errorf("HebbianCoincidenceWindow must be positive, got %d", ac.SimParams.HebbianCoincidenceWindow)
+	}
+	// Factors can be positive or negative depending on their meaning, e.g. CortisolInfluenceOnLR is negative.
+	// For now, not adding generic positive checks for all factors, but specific ones like ReinforceFactor.
+	if ac.SimParams.HebbPositiveReinforceFactor < 0 {
+		return fmt.Errorf("HebbPositiveReinforceFactor must be non-negative, got %f", ac.SimParams.HebbPositiveReinforceFactor)
+	}
+	if ac.SimParams.MinLearningRateFactor < 0 {
+		return fmt.Errorf("MinLearningRateFactor must be non-negative, got %f", ac.SimParams.MinLearningRateFactor)
+	}
+	if ac.SimParams.SynaptogenesisInfluenceRadius <= 0 {
+		return fmt.Errorf("SynaptogenesisInfluenceRadius must be positive, got %f", ac.SimParams.SynaptogenesisInfluenceRadius)
+	}
+	if ac.SimParams.MaxMovementPerCycle < 0 {
+		return fmt.Errorf("MaxMovementPerCycle must be non-negative, got %f", ac.SimParams.MaxMovementPerCycle)
+	}
+	if ac.SimParams.CortisolProductionRate < 0 || ac.SimParams.CortisolDecayRate < 0 || ac.SimParams.CortisolProductionPerHit < 0 || ac.SimParams.CortisolMaxLevel < 0 {
+		return fmt.Errorf("Cortisol parameters (ProductionRate, DecayRate, ProductionPerHit, MaxLevel) must be non-negative")
+	}
+	if ac.SimParams.DopamineProductionRate < 0 || ac.SimParams.DopamineDecayRate < 0 || ac.SimParams.DopamineProductionPerEvent < 0 || ac.SimParams.DopamineMaxLevel < 0 {
+		return fmt.Errorf("Dopamine parameters (ProductionRate, DecayRate, ProductionPerEvent, MaxLevel) must be non-negative")
+	}
+	if ac.SimParams.CortisolMaxLevel < ac.SimParams.CortisolProductionPerHit {
+		// This is a logical check, a single hit shouldn't exceed max. Could be more complex if rate also contributes significantly before decay.
+		// For simplicity, basic check.
+	}
+	if ac.SimParams.DopamineMaxLevel < ac.SimParams.DopamineProductionPerEvent {
+		// Similar logical check for dopamine
+	}
+
 
 	return nil
 }
