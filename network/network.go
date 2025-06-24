@@ -46,6 +46,8 @@ type CrowNet struct {
 	InputNeuronIDs    []common.NeuronID           // Cache of IDs for input neurons, sorted
 	OutputNeuronIDs   []common.NeuronID           // Cache of IDs for output neurons, sorted
 	OutputNeuronIDSet map[common.NeuronID]struct{} // Set of output neuron IDs for efficient lookup
+	InputNeuronIDSet  map[common.NeuronID]struct{} // Set of input neuron IDs for efficient lookup
+	neuronMap         map[common.NeuronID]*neuron.Neuron // Map for O(1) neuron lookup by ID
 	neuronIDCounter   common.NeuronID             // Counter for generating unique neuron IDs
 
 	// --- Dynamic Sub-systems of the Network ---
@@ -89,6 +91,8 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		InputNeuronIDs:    make([]common.NeuronID, 0, simParams.MinInputNeurons),
 		OutputNeuronIDs:   make([]common.NeuronID, 0, simParams.MinOutputNeurons),
 		OutputNeuronIDSet: make(map[common.NeuronID]struct{}),
+		InputNeuronIDSet:  make(map[common.NeuronID]struct{}),
+		neuronMap:         make(map[common.NeuronID]*neuron.Neuron),
 		neuronIDCounter:   0,
 
 		// Dynamic sub-systems
@@ -227,6 +231,18 @@ func (cn *CrowNet) finalizeInitialization() {
 	for _, outID := range cn.OutputNeuronIDs {
 		cn.OutputNeuronIDSet[outID] = struct{}{}
 		cn.outputFiringHistory[outID] = make([]common.CycleCount, 0)
+	}
+
+	// Populate InputNeuronIDSet
+	cn.InputNeuronIDSet = make(map[common.NeuronID]struct{}, len(cn.InputNeuronIDs))
+	for _, inID := range cn.InputNeuronIDs {
+		cn.InputNeuronIDSet[inID] = struct{}{}
+	}
+
+	// Populate neuronMap
+	cn.neuronMap = make(map[common.NeuronID]*neuron.Neuron, len(cn.Neurons))
+	for _, n := range cn.Neurons {
+		cn.neuronMap[n.ID] = n
 	}
 }
 
@@ -421,118 +437,4 @@ func (cn *CrowNet) recordOutputFiring(neuronID common.NeuronID) {
 		}
 	}
 	cn.outputFiringHistory[neuronID] = prunedHistory
-}
-
-func (cn *CrowNet) PresentPattern(patternData []float64) error {
-	if len(patternData) != cn.SimParams.PatternSize {
-		return fmt.Errorf("tamanho do padrão (%d) diferente do esperado (%d)", len(patternData), cn.SimParams.PatternSize)
-	}
-	if len(cn.InputNeuronIDs) < cn.SimParams.PatternSize {
-		return fmt.Errorf("não há neurônios de input suficientes (%d) para o tamanho do padrão (%d)", len(cn.InputNeuronIDs), cn.SimParams.PatternSize)
-	}
-	for i := 0; i < cn.SimParams.PatternSize; i++ {
-		if patternData[i] > 0.5 {
-			inputNeuronID := cn.InputNeuronIDs[i]
-			var targetNeuron *neuron.Neuron
-			for _, n := range cn.Neurons {
-				if n.ID == inputNeuronID {
-					targetNeuron = n
-					break
-				}
-			}
-			if targetNeuron != nil && targetNeuron.Type == neuron.Input {
-				targetNeuron.CurrentState = neuron.Firing
-				emittedSignal := targetNeuron.EmittedPulseSign()
-				if emittedSignal != 0 {
-					newP := pulse.New(
-						targetNeuron.ID,
-						targetNeuron.Position,
-						emittedSignal,
-						cn.CycleCount,
-						cn.SimParams.SpaceMaxDimension*2.0,
-					)
-					cn.ActivePulses.Add(newP)
-				}
-			} else {
-				return fmt.Errorf("neurônio de input ID %d não encontrado ou não é do tipo Input", inputNeuronID)
-			}
-		}
-	}
-	return nil
-}
-
-func (cn *CrowNet) ResetNetworkStateForNewPattern() {
-	for _, n := range cn.Neurons {
-		n.AccumulatedPotential = 0.0
-	}
-	cn.ActivePulses.Clear()
-}
-
-func (cn *CrowNet) GetOutputActivation() ([]float64, error) {
-	if len(cn.OutputNeuronIDs) < cn.SimParams.MinOutputNeurons {
-		return nil, fmt.Errorf("número de neurônios de output (%d) é menor que o esperado (%d)", len(cn.OutputNeuronIDs), cn.SimParams.MinOutputNeurons)
-	}
-	outputActivations := make([]float64, cn.SimParams.MinOutputNeurons)
-	for i := 0; i < cn.SimParams.MinOutputNeurons; i++ {
-		outputNeuronID := cn.OutputNeuronIDs[i]
-		var targetNeuron *neuron.Neuron
-		for _, n := range cn.Neurons {
-			if n.ID == outputNeuronID {
-				targetNeuron = n
-				break
-			}
-		}
-		if targetNeuron != nil && targetNeuron.Type == neuron.Output {
-			outputActivations[i] = float64(targetNeuron.AccumulatedPotential)
-		} else {
-			return nil, fmt.Errorf("neurônio de output ID %d (esperado na posição %d da lista de outputs) não encontrado ou não é do tipo Output", outputNeuronID, i)
-		}
-	}
-	return outputActivations, nil
-}
-
-func (cn *CrowNet) ConfigureFrequencyInput(neuronID common.NeuronID, hz float64) error {
-	isInput := false
-	for _, id := range cn.InputNeuronIDs {
-		if id == neuronID {
-			isInput = true
-			break
-		}
-	}
-	if !isInput {
-		return fmt.Errorf("neurônio ID %d não é um neurônio de input válido", neuronID)
-	}
-	if hz <= 0 {
-		delete(cn.inputTargetFrequencies, neuronID)
-		delete(cn.timeToNextInputFire, neuronID)
-	} else {
-		cn.inputTargetFrequencies[neuronID] = hz
-		cyclesPerFiring := cn.SimParams.CyclesPerSecond / hz
-		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1))
-	}
-	return nil
-}
-
-func (cn *CrowNet) GetOutputFrequency(neuronID common.NeuronID) (float64, error) {
-	isOutput := false
-	for _, id := range cn.OutputNeuronIDs {
-		if id == neuronID {
-			isOutput = true
-			break
-		}
-	}
-	if !isOutput {
-		return 0, fmt.Errorf("neurônio ID %d não é um neurônio de output válido", neuronID)
-	}
-	history, exists := cn.outputFiringHistory[neuronID]
-	if !exists || len(history) == 0 {
-		return 0.0, nil
-	}
-	firingsInWindow := len(history)
-	windowDurationSeconds := cn.SimParams.OutputFrequencyWindowCycles / cn.SimParams.CyclesPerSecond
-	if windowDurationSeconds == 0 {
-		return 0, fmt.Errorf("OutputFrequencyWindowCycles ou CyclesPerSecond é zero, não é possível calcular frequência")
-	}
-	frequencyHz := float64(firingsInWindow) / windowDurationSeconds
-	return frequencyHz, nil
 }
