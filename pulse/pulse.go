@@ -141,7 +141,7 @@ func (pl *PulseList) Count() int {
 func processSinglePulseOnTargetNeuron(
 	p *Pulse,
 	targetNeuron *neuron.Neuron,
-	weights synaptic.NetworkWeights,
+	weights *synaptic.NetworkWeights, // Corrected to pointer type
 	currentCycle common.CycleCount,
 	simParams *config.SimulationParameters,
 	shellStartRadius, shellEndRadius float64,
@@ -209,51 +209,54 @@ func processSinglePulseOnTargetNeuron(
 // 5. Update the PulseList to contain only pulses that are still active after propagation.
 //
 // Parameters:
-//   - neurons: A slice of all neurons in the network, used to check for pulse effects.
+//   - spatialGrid: The spatial grid index used to efficiently find candidate neurons
+//     that might be affected by the pulses. This replaces a brute-force iteration over all neurons.
 //   - weights: The network's synaptic weights, used by `processSinglePulseOnTargetNeuron`.
+//     Note: This is expected to be `*synaptic.NetworkWeights` after its refactoring.
 //   - currentCycle: The current simulation cycle number.
 //   - simParams: Global simulation parameters.
 //
 // Returns:
 //   - []*Pulse: A slice of all pulses newly generated during this cycle.
 func (pl *PulseList) ProcessCycle(
-	neurons []*neuron.Neuron,
-	weights synaptic.NetworkWeights,
+	spatialGrid *space.SpatialGrid,
+	weights *synaptic.NetworkWeights, // Corrected to pointer type
 	currentCycle common.CycleCount,
 	simParams *config.SimulationParameters,
 ) (newlyGeneratedPulses []*Pulse) {
 
 	// Defensive nil checks for critical parameters.
-	if neurons == nil || weights == nil || simParams == nil {
+	if spatialGrid == nil || weights == nil || simParams == nil {
 		// Log this critical error if a logging mechanism is available.
-		// This state should ideally not be reached in normal operation.
-		return make([]*Pulse, 0) // Return empty slice to prevent further issues
+		return make([]*Pulse, 0)
 	}
 
 	remainingActivePulses := make([]*Pulse, 0, len(pl.pulses))
-	newlyGeneratedPulses = make([]*Pulse, 0) // Initialize to ensure non-nil return
+	newlyGeneratedPulses = make([]*Pulse, 0)
 
-	// Phase 1: Propagate existing pulses and identify those still active.
-	// Also, process effects of active pulses on neurons.
 	for _, p := range pl.pulses {
-		// Propagate the pulse; if it's no longer active (e.g., exceeded max travel radius), skip it.
 		if !p.Propagate(simParams) {
 			continue
 		}
-		remainingActivePulses = append(remainingActivePulses, p) // Keep it for the next cycle's list
+		remainingActivePulses = append(remainingActivePulses, p)
 
-		// Determine the spherical shell where this pulse has an effect in the current cycle.
 		shellStartRadius, shellEndRadius := p.GetEffectShellForCycle(simParams)
 
-		// Phase 2: Check effect of this active pulse on all neurons.
-		for _, targetNeuron := range neurons {
+		// Phase 2: Use spatial grid to get candidate neurons near the pulse's outer shell.
+		// The query center for the pulse's effect is its origin.
+		candidateNeurons := spatialGrid.QuerySphereForCandidates(p.OriginPosition, shellEndRadius)
+
+		for _, targetNeuron := range candidateNeurons {
+			// processSinglePulseOnTargetNeuron already checks the exact distance for the shell
+			// if we modify it slightly, or we do the full check here.
+			// The current processSinglePulseOnTargetNeuron takes shellStart/EndRadius.
+			// Let's keep it that way, it will re-check distance but on a smaller set.
 			if newPulse := processSinglePulseOnTargetNeuron(p, targetNeuron, weights, currentCycle, simParams, shellStartRadius, shellEndRadius); newPulse != nil {
 				newlyGeneratedPulses = append(newlyGeneratedPulses, newPulse)
 			}
 		}
 	}
 
-	// Phase 3: Update the pulse list to only contain pulses that remained active.
 	pl.pulses = remainingActivePulses
-	return newlyGeneratedPulses // Return all pulses generated in this cycle.
+	return newlyGeneratedPulses
 }

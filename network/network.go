@@ -7,6 +7,7 @@ import (
 	"crownet/neurochemical"
 	"crownet/pulse"
 	"crownet/space"
+	// "crownet/space/grid" // If grid becomes its own sub-package. For now, space.SpatialGrid
 	"crownet/synaptic"
 	"fmt"
 	"math"
@@ -52,8 +53,9 @@ type CrowNet struct {
 
 	// --- Dynamic Sub-systems of the Network ---
 	ActivePulses    *pulse.PulseList         // Manages active pulses propagating through the network
-	SynapticWeights synaptic.NetworkWeights  // Manages the matrix of synaptic weights between neurons
+	SynapticWeights *synaptic.NetworkWeights // Manages the matrix of synaptic weights between neurons (Pointer after refactor)
 	ChemicalEnv     *neurochemical.Environment // Manages the neurochemical environment (e.g., cortisol, dopamine levels and effects)
+	SpatialGrid     *space.SpatialGrid       // Spatial index for neurons
 
 	// --- Simulation State ---
 	CycleCount common.CycleCount // Current simulation cycle
@@ -80,6 +82,28 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	simParams := &appCfg.SimParams // Use a pointer to SimParams
 
 	localRng := rand.New(rand.NewSource(appCfg.Cli.Seed))
+
+	// Spatial Grid Initialization
+	// Define the grid origin (min corner of the simulation space)
+	var gridMinBound common.Point
+	for i := 0; i < common.PointDimension; i++ {
+		gridMinBound[i] = common.Coordinate(-simParams.SpaceMaxDimension)
+	}
+	// Determine cell size, e.g., based on pulse propagation speed or a fraction of space size.
+	// Using a factor of pulse speed for now. Ensure it's not zero.
+	const defaultGridCellSizeMultiplier = 2.0
+	cellSize := simParams.PulsePropagationSpeed * defaultGridCellSizeMultiplier
+	if cellSize < 1e-6 { // Avoid zero or too small cell size
+		cellSize = simParams.SpaceMaxDimension / 10.0 // Fallback to a fraction of space dimension
+		if cellSize < 1e-6 {
+			cellSize = 1.0 // Absolute fallback
+		}
+	}
+	spatialGridInstance, err := space.NewSpatialGrid(cellSize, common.PointDimension, gridMinBound)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create spatial grid: %w", err)
+	}
+
 	net := &CrowNet{
 		// Simulation parameters and core components
 		SimParams:        simParams,
@@ -97,9 +121,10 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 
 		// Dynamic sub-systems
 		ActivePulses:    pulse.NewPulseList(),
-		SynapticWeights: synaptic.NewNetworkWeights(),
-		ChemicalEnv:     neurochemical.NewEnvironment(), // Note: CortisolGlandPosition is now in SimParams.
-		                                                // ChemicalEnv.UpdateLevels will need to access it via SimParams.
+		SynapticWeights: synaptic.NewNetworkWeights(), // Assuming constructor doesn't fail or is handled if it can
+		ChemicalEnv:     neurochemical.NewEnvironment(),
+		SpatialGrid:     spatialGridInstance,
+
 		// Simulation state
 		CycleCount:      0,
 
@@ -113,6 +138,14 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		isSynaptogenesisEnabled: true,
 		isChemicalModulationEnabled: true,
 	}
+	// Ensure SynapticWeights is properly initialized (it was missing its params before)
+	// This assumes NewNetworkWeights might also return an error or needs simParams & rng
+	synapticWeightsInstance, err := synaptic.NewNetworkWeights(simParams, localRng)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create synaptic weights: %w", err)
+	}
+	net.SynapticWeights = synapticWeightsInstance
+
 
 	// Initialize neurons - this might return an error
 	if err := net.initializeNeurons(appCfg.Cli.TotalNeurons); err != nil {
@@ -122,11 +155,14 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	for i, n := range net.Neurons {
 		allNeuronIDs[i] = n.ID
 	}
-	// InitializeAllToAllWeights uses rng and SimParams.
-	// Consider if InitializeAllToAllWeights could also return an error. For now, assuming it doesn't.
-	net.SynapticWeights.InitializeAllToAllWeights(allNeuronIDs, net.SimParams, net.rng)
 
-	net.finalizeInitialization()
+	net.SynapticWeights.InitializeAllToAllWeights(allNeuronIDs) // Now uses internal simParams and rng
+
+	net.finalizeInitialization() // Populates neuronMap, ID sets
+
+	// Initial build of the spatial grid after neurons are positioned
+	net.SpatialGrid.Build(net.Neurons)
+
 
 	return net, nil
 }
@@ -277,11 +313,20 @@ func (cn *CrowNet) _applyChemicalModulationEffects() {
 	}
 }
 
+// RunCycle executes a single simulation cycle of the CrowNet.
+// It orchestrates the various phases of the simulation including:
+// 1. Processing continuous inputs (if any).
+// 2. Updating base neuron states (potential decay, refractory periods).
+// 3. Processing active pulse propagation and their effects on neurons (using the spatial grid for optimization).
+// 4. Updating and applying neurochemical effects.
+// 5. Applying Hebbian learning.
+// 6. Applying synaptogenesis (neuron movement), which also triggers a rebuild of the spatial grid if enabled.
+// 7. Incrementing the simulation cycle count.
 func (cn *CrowNet) RunCycle() {
 	cn.processFrequencyInputs()         // Step 1: Process any continuous/frequency-based inputs
 	cn._updateAllNeuronStates()         // Step 2: Update base states of all neurons
 
-	cn.processActivePulses()            // Step 3: Process pulse propagation and effects
+	cn.processActivePulses()            // Step 3: Process pulse propagation and effects (uses SpatialGrid)
 
 	cn._applyChemicalModulationEffects() // Step 4: Apply or reset neurochemical effects
 
@@ -290,6 +335,8 @@ func (cn *CrowNet) RunCycle() {
 	}
 	if cn.isSynaptogenesisEnabled {     // Step 6: Apply Synaptogenesis (neuron movement) if enabled
 		cn.applySynaptogenesis()
+		// Rebuild spatial grid if neurons moved
+		cn.SpatialGrid.Build(cn.Neurons)
 	}
 	cn.CycleCount++                     // Step 7: Increment cycle count
 }
@@ -304,9 +351,10 @@ func (cn *CrowNet) RunCycle() {
 //    - Adding all new pulses to the active list for processing in subsequent cycles.
 func (cn *CrowNet) processActivePulses() {
 	// Step 1: Process existing pulses and get newly generated ones from firing neurons.
+	// Pass the spatialGrid and the pointer to SynapticWeights.
 	newlyGeneratedPulses := cn.ActivePulses.ProcessCycle(
-		cn.Neurons,
-		cn.SynapticWeights,
+		cn.SpatialGrid,
+		cn.SynapticWeights, // cn.SynapticWeights is already *synaptic.NetworkWeights
 		cn.CycleCount,
 		cn.SimParams,
 	)

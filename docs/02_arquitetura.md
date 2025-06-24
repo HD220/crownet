@@ -126,11 +126,11 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
     *   Depende de: `common` (para `Point`), `config` (para velocidade do pulso, raio máximo), `neuron`, `synaptic`, `space`.
 
 *   **`space`** (Cálculos Espaciais)
-    *   Localizado em `space/geometry.go`.
+    *   Localizado em `space/geometry.go` e `space/spatial_grid.go`.
     *   Responsável por:
-        *   Fornecer funções utilitárias relacionadas ao espaço N-dimensional (atualmente 16D).
-        *   Inclui cálculo de distância Euclidiana, geração de posições aleatórias dentro de esferas/hiperesferas.
-    *   Depende de: `math`, `math/rand`, `common` (para `Point`).
+        *   Fornecer funções utilitárias relacionadas ao espaço N-dimensional (atualmente 16D), como cálculo de distância Euclidiana e geração de posições aleatórias (`geometry.go`).
+        *   Implementar estruturas de dados para indexação espacial, como `SpatialGrid`, para otimizar buscas de proximidade (ex: encontrar neurônios próximos a um pulso) (`spatial_grid.go`).
+    *   Depende de: `math`, `math/rand`, `common` (para `Point`), `neuron` (para `SpatialGrid` armazenar neurônios), `fmt`.
 
 *   **`synaptic`** (Gerenciamento de Pesos Sinápticos)
     *   Localizado em `synaptic/weights.go`.
@@ -212,15 +212,15 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
     2.  **Atualizar Estados dos Neurônios**: Para cada neurônio:
         *   Decair `AccumulatedPulse`.
         *   Avançar estado na máquina de estados (Repouso, Disparo, Refratário Absoluto, Refratário Relativo) e `CyclesInCurrentState`.
-    3.  **Processar Pulsos Ativos (`PulseList.ProcessCycle`)**: Para cada pulso em `ActivePulses`:
-        *   Avançar `CurrentDistance` (baseado na velocidade do pulso).
-        *   Identificar neurônios dentro da "casca" de efeito do pulso.
-        *   Para cada neurônio atingido, calcular o efeito (`pulse.Value * SynapticWeights.Get(pulse.EmittingNeuronID, targetNeuronID)`) e adicionar ao `AccumulatedPulse` do neurônio alvo.
-        *   Remover pulsos que excederam `MaxTravelRadius`.
+    3.  **Processar Pulsos Ativos (`PulseList.ProcessCycle` otimizado com `SpatialGrid`)**:
+        *   Para cada pulso ativo, sua propagação é atualizada.
+        *   Em vez de verificar todos os neurônios, o `SpatialGrid` é consultado para obter uma lista de neurônios candidatos que estão espacialmente próximos à casca de efeito do pulso.
+        *   Apenas para estes neurônios candidatos, é feita a verificação precisa de distância e, se aplicável, o efeito do pulso é calculado (`pulse.Value * SynapticWeight`) e integrado ao `AccumulatedPulse` do neurônio alvo.
+        *   Pulsos que excederam seu `MaxTravelRadius` são removidos.
     4.  **Verificar Disparos Neuronais**: Para cada neurônio:
         *   Se `AccumulatedPulse > CurrentFiringThreshold` e não em estado refratário absoluto, o neurônio dispara.
         *   Mudar estado para `Firing`, registrar `LastFiredCycle`.
-        *   Criar um novo `pulse.Pulse` originado deste neurônio e adicioná-lo a `ActivePulses`.
+        *   Criar um novo `pulse.Pulse` originado deste neurônio e adicioná-lo à lista de pulsos ativos da rede.
     5.  **Atualizar Neuroquímicos (`neurochemical.Neurochemical.UpdateLevel`)**:
         *   Calcular produção de Cortisol (baseado em atividade perto da "glândula") e Dopamina (baseado em disparos de neurônios dopaminérgicos).
         *   Aplicar decaimento percentual aos níveis de Cortisol e Dopamina.
