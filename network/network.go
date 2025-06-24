@@ -14,9 +14,25 @@ import (
 	"sort"
 )
 
+const minEffectiveLearningRateThreshold = 1e-9
+
+// _isNeuronRecentlyActive checks if a neuron has fired within the given coincidence window relative to the current cycle.
+// It accesses CrowNet's CycleCount via the receiver.
+func (cn *CrowNet) _isNeuronRecentlyActive(n *neuron.Neuron, coincidenceWindow common.CycleCount) bool {
+	if n == nil || n.LastFiredCycle == -1 {
+		return false
+	}
+	// Neuron's LastFiredCycle is the cycle number it fired in.
+	// cn.CycleCount is the current cycle number (about to end).
+	// If neuron fired in cycle X, and current cycle is Y, age is Y-X.
+	// If this age is <= window, it's recent.
+	return (cn.CycleCount - n.LastFiredCycle) <= coincidenceWindow
+}
+
 type CrowNet struct {
-	SimParams        *config.SimulationParameters
-	baseLearningRate common.Rate
+	// --- Core Simulation Parameters & Random Number Generation ---
+	SimParams        *config.SimulationParameters // Pointer to shared simulation parameters
+	baseLearningRate common.Rate                  // Base learning rate, modulated by chemical environment
 	rng              *rand.Rand
 
 	Neurons            []*neuron.Neuron
@@ -294,34 +310,48 @@ func (cn *CrowNet) processActivePulses() {
 	}
 }
 
+// applyHebbianLearning applies Hebbian learning rules to update synaptic weights.
+// It strengthens connections between neurons that fire together within a defined time window (coincidenceWindow).
+// The learning rate is modulated by the neurochemical environment.
 func (cn *CrowNet) applyHebbianLearning() {
+	// Calculate effective learning rate, modulated by chemical environment.
 	effectiveLR := common.Rate(float64(cn.baseLearningRate) * float64(cn.ChemicalEnv.LearningRateModulationFactor))
-	if effectiveLR < 1e-9 {
+
+	// If learning rate is negligible, skip the computationally intensive process.
+	if effectiveLR < minEffectiveLearningRateThreshold {
 		return
 	}
+
 	coincidenceWindow := common.CycleCount(cn.SimParams.HebbianCoincidenceWindow)
+
+	// Iterate over all possible presynaptic neurons.
 	for _, preSynapticNeuron := range cn.Neurons {
-		preActivity := 0.0
-		if preSynapticNeuron.LastFiredCycle != -1 && (cn.CycleCount-preSynapticNeuron.LastFiredCycle <= coincidenceWindow) {
-			preActivity = 1.0
+		// Determine if the presynaptic neuron was recently active.
+		isPreActive := cn._isNeuronRecentlyActive(preSynapticNeuron, coincidenceWindow)
+
+		if !isPreActive {
+			continue // If presynaptic neuron wasn't active, no update based on it.
 		}
-		if preActivity == 0.0 {
-			continue
-		}
+		preActivityValue := 1.0 // Using a binary activity signal for this Hebbian rule.
+
+		// Iterate over all possible postsynaptic neurons.
 		for _, postSynapticNeuron := range cn.Neurons {
-			if preSynapticNeuron.ID == postSynapticNeuron.ID {
+			if preSynapticNeuron.ID == postSynapticNeuron.ID { // No self-connections for Hebbian learning.
 				continue
 			}
-			postActivity := 0.0
-			if postSynapticNeuron.LastFiredCycle != -1 && (cn.CycleCount-postSynapticNeuron.LastFiredCycle <= coincidenceWindow) {
-				postActivity = 1.0
-			}
-			if postActivity > 0 {
+
+			// Determine if the postsynaptic neuron was recently active.
+			isPostActive := cn._isNeuronRecentlyActive(postSynapticNeuron, coincidenceWindow)
+
+			if isPostActive { // If postsynaptic neuron was also active (co-activation).
+				postActivityValue := 1.0 // Using a binary activity signal.
+
+				// Delegate the actual weight update to SynapticWeights.
 				cn.SynapticWeights.ApplyHebbianUpdate(
 					preSynapticNeuron.ID,
 					postSynapticNeuron.ID,
-					preActivity,
-					postActivity,
+					preActivityValue,  // Pass 1.0 for active
+					postActivityValue, // Pass 1.0 for active
 					effectiveLR,
 					cn.SimParams,
 				)
