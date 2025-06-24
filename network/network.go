@@ -214,24 +214,40 @@ func (cn *CrowNet) SetDynamicState(learning, synaptogenesis, chemicalModulation 
 	cn.isChemicalModulationEnabled = chemicalModulation
 }
 
-func (cn *CrowNet) RunCycle() {
-	cn.processFrequencyInputs()
+// _updateAllNeuronStates handles the decay of accumulated potential and state advancement for all neurons.
+func (cn *CrowNet) _updateAllNeuronStates() {
 	for _, n := range cn.Neurons {
 		n.DecayPotential(cn.SimParams)
 		n.AdvanceState(cn.CycleCount, cn.SimParams)
 	}
-	cn.processActivePulses()
+}
+
+// _applyChemicalModulationEffects updates chemical levels and applies their effects to neurons
+// if chemical modulation is enabled. Otherwise, it resets modulation factors and neuron thresholds.
+func (cn *CrowNet) _applyChemicalModulationEffects() {
 	if cn.isChemicalModulationEnabled {
+		// Note: CortisolGlandPosition is accessed from SimParams.
 		cn.ChemicalEnv.UpdateLevels(cn.Neurons, cn.ActivePulses.GetAll(), cn.CortisolGlandPosition, cn.SimParams)
 		cn.ChemicalEnv.ApplyEffectsToNeurons(cn.Neurons, cn.SimParams)
 	} else {
+		// Reset modulation factors and thresholds if chemical modulation is off
 		cn.ChemicalEnv.LearningRateModulationFactor = 1.0
 		cn.ChemicalEnv.SynaptogenesisModulationFactor = 1.0
 		for _, n := range cn.Neurons {
 			n.CurrentFiringThreshold = n.BaseFiringThreshold
 		}
 	}
-	if cn.isLearningEnabled {
+}
+
+func (cn *CrowNet) RunCycle() {
+	cn.processFrequencyInputs()         // Step 1: Process any continuous/frequency-based inputs
+	cn._updateAllNeuronStates()         // Step 2: Update base states of all neurons
+
+	cn.processActivePulses()            // Step 3: Process pulse propagation and effects
+
+	cn._applyChemicalModulationEffects() // Step 4: Apply or reset neurochemical effects
+
+	if cn.isLearningEnabled {           // Step 5: Apply Hebbian learning if enabled
 		cn.applyHebbianLearning()
 	}
 	if cn.isSynaptogenesisEnabled {
