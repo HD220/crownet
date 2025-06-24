@@ -109,14 +109,24 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	return net, nil
 }
 
+// getNextNeuronID returns the next available unique ID for a new neuron and increments the internal counter.
 func (cn *CrowNet) getNextNeuronID() common.NeuronID {
 	id := cn.neuronIDCounter
 	cn.neuronIDCounter++
 	return id
 }
 
+// addNeuronsOfType creates and adds a specified number of neurons of a given type to the network.
+// Neurons are positioned randomly within a sphere whose radius is determined by radiusFactor * SimParams.SpaceMaxDimension.
+// It also updates the InputNeuronIDs or OutputNeuronIDs slices if applicable.
 func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFactor float64) {
 	if count <= 0 {
+		return
+	}
+	// Ensure SimParams is not nil to prevent panic, though it should always be set in a valid CrowNet.
+	if cn.SimParams == nil {
+		// This case should ideally not be reached if CrowNet is constructed properly.
+		// Consider logging a critical error or panicking if SimParams is unexpectedly nil.
 		return
 	}
 	for i := 0; i < count; i++ {
@@ -135,6 +145,10 @@ func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFac
 	}
 }
 
+// calculateInternalNeuronCounts determines the number of dopaminergic, inhibitory, and
+// excitatory neurons to create based on the total remaining neurons to be distributed and
+// the configured percentages for dopaminergic and inhibitory types. Excitatory neurons
+// make up the remainder.
 func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP float64) (numDopaminergic, numInhibitory, numExcitatory int) {
 	if remainingForDistribution <= 0 {
 		return 0, 0, 0
@@ -146,17 +160,24 @@ func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP f
 	return
 }
 
-func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) {
+// initializeNeurons populates the network with neurons of different types based on configuration.
+// It ensures the minimum number of input and output neurons are created and distributes
+// the remaining neurons among internal types (excitatory, inhibitory, dopaminergic).
+// It returns an error if the final neuron count does not match the expected count.
+// initializeNeurons populates the network with neurons of different types based on configuration.
+// It ensures the minimum number of input and output neurons are created and distributes
+// the remaining neurons among internal types (excitatory, inhibitory, dopaminergic).
+// Assumes totalNeuronsInput has been validated by config.Validate() to be >= MinInputNeurons and MinOutputNeurons.
+// It returns an error if the final neuron count does not match the expected count, indicating an internal logic issue.
+func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
 	simParams := cn.SimParams
-	actualTotalNeurons := totalNeuronsInput
+	actualTotalNeurons := totalNeuronsInput // totalNeuronsInput is pre-validated by config.Validate()
 	numInput := simParams.MinInputNeurons
 	numOutput := simParams.MinOutputNeurons
 
-	if actualTotalNeurons < numInput+numOutput {
-		fmt.Printf("Aviso: Total de neurônios configurado (%d) é menor que o mínimo para Input (%d) e Output (%d). Ajustando para o mínimo necessário (%d).\n",
-			actualTotalNeurons, numInput, numOutput, numInput+numOutput)
-		actualTotalNeurons = numInput + numOutput
-	}
+	// Note: The check for actualTotalNeurons < numInput+numOutput and associated adjustment/warning
+	// has been moved to config.Validate() to handle configuration errors upfront.
+	// initializeNeurons now assumes totalNeuronsInput is sufficient.
 
 	cn.addNeuronsOfType(numInput, neuron.Input, simParams.ExcitatoryRadiusFactor)
 	cn.addNeuronsOfType(numOutput, neuron.Output, simParams.ExcitatoryRadiusFactor)

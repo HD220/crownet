@@ -241,9 +241,10 @@ func NewAppConfig(args []string) (*AppConfig, error) {
 
 func (ac *AppConfig) Validate() error {
 	// General CLI parameter validation
-	if ac.Cli.TotalNeurons <= 0 {
+	if ac.Cli.TotalNeurons <= 0 { // Basic positivity check
 		return fmt.Errorf("total neurons must be positive, got %d", ac.Cli.TotalNeurons)
 	}
+	// More specific check against minimums will be done after SimParams are validated for MinInput/OutputNeurons
 	if ac.Cli.BaseLearningRate < 0 {
 		return fmt.Errorf("baseLearningRate must be non-negative, got %f", ac.Cli.BaseLearningRate)
 	}
@@ -291,10 +292,20 @@ func (ac *AppConfig) Validate() error {
 		}
 	}
 
-	// SimulationParameters validation
-	if ac.SimParams.MinInputNeurons <= 0 || ac.SimParams.MinOutputNeurons <= 0 {
-		return fmt.Errorf("MinInputNeurons (%d) and MinOutputNeurons (%d) must be positive", ac.SimParams.MinInputNeurons, ac.SimParams.MinOutputNeurons)
+	// SimulationParameters validation (Order can be important for dependent checks)
+	if ac.SimParams.MinInputNeurons <= 0 {
+		return fmt.Errorf("MinInputNeurons must be positive, got %d", ac.SimParams.MinInputNeurons)
 	}
+	if ac.SimParams.MinOutputNeurons <= 0 {
+		return fmt.Errorf("MinOutputNeurons must be positive, got %d", ac.SimParams.MinOutputNeurons)
+	}
+
+	// Check TotalNeurons from CLI against the (now validated positive) MinInput/Output from SimParams
+	if ac.Cli.TotalNeurons < (ac.SimParams.MinInputNeurons + ac.SimParams.MinOutputNeurons) {
+		return fmt.Errorf("total neurons from CLI (%d) is less than the sum of required MinInputNeurons (%d) and MinOutputNeurons (%d)",
+			ac.Cli.TotalNeurons, ac.SimParams.MinInputNeurons, ac.SimParams.MinOutputNeurons)
+	}
+
 	if ac.SimParams.PatternSize <= 0 {
 		return fmt.Errorf("PatternSize must be positive, got %d", ac.SimParams.PatternSize)
 	}
