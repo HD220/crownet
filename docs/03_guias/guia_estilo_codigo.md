@@ -82,6 +82,70 @@ O projeto agora possui um arquivo de configuração dedicado `.golangci.yml` na 
 golangci-lint run ./...
 ```
 
+### Hook de Pre-Commit (Opcional)
+
+Para garantir que os linters sejam executados automaticamente antes de cada commit, você pode configurar um hook de pre-commit do Git. Isso ajuda a manter a consistência do código no repositório e a identificar problemas mais cedo.
+
+**Conteúdo do Script de Pre-Commit:**
+
+O script a seguir deve ser colocado em um arquivo chamado `pre-commit` dentro do diretório `.git/hooks/` do seu repositório local.
+
+```sh
+#!/bin/sh
+
+# Hook pre-commit para executar golangci-lint
+
+echo "Executando golangci-lint antes do commit..."
+
+# Verifica se golangci-lint está instalado
+if ! command -v golangci-lint &> /dev/null
+then
+    echo "golangci-lint não encontrado no PATH."
+    echo "Por favor, instale-o: https://golangci-lint.run/usage/install/"
+    exit 1
+fi
+
+# Executa o linter na raiz do projeto
+# A opção --fix pode ser adicionada se você quiser tentar corrigir os problemas automaticamente
+# No entanto, para um hook pre-commit, é geralmente melhor apenas reportar os erros.
+if golangci-lint run ./...
+then
+    echo "Nenhum problema encontrado pelo linter."
+    exit 0 # Permite o commit
+else
+    echo "Erros de linting encontrados. Corrija-os antes de commitar."
+    echo "Você pode tentar executar 'golangci-lint run --fix ./...' para corrigir alguns problemas automaticamente."
+    exit 1 # Impede o commit
+fi
+```
+
+**Instalação do Hook:**
+
+1.  **Navegue até o diretório de hooks do Git** no seu clone local do repositório. A partir da raiz do projeto:
+    ```bash
+    cd .git/hooks
+    ```
+    (Se o diretório `hooks` não existir, crie-o: `mkdir .git/hooks`)
+
+2.  **Crie o arquivo de hook**:
+    Crie um novo arquivo chamado `pre-commit` (sem extensão) neste diretório.
+    ```bash
+    touch pre-commit
+    ```
+
+3.  **Copie o conteúdo do script**:
+    Abra o arquivo `pre-commit` em um editor de texto e cole o conteúdo do script fornecido acima.
+
+4.  **Torne o script executável**:
+    No terminal, execute o seguinte comando para dar permissão de execução ao script:
+    ```bash
+    chmod +x pre-commit
+    ```
+
+Agora, a cada vez que você executar `git commit`, este script será acionado. Se o `golangci-lint` reportar quaisquer problemas, o commit será abortado, permitindo que você corrija os problemas antes de prosseguir.
+
+**Nota Importante:** Este hook de pre-commit é local para o seu repositório. Ele não é versionado com o projeto (o diretório `.git` é ignorado pelo Git). Portanto, cada desenvolvedor que desejar utilizar este hook precisará seguir estas instruções para configurá-lo em seu próprio ambiente de desenvolvimento.
+
 ## 8. Referências Adicionais
 
 *   [Effective Go](https://go.dev/doc/effective_go)
