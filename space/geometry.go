@@ -5,42 +5,50 @@ import (
 	"math"
 )
 
-// pointDimension define a dimensionalidade dos pontos e vetores neste pacote.
+// pointDimension defines the dimensionality of points and vectors processed by this package.
+// For CrowNet, this is typically a 16-dimensional space.
 const pointDimension = 16
 
-// EuclideanDistance calcula a distância Euclidiana entre dois pontos.
+// EuclideanDistance calculates the standard Euclidean distance between two N-dimensional points.
+// It sums the squares of the differences of corresponding coordinates and returns the square root of that sum.
 func EuclideanDistance(p1, p2 common.Point) float64 {
 	var sumOfSquares float64
-	for i := 0; i < pointDimension; i++ {
+	for i := range p1 { // Iterate over dimensions of the point
 		diff := float64(p1[i] - p2[i])
 		sumOfSquares += diff * diff
 	}
 	return math.Sqrt(sumOfSquares)
 }
 
-// IsWithinRadius verifica se um ponto pTest está dentro de um raio de um ponto central pCenter.
+// IsWithinRadius checks if a point pTest is within a specified Euclidean distance (radius)
+// from a central point pCenter in N-dimensional space.
+// It handles negative radius by returning false.
+// For robustness and clarity with edge cases (like radius=0), it uses EuclideanDistance.
 func IsWithinRadius(pCenter, pTest common.Point, radius float64) bool {
-	// Evitar Sqrt se possível, comparando quadrados
-	if radius < 0 { return false } // Raio negativo não faz sentido
-	var sumOfSquares float64
-	for i := 0; i < pointDimension; i++ {
-		diff := float64(pCenter[i] - pTest[i])
-		sumOfSquares += diff * diff
-		// Otimização: se sumOfSquares já excede radius*radius, podemos parar mais cedo.
-		// No entanto, radius*radius pode dar overflow se radius for grande.
-		// A comparação direta com EuclideanDistance é mais simples de manter correta.
+	if radius < 0 { // A negative radius is not meaningful for this check.
+		return false
 	}
-	// return sumOfSquares <= radius*radius // Alternativa sem Sqrt, mas requer cuidado com radius=0
+	// Direct Euclidean distance comparison is preferred over squared distances
+	// to avoid potential overflow with radius*radius and to simplify handling of radius = 0.
 	return EuclideanDistance(pCenter, pTest) <= radius
 }
 
-// ClampToHyperSphere garante que um ponto permaneça dentro de uma hiperesfera de raio `maxRadius`
-// a partir da origem (0,0,...,0). Se estiver fora, o ponto é projetado para a superfície da esfera.
-// Retorna o novo ponto e um booleano indicando se foi necessário fazer o clamp.
+// ClampToHyperSphere ensures that a given point p stays within (or on the surface of)
+// an N-dimensional hypersphere centered at the origin with a specified maxRadius.
+// If the point is outside this hypersphere, it is projected onto the hypersphere's surface
+// by scaling its vector from the origin.
+//
+// Parameters:
+//   - p: The point to be clamped.
+//   - maxRadius: The maximum allowed distance from the origin. If negative, the original point is returned as no clamping is applied.
+//
+// Returns:
+//   - clampedPoint: The (potentially) clamped point.
+//   - wasClamped: A boolean indicating true if the point was outside and clamped, false otherwise.
 func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.Point, wasClamped bool) {
-	const epsilon = 1e-9 // For floating point comparisons
+	const epsilon = 1e-9 // Small value for floating-point comparisons, e.g., to check if a point is at the origin.
 
-	if maxRadius < 0 {
+	if maxRadius < 0 { // A negative maxRadius implies no boundary or an invalid scenario.
 		// Negative radius implies no boundary.
 		return p, false
 	}
@@ -48,7 +56,7 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 	// Calculate squared distance from origin.
 	distFromOriginSq := 0.0
 	isOrigin := true
-	for i := 0; i < pointDimension; i++ {
+	for i := range p { // Iterate over dimensions of the point
 		coordVal := float64(p[i])
 		distFromOriginSq += coordVal * coordVal
 		if math.Abs(coordVal) > epsilon {
@@ -89,7 +97,7 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 
 	scaleFactor := maxRadius / distFromOrigin
 	clampedP := common.Point{}
-	for i := 0; i < pointDimension; i++ {
+	for i := range p { // Iterate over dimensions of the point
 		clampedP[i] = common.Coordinate(float64(p[i]) * scaleFactor)
 	}
 	return clampedP, true
@@ -98,17 +106,33 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 // GenerateRandomPositionInHyperSphere cria uma posição aleatória dentro de uma hiperesfera
 // de raio `maxRadius` centrada na origem.
 // Utiliza amostragem por rejeição dentro de um hipercubo envolvente.
-// Nota: A amostragem por rejeição pode se tornar ineficiente em altas dimensões (como 16D)
-// devido ao "curse of dimensionality", onde o volume da hiperesfera se torna
-// uma fração muito pequena do volume do hipercubo envolvente.
-// Alternativas como o método de Muller podem ser mais eficientes, mas são mais complexas.
+//
+// Parameters:
+//   - maxRadius: The radius of the hypersphere. If negative, it's treated as 0.
+//   - randomSource: A function that returns a float64 in [0.0, 1.0), used as the source of randomness.
+//                  This allows for deterministic testing by providing a seeded RNG.
+//
+// Returns:
+//   - common.Point: A randomly generated point within the specified N-dimensional hypersphere.
+//
+// Note on Efficiency:
+// Rejection sampling becomes inefficient in high dimensions (like 16D used in CrowNet)
+// due to the "curse of dimensionality," where the volume of the hypersphere becomes
+// a very small fraction of the volume of its enclosing hypercube. This means many
+// generated points are rejected, leading to potentially many iterations.
+// Alternatives like Marsaglia's method (for 2D/3D) or Muller's method (normalizing points
+// generated from a Gaussian distribution) are more efficient for higher dimensions but are more complex to implement.
+// For the current scope, rejection sampling is used for its simplicity.
 func GenerateRandomPositionInHyperSphere(maxRadius float64, randomSource func() float64) common.Point {
-	if maxRadius < 0 { maxRadius = 0 } // Raio não pode ser negativo
+	if maxRadius < 0 { // Ensure radius is non-negative.
+		maxRadius = 0
+	}
 
+	// Loop indefinitely until a point within the hypersphere is found.
 	for {
 		var p common.Point
 		distSq := 0.0
-		for i := 0; i < pointDimension; i++ {
+		for i := range p { // Iterate over dimensions of the point
 			// Gera coordenada entre -maxRadius e +maxRadius
 			coord := (randomSource()*2*maxRadius - maxRadius)
 			p[i] = common.Coordinate(coord)
