@@ -20,58 +20,93 @@ type CrowNet struct {
 	rng              *rand.Rand
 
 	Neurons            []*neuron.Neuron
-	InputNeuronIDs     []common.NeuronID
-	OutputNeuronIDs    []common.NeuronID
-	neuronIDCounter    common.NeuronID
-	CortisolGlandPosition common.Point
+	// --- Core Simulation Parameters & Random Number Generation ---
+	SimParams        *config.SimulationParameters // Pointer to shared simulation parameters
+	baseLearningRate common.Rate                  // Base learning rate, modulated by chemical environment
+	rng              *rand.Rand                   // Local random number generator for this network instance
 
-	ActivePulses   *pulse.PulseList
-	SynapticWeights synaptic.NetworkWeights
-	ChemicalEnv    *neurochemical.Environment
+	// --- Neuron Collections and Management ---
+	Neurons         []*neuron.Neuron  // Slice of all neuron instances in the network
+	InputNeuronIDs  []common.NeuronID // Cache of IDs for input neurons, sorted
+	OutputNeuronIDs []common.NeuronID // Cache of IDs for output neurons, sorted
+	neuronIDCounter common.NeuronID   // Counter for generating unique neuron IDs
 
-	CycleCount common.CycleCount
+	// --- Dynamic Sub-systems of the Network ---
+	ActivePulses    *pulse.PulseList         // Manages active pulses propagating through the network
+	SynapticWeights synaptic.NetworkWeights  // Manages the matrix of synaptic weights between neurons
+	ChemicalEnv     *neurochemical.Environment // Manages the neurochemical environment (e.g., cortisol, dopamine levels and effects)
 
+	// --- Simulation State ---
+	CycleCount common.CycleCount // Current simulation cycle
+
+	// Feature-specific state
+	// For 'sim' mode continuous frequency input
 	inputTargetFrequencies map[common.NeuronID]float64
 	timeToNextInputFire    map[common.NeuronID]common.CycleCount
+	// For calculating output neuron firing frequency
 	outputFiringHistory    map[common.NeuronID][]common.CycleCount
 
-	isLearningEnabled      bool
-	isSynaptogenesisEnabled bool
-	isChemicalModulationEnabled bool
+	// Dynamic process toggles
+	isLearningEnabled           bool // If true, Hebbian learning rule is applied
+	isSynaptogenesisEnabled     bool // If true, neuron movement (synaptogenesis) occurs
+	isChemicalModulationEnabled bool // If true, neurochemicals modulate learning, synaptogenesis, and firing thresholds
 }
 
-func NewCrowNet(totalNeurons int, baseLR common.Rate, simParams *config.SimulationParameters, seed int64) *CrowNet {
-	localRng := rand.New(rand.NewSource(seed))
+// NewCrowNet creates and initializes a new CrowNet instance.
+// It now takes an AppConfig to centralize configuration sourcing and returns an error if initialization fails.
+func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
+	if appCfg == nil {
+		return nil, fmt.Errorf("NewCrowNet: appConfig cannot be nil")
+	}
+	simParams := &appCfg.SimParams // Use a pointer to SimParams
+
+	localRng := rand.New(rand.NewSource(appCfg.Cli.Seed))
 	net := &CrowNet{
-		SimParams:              simParams,
-		baseLearningRate:       baseLR,
-		rng:                    localRng,
-		Neurons:                make([]*neuron.Neuron, 0, totalNeurons),
-		InputNeuronIDs:         make([]common.NeuronID, 0, simParams.MinInputNeurons),
-		OutputNeuronIDs:        make([]common.NeuronID, 0, simParams.MinOutputNeurons),
-		neuronIDCounter:        0,
-		CortisolGlandPosition:  common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		ActivePulses:           pulse.NewPulseList(),
-		SynapticWeights:        synaptic.NewNetworkWeights(),
-		ChemicalEnv:            neurochemical.NewEnvironment(),
-		CycleCount:             0,
+		// Simulation parameters and core components
+		SimParams:        simParams,
+		baseLearningRate: appCfg.Cli.BaseLearningRate,
+		rng:              localRng,
+
+		// Neuron collections and management
+		Neurons:         make([]*neuron.Neuron, 0, appCfg.Cli.TotalNeurons),
+		InputNeuronIDs:  make([]common.NeuronID, 0, simParams.MinInputNeurons),
+		OutputNeuronIDs: make([]common.NeuronID, 0, simParams.MinOutputNeurons),
+		neuronIDCounter: 0,
+
+		// Dynamic sub-systems
+		ActivePulses:    pulse.NewPulseList(),
+		SynapticWeights: synaptic.NewNetworkWeights(),
+		ChemicalEnv:     neurochemical.NewEnvironment(), // Note: CortisolGlandPosition is now in SimParams.
+		                                                // ChemicalEnv.UpdateLevels will need to access it via SimParams.
+		// Simulation state
+		CycleCount:      0,
+
+		// Feature-specific state
 		inputTargetFrequencies: make(map[common.NeuronID]float64),
 		timeToNextInputFire:    make(map[common.NeuronID]common.CycleCount),
 		outputFiringHistory:    make(map[common.NeuronID][]common.CycleCount),
+
+		// Dynamic process toggles (default to true)
 		isLearningEnabled:      true,
 		isSynaptogenesisEnabled: true,
 		isChemicalModulationEnabled: true,
 	}
 
-	net.initializeNeurons(totalNeurons)
+	// Initialize neurons - this might return an error
+	if err := net.initializeNeurons(appCfg.Cli.TotalNeurons); err != nil {
+		return nil, fmt.Errorf("failed to initialize neurons: %w", err)
+	}
 	allNeuronIDs := make([]common.NeuronID, len(net.Neurons))
 	for i, n := range net.Neurons {
 		allNeuronIDs[i] = n.ID
 	}
+	// InitializeAllToAllWeights uses rng and SimParams.
+	// Consider if InitializeAllToAllWeights could also return an error. For now, assuming it doesn't.
 	net.SynapticWeights.InitializeAllToAllWeights(allNeuronIDs, net.SimParams, net.rng)
+
 	net.finalizeInitialization()
 
-	return net
+	return net, nil
 }
 
 func (cn *CrowNet) getNextNeuronID() common.NeuronID {
@@ -138,8 +173,10 @@ func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) {
 	cn.addNeuronsOfType(numExcitatory, neuron.Excitatory, simParams.ExcitatoryRadiusFactor)
 
 	if len(cn.Neurons) != actualTotalNeurons {
-		fmt.Printf("ALERTA CRÍTICO: Contagem final de neurônios (%d) não corresponde ao esperado (%d) em initializeNeurons.\n", len(cn.Neurons), actualTotalNeurons)
+		// This is a critical failure in setup.
+		return fmt.Errorf("critical alert: final neuron count (%d) does not match expected (%d) in initializeNeurons", len(cn.Neurons), actualTotalNeurons)
 	}
+	return nil
 }
 
 func (cn *CrowNet) finalizeInitialization() {

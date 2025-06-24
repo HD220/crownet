@@ -77,6 +77,8 @@ type SimulationParameters struct {
 	DopamineInfluenceOnSynapto    common.Factor // How dopamine influences synaptogenesis.
 	FiringThresholdIncreaseOnDopa common.Factor // How dopamine influences neuron firing thresholds.
 	FiringThresholdIncreaseOnCort common.Factor // How cortisol influences neuron firing thresholds.
+
+	CortisolGlandPosition common.Point // Position of the cortisol gland.
 }
 
 type CLIConfig struct {
@@ -113,6 +115,7 @@ type AppConfig struct {
 func DefaultSimulationParameters() SimulationParameters {
 	return SimulationParameters{
 		SpaceMaxDimension:             10.0,
+		CortisolGlandPosition:         common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // Default to origin
 		BaseFiringThreshold:           1.0,
 		PulsePropagationSpeed:         1.0,
 		HebbianCoincidenceWindow:      2,
