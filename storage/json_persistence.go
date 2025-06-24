@@ -9,7 +9,22 @@ import (
 	"strconv"
 )
 
+// SaveNetworkWeightsToJSON serializes the given network synaptic weights into a JSON file
+// at the specified filePath.
+// The synaptic.NetworkWeights type (map[common.NeuronID]map[common.NeuronID]common.SynapticWeight)
+// is converted to map[string]map[string]float64 for JSON compatibility, as JSON object keys
+// must be strings. Neuron IDs are converted to their string representations.
+// The JSON output is indented for human readability.
+// File permissions are set to 0644.
+//
+// Parameters:
+//   - weights: The synaptic.NetworkWeights data structure to save.
+//   - filePath: The path to the file where the JSON data will be written.
+//
+// Returns:
+//   - error: An error if serialization or file writing fails, nil otherwise.
 func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) error {
+	// Prepare a structure with string keys for JSON serialization.
 	serializableWeights := make(map[string]map[string]float64)
 	for fromID, toMap := range weights {
 		strFromID := strconv.FormatInt(int64(fromID), 10)
@@ -32,7 +47,20 @@ func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) 
 	return nil
 }
 
+// LoadNetworkWeightsFromJSON deserializes network synaptic weights from a JSON file
+// located at the specified filePath.
+// It expects the JSON structure to be map[string]map[string]float64, where keys
+// are string representations of NeuronIDs. These are converted back to their numeric types.
+//
+// Parameters:
+//   - filePath: The path to the JSON file containing the weights.
+//
+// Returns:
+//   - synaptic.NetworkWeights: The loaded synaptic weights.
+//   - error: An error if file reading, JSON unmarshalling, or NeuronID parsing fails.
+//            Specific error for os.IsNotExist if the file is not found.
 func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error) {
+	// Read the JSON file content.
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
