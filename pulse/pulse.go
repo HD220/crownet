@@ -8,17 +8,28 @@ import (
 	"crownet/synaptic"
 )
 
-// Pulse representa um sinal elétrico ou químico propagando-se pela rede.
+// defaultPulseMaxTravelRadiusFactor is multiplied by SimParams.SpaceMaxDimension
+// to set the MaxTravelRadius for newly created pulses. A factor of 2.0 implies
+// pulses can travel across the diameter of the defined space.
+const defaultPulseMaxTravelRadiusFactor = 2.0
+
+// Pulse represents an individual signal propagating through the neural network.
+// It carries information about its origin, strength, and current propagation status.
 type Pulse struct {
-	EmittingNeuronID common.NeuronID
-	OriginPosition   common.Point
-	BaseSignalValue  common.PulseValue
-	CreationCycle    common.CycleCount
-	CurrentDistance  float64
-	MaxTravelRadius  float64
+	EmittingNeuronID common.NeuronID   // ID of the neuron that emitted this pulse.
+	OriginPosition   common.Point      // Position in space where the pulse originated.
+	BaseSignalValue  common.PulseValue // Base strength/value of the pulse (e.g., +1.0 for excitatory, -1.0 for inhibitory).
+	CreationCycle    common.CycleCount // Simulation cycle in which this pulse was created.
+	CurrentDistance  float64           // Current distance the pulse has traveled from its origin.
+	MaxTravelRadius  float64           // Maximum distance this pulse can travel before becoming inactive.
 }
 
-// New cria um novo Pulso.
+// New creates and initializes a new Pulse instance.
+// emitterID: ID of the neuron emitting the pulse.
+// origin: The spatial position where the pulse starts.
+// signal: The base signal value of the pulse.
+// creationCycle: The simulation cycle when the pulse is generated.
+// maxRadius: The maximum distance the pulse can travel.
 func New(emitterID common.NeuronID, origin common.Point, signal common.PulseValue, creationCycle common.CycleCount, maxRadius float64) *Pulse {
 	return &Pulse{
 		EmittingNeuronID: emitterID,
@@ -30,14 +41,30 @@ func New(emitterID common.NeuronID, origin common.Point, signal common.PulseValu
 	}
 }
 
-// Propagate avança a distância do pulso e verifica se ele ainda está ativo.
+// Propagate advances the pulse's CurrentDistance by the PulsePropagationSpeed defined in simParams.
+// It returns true if the pulse is still active (i.e., its CurrentDistance is less than its MaxTravelRadius),
+// and false otherwise.
+// A defensive check for nil simParams is included.
 func (p *Pulse) Propagate(simParams *config.SimulationParameters) (isActive bool) {
+	if simParams == nil {
+		// Log error or handle as critical if SimParams can ever be nil here.
+		// For now, assume pulse cannot propagate without SimParams.
+		return false
+	}
 	p.CurrentDistance += simParams.PulsePropagationSpeed
 	return p.CurrentDistance < p.MaxTravelRadius
 }
 
-// GetEffectShellForCycle calcula o raio interno e externo da "casca" esférica
+// GetEffectShellForCycle calculates the inner (shellStartRadius) and outer (shellEndRadius)
+// boundaries of the spherical shell where this pulse exerts its influence during the current cycle.
+// The shell's thickness is determined by PulsePropagationSpeed.
+// shellStartRadius is clamped to be non-negative.
+// A defensive check for nil simParams is included.
 func (p *Pulse) GetEffectShellForCycle(simParams *config.SimulationParameters) (shellStartRadius, shellEndRadius float64) {
+	if simParams == nil {
+		// Return a zero-width shell if SimParams is nil, effectively making the pulse have no area of effect.
+		return p.CurrentDistance, p.CurrentDistance
+	}
 	shellEndRadius = p.CurrentDistance
 	shellStartRadius = p.CurrentDistance - simParams.PulsePropagationSpeed
 	if shellStartRadius < 0 {
@@ -46,44 +73,71 @@ func (p *Pulse) GetEffectShellForCycle(simParams *config.SimulationParameters) (
 	return shellStartRadius, shellEndRadius
 }
 
-// PulseList gerencia uma coleção de pulsos ativos na rede.
+// PulseList manages a collection of active pulses within the neural network.
+// It provides methods to add, clear, and access these pulses.
+// Its main responsibility is to orchestrate the processing of all pulses during a simulation cycle.
 type PulseList struct {
-	pulses []*Pulse
+	pulses []*Pulse // Internal slice holding the active pulses.
 }
 
-// NewPulseList cria uma nova lista de pulsos vazia.
+// NewPulseList creates and returns an empty PulseList, ready to store pulses.
 func NewPulseList() *PulseList {
 	return &PulseList{
-		pulses: make([]*Pulse, 0),
+		pulses: make([]*Pulse, 0), // Initialize with an empty slice of capacity 0.
 	}
 }
 
-// Add adiciona um novo pulso à lista.
+// Add appends a single pulse to the list of active pulses.
 func (pl *PulseList) Add(p *Pulse) {
+	if p == nil { // Avoid adding nil pulses
+		return
+	}
 	pl.pulses = append(pl.pulses, p)
 }
 
-// AddAll adiciona múltiplos pulsos à lista.
+// AddAll appends a slice of new pulses to the list of active pulses.
+// It filters out any nil pulses from the input slice.
 func (pl *PulseList) AddAll(newPulses []*Pulse) {
-	pl.pulses = append(pl.pulses, newPulses...)
+	for _, p := range newPulses {
+		if p != nil { // Add only non-nil pulses
+			pl.pulses = append(pl.pulses, p)
+		}
+	}
 }
 
-// Clear remove todos os pulsos da lista.
+// Clear removes all pulses from the list, effectively resetting it to an empty state.
 func (pl *PulseList) Clear() {
-	pl.pulses = make([]*Pulse, 0)
+	pl.pulses = make([]*Pulse, 0) // Replace with a new empty slice.
 }
 
-// GetAll retorna todos os pulsos atualmente na lista.
+// GetAll returns a slice containing all pulses currently managed by the PulseList.
+// Note: This returns a reference to the internal slice; modifications to the returned slice
+// will affect the PulseList's internal state. Consider returning a copy if immutability is required.
 func (pl *PulseList) GetAll() []*Pulse {
     return pl.pulses
 }
 
-// Count retorna o número de pulsos ativos.
+// Count returns the current number of active pulses in the list.
 func (pl *PulseList) Count() int {
     return len(pl.pulses)
 }
 
-// processSinglePulseOnTargetNeuron processa o efeito de um único pulso em um único neurônio alvo.
+// processSinglePulseOnTargetNeuron processes the effect of a given pulse 'p' on a 'targetNeuron'.
+// It checks if the target neuron is within the pulse's current spherical shell of effect.
+// If it is, the pulse's potential (modulated by synaptic weight) is integrated by the target neuron.
+// If the target neuron fires as a result, a new pulse is generated and returned.
+//
+// Parameters:
+//   - p: The active pulse being processed.
+//   - targetNeuron: The neuron being checked for an effect from pulse 'p'.
+//   - weights: The network's synaptic weights, used to modulate pulse potential.
+//   - currentCycle: The current simulation cycle, used for new pulse creation time.
+//   - simParams: Simulation parameters, used for pulse speed, effect shell, and new pulse properties.
+//   - shellStartRadius: The inner radius of the pulse's current effect shell.
+//   - shellEndRadius: The outer radius of the pulse's current effect shell.
+//
+// Returns:
+//   - *Pulse: A pointer to a newly generated pulse if the targetNeuron fires, otherwise nil.
 func processSinglePulseOnTargetNeuron(
 	p *Pulse,
 	targetNeuron *neuron.Neuron,
@@ -93,41 +147,75 @@ func processSinglePulseOnTargetNeuron(
 	shellStartRadius, shellEndRadius float64,
 ) (newlyGeneratedPulse *Pulse) {
 
+	// Defensive nil checks for critical parameters.
+	if p == nil || targetNeuron == nil || weights == nil || simParams == nil {
+		// Log this critical error if a logging mechanism is available.
+		// This state should ideally not be reached in normal operation.
+		return nil
+	}
+
+	// A neuron cannot be affected by its own pulse directly in this manner.
 	if targetNeuron.ID == p.EmittingNeuronID {
 		return nil
 	}
 
+	// Calculate the distance from the pulse's origin to the target neuron.
 	distanceToTarget := space.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
 
+	// Check if the target neuron is within the pulse's current spherical shell of effect.
 	if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
+		// Retrieve synaptic weight between the emitting neuron of the pulse and the target neuron.
 		weight := weights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
-		// BaseSignalValue and weight are already float64 underlying types (common.PulseValue, common.SynapticWeight)
+
+		// Calculate the effective potential received by the target neuron.
+		// BaseSignalValue and weight are common.PulseValue and common.SynapticWeight respectively (underlying float64).
 		effectivePotential := p.BaseSignalValue * common.PulseValue(weight)
 
-		if effectivePotential == 0 { // No effect if potential is zero
+		// If the effective potential is zero (e.g., zero weight or zero base signal), it has no effect.
+		if effectivePotential == 0 {
 			return nil
 		}
 
+		// Integrate the potential into the target neuron. This returns true if the neuron fires.
 		if targetNeuron.IntegrateIncomingPotential(effectivePotential, currentCycle) {
+			// If the target neuron fired, determine the signal of the new pulse it emits.
 			emittedSignal := targetNeuron.EmittedPulseSign()
-			if emittedSignal != 0 {
-				// The MaxTravelRadius for a new pulse is set to twice the space dimension.
-				// This allows pulses to potentially cross the entire defined space.
-				// Consider making this a configurable SimulationParameter if more control is needed.
+			if emittedSignal != 0 { // Only create a new pulse if the emitted signal is non-neutral.
+				// Create and return the new pulse.
+				// Its MaxTravelRadius is based on SpaceMaxDimension multiplied by a factor.
+				newPulseMaxRadius := simParams.SpaceMaxDimension * defaultPulseMaxTravelRadiusFactor
 				return New(
 					targetNeuron.ID,
 					targetNeuron.Position,
 					emittedSignal,
 					currentCycle,
-					simParams.SpaceMaxDimension*2.0,
+					newPulseMaxRadius,
 				)
 			}
 		}
 	}
+	// No new pulse generated if neuron not in shell, potential is zero, or neuron doesn't fire/emits neutral signal.
 	return nil
 }
 
-// ProcessCycle propaga todos os pulsos, processa seus efeitos nos neurônios
+// ProcessCycle advances the state of all pulses in the PulseList by one simulation cycle.
+// It involves several steps:
+// 1. Propagate each pulse: Update its CurrentDistance. Inactive pulses (exceeding MaxTravelRadius) are removed.
+// 2. For each remaining active pulse, determine its spherical shell of effect for the current cycle.
+// 3. For each active pulse, iterate through all neurons in the network:
+//    - If a neuron falls within the pulse's effect shell, process the interaction using
+//      `processSinglePulseOnTargetNeuron`. This may result in the neuron firing.
+// 4. Collect all newly generated pulses (from neurons that fired in step 3).
+// 5. Update the PulseList to contain only pulses that are still active after propagation.
+//
+// Parameters:
+//   - neurons: A slice of all neurons in the network, used to check for pulse effects.
+//   - weights: The network's synaptic weights, used by `processSinglePulseOnTargetNeuron`.
+//   - currentCycle: The current simulation cycle number.
+//   - simParams: Global simulation parameters.
+//
+// Returns:
+//   - []*Pulse: A slice of all pulses newly generated during this cycle.
 func (pl *PulseList) ProcessCycle(
 	neurons []*neuron.Neuron,
 	weights synaptic.NetworkWeights,
@@ -135,23 +223,37 @@ func (pl *PulseList) ProcessCycle(
 	simParams *config.SimulationParameters,
 ) (newlyGeneratedPulses []*Pulse) {
 
-	remainingActivePulses := make([]*Pulse, 0, len(pl.pulses))
-	newlyGeneratedPulses = make([]*Pulse, 0)
+	// Defensive nil checks for critical parameters.
+	if neurons == nil || weights == nil || simParams == nil {
+		// Log this critical error if a logging mechanism is available.
+		// This state should ideally not be reached in normal operation.
+		return make([]*Pulse, 0) // Return empty slice to prevent further issues
+	}
 
+	remainingActivePulses := make([]*Pulse, 0, len(pl.pulses))
+	newlyGeneratedPulses = make([]*Pulse, 0) // Initialize to ensure non-nil return
+
+	// Phase 1: Propagate existing pulses and identify those still active.
+	// Also, process effects of active pulses on neurons.
 	for _, p := range pl.pulses {
+		// Propagate the pulse; if it's no longer active (e.g., exceeded max travel radius), skip it.
 		if !p.Propagate(simParams) {
 			continue
 		}
-		remainingActivePulses = append(remainingActivePulses, p)
+		remainingActivePulses = append(remainingActivePulses, p) // Keep it for the next cycle's list
 
+		// Determine the spherical shell where this pulse has an effect in the current cycle.
 		shellStartRadius, shellEndRadius := p.GetEffectShellForCycle(simParams)
 
+		// Phase 2: Check effect of this active pulse on all neurons.
 		for _, targetNeuron := range neurons {
 			if newPulse := processSinglePulseOnTargetNeuron(p, targetNeuron, weights, currentCycle, simParams, shellStartRadius, shellEndRadius); newPulse != nil {
 				newlyGeneratedPulses = append(newlyGeneratedPulses, newPulse)
 			}
 		}
 	}
+
+	// Phase 3: Update the pulse list to only contain pulses that remained active.
 	pl.pulses = remainingActivePulses
-	return newlyGeneratedPulses
+	return newlyGeneratedPulses // Return all pulses generated in this cycle.
 }
