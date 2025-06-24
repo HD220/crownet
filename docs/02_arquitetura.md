@@ -258,4 +258,55 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
 *   **Builder (Potencial):** Para a inicialização complexa de `CrowNet`, um padrão Builder poderia ser considerado na reescrita para torná-la mais fluida, embora a função `NewCrowNet` atual já lide com isso.
 
 A arquitetura atual é funcional para o MVP. A reescrita focará em refinar a modularidade, aplicar princípios de Código Limpo e Object Calisthenics, e formalizar alguns desses padrões para melhorar a manutenibilidade e testabilidade.
+
+## 6. Propostas de Evolução e Reescrita Futura
+
+Esta seção descreve áreas potenciais para evolução da arquitetura e propostas de reescrita que podem melhorar ainda mais a manutenibilidade, extensibilidade, testabilidade, configurabilidade e desempenho do CrowNet. Estas propostas baseiam-se nos Requisitos Não Funcionais (especialmente RNF-EXT, RNF-CONF, RNF-TEST, RNF-REL) e na experiência adquirida durante o desenvolvimento e refatoração do MVP.
+
+### 6.1. Gestão Avançada de Configuração
+*   **Problema/Área:** Configuração atual primariamente via flags CLI.
+*   **Proposta:** Implementar carregamento de parâmetros de simulação a partir de arquivos de configuração (ex: TOML, YAML), conforme RNF-CONF-001. Flags CLI poderiam especificar o arquivo ou sobrescrever valores.
+*   **Benefícios:** Facilita o gerenciamento de configurações complexas, versionamento e compartilhamento. Reduz a necessidade de longas strings de comando.
+
+### 6.2. Melhorias na Extensibilidade (RNF-EXT-001)
+*   **Problema/Área:** Facilitar a adição de novos tipos de neurônios, efeitos neuroquímicos e regras de aprendizado.
+*   **Propostas:**
+    *   **Comportamento Neuronal via Interfaces:** Definir interfaces para comportamentos neuronais variáveis (ex: `FiringCondition`, `PulseEffectReceiver`). Neurônios concretos implementariam estas interfaces.
+    *   **Registro de Efeitos Neuroquímicos:** Criar um sistema de registro onde diferentes neuroquímicos possam registrar suas funções de efeito específicas (modulação de limiar, modulação de taxa de aprendizado), em vez de lógica condicional centralizada.
+    *   **Padrão Strategy para Regras de Aprendizado:** Se múltiplas rules de aprendizado forem previstas, refatorar a lógica de aprendizado para usar o padrão Strategy, permitindo a fácil substituição ou adição de algoritmos.
+*   **Benefícios:** Aumenta a modularidade, reduz o acoplamento e simplifica a extensão das mecânicas centrais da simulação.
+
+### 6.3. Aprimoramento da Testabilidade (RNF-TEST-001)
+*   **Problema/Área:** Funções ou métodos complexos, especialmente no pacote `network`, que podem ser difíceis de testar unitariamente em isolamento.
+*   **Propostas:**
+    *   **Decomposição Adicional:** Avaliar funções complexas (ex: dentro de `network.RunCycle` ou seus helpers) para maior decomposição em unidades menores e testáveis.
+    *   **Dependências Baseadas em Interfaces:** Para componentes chave como `PulseList`, `SynapticWeights`, e os gerenciadores de neuroquímicos, definir interfaces no pacote `network` (ou em um pacote de interfaces dedicado). `CrowNet` dependeria dessas interfaces, facilitando o uso de mocks em testes.
+*   **Benefícios:** Permite testes unitários mais focados e robustos, melhora a confiança nas alterações e facilita refatorações seguras.
+
+### 6.4. Reprodutibilidade Total e Gestão de Aleatoriedade (RNF-REL-001, FEATURE-002)
+*   **Problema/Área:** Garantir que a simulação seja totalmente determinística com uma semente fornecida.
+*   **Proposta:**
+    *   Utilizar uma única instância de `rand.Rand` (semeada pela configuração) em toda a aplicação.
+    *   Passar explicitamente esta instância `rng` para todas as funções que realizam operations aleatórias (posicionamento inicial, inicialização de pesos, etc.).
+    *   Evitar o uso do `math/rand` global.
+*   **Benefícios:** Assegura resultados idênticos para a mesma semente, fundamental para depuração, análise e validação de resultados.
+
+### 6.5. Logging Avançado e Observabilidade
+*   **Problema/Área:** Logging atual via SQLite é baseado em snapshots. Maior granularidade ou observabilidade em tempo real pode ser necessária.
+*   **Propostas:**
+    *   **Logging Estruturado de Eventos:** Implementar um sistema de logging de eventos mais detalhado para ocorrências chave (disparos neuronais específicos, alterações significativas de peso, etc.).
+    *   **Métricas de Simulação:** Introduzir um sistema simples para coletar e expor/logar métricas de simulação ao longo do tempo (taxa média de disparo, níveis químicos, etc.).
+*   **Benefícios:** Fornece insights mais profundos sobre a dinâmica da simulação e facilita a depuração de comportamentos complexos.
+
+### 6.6. Otimizações de Desempenho (PERF-002, PERF-003)
+*   **Problema/Área:** Potenciais gargalos em propagação de pulso e cálculos espaciais para redes maiores.
+*   **Propostas:**
+    *   **Otimização de `PulseList.ProcessCycle` (PERF-002):** Investigar e documentar a implementação de técnicas de indexação espacial (ex: k-d trees, grids) para otimizar a busca de neurônios vizinhos afetados por pulsos.
+    *   **Otimização de `GenerateRandomPositionInHyperSphere` (PERF-003):** Avaliar e potencialmente implementar algoritmos mais eficientes para geração uniforme de pontos em hiperesferas (ex: método de Muller), se o método atual for um gargalo.
+*   **Benefícios:** Permite simulações maiores e/ou mais rápidas, expandindo a capacidade de pesquisa da ferramenta.
+
+### 6.7. Refinamentos Contínuos de Qualidade de Código (RNF-MAINT-003, RNF-MAINT-004)
+*   **Problema/Área:** Manutenção contínua da aderência aos princípios de Código Limpo e Object Calisthenics.
+*   **Proposta:** Realizar revisões periódicas do código com foco nestes princípios. Propor refatorações específicas e localizadas onde funções, structs ou pacotes possam ser simplificados, melhor encapsulados, ou ter sua legibilidade/manutenibilidade aprimorada.
+*   **Benefícios:** Preserva e melhora a qualidade do código a longo prazo, facilitando a manutenção e futuras extensões.
 ```
