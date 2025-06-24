@@ -1,0 +1,152 @@
+# Configuration file for golangci-lint (https://golangci-lint.run/)
+run:
+  # Timeout for analysis, e.g. 30s, 5m. Default: 1m
+  timeout: 5m
+  # Which Go version to target.
+  # Default: use Go version from the go.mod file, fallback on the env var `GOVERSION`, fallback on 1.22
+  go: '1.22' # Will be updated by go.mod usually, but good to have a base.
+  # Include test files or not.
+  # Default: true
+  tests: true
+
+linters-settings:
+  errcheck:
+    # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+    # Default: false
+    check-type-assertions: true
+    # Report about not checking of errors in blank assignments: `_ = b.(MyStruct)`.
+    # Default: false
+    check-blank: true
+  govet:
+    # Enable all analyzers.
+    # Default: false
+    enable-all: true
+    # Disable specific analyzers (all other will be enabled if enable-all is true).
+    # disable:
+    #   - fieldalignment
+    # Disable all analyzers by default and enable only specified.
+    # Default: false
+    # enable:
+    #   - atomicalign
+  gofmt:
+    # Simplify code: gofmt with -s flag.
+    # Default: true
+    simplify: true
+  goimports:
+    # Put local imports after third-party packages.
+    # Default: false
+    local-prefixes: crownet # Assuming 'crownet' is the local module prefix
+  misspell:
+    # Correct commonly misspelled English words in comments and strings.
+    # Default: "US"
+    locale: US
+  lll:
+    # Max line length, lines longer will be reported.
+    # Default: 120
+    line-length: 120
+  # nakedret:
+    # Max func lines to report for naked returns.
+    # Default: 30
+    # max-func-lines: 30
+  # goconst:
+    # Minimum occurrences of constant string value to report.
+    # Default: 3
+    # min-len: 3
+    # min-occurrences: 2
+  # gocritic:
+    # Enable specific checks from https://go-critic.com/overview.
+    # Default: enable all checks from the list mentioned in the link.
+    # enabled-tags:
+    #  - diagnostic
+    #  - experimental
+    #  - opinionated
+    #  - performance
+    #  - style
+  # revive: # Formerly golint
+    # Default: 0.8
+    # confidence: 0.8
+    # severity: "warning"
+    # Default: []
+    # rules:
+    #   - name: blank-imports
+    #   - name: context-as-argument
+    #   - name: context-keys-type
+    #   - name: dot-imports
+    #   - name: error-return
+    #   - name: error-strings
+    #   - name: error-naming
+    #   - name: exported
+    #   - name: if-return
+    #   - name: increment-decrement
+    #   - name: var-naming
+    #   - name: var-declaration
+    #   - name: package-comments
+    #   - name: range
+    #   - name: receiver-naming
+    #   - name: time-naming
+    #   - name: unexported-return
+    #   - name: unnecessary-stmt
+    #   - name: struct-tag
+    #   - name: modiFier-order
+    #   - name: constant-logical-expr
+    #   - name: bool-literal-in-expr
+    #   - name: redefines-builtin-id
+    #   - name: deep-exit
+    #   - name: empty-block
+    #   - name: superfluous-else
+    #   - name: unused-parameter
+    #   - name: unreachable-code
+    #   - name: add-constant
+    #   - name: flag-parameter
+    #   - name: unconditional-recursion
+    #   - name: identical-branches
+    #   - name: superfluous-else
+    #   - name: confusing-results
+    #   - name: waitgroup-by-value
+
+linters:
+  # Disable all linters by default and explicitly enable needed ones.
+  # We are doing this to have a curated list.
+  disable-all: true
+  enable:
+    # Essential
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - structcheck # Check for unused struct fields
+    - varcheck    # Check for unused global variables and constants
+    - ineffassign # Check for ineffectual assignments
+    - typecheck   # Basic type checking
+    # Formatting
+    - gofmt
+    - goimports
+    # Style & Best Practices
+    - revive # Replacement for golint, highly configurable
+    - misspell
+    - lll
+    # Complexity (can be adjusted or disabled if too noisy initially)
+    # - gocyclo # Cyclomatic complexity
+    # - gocognit # Cognitive complexity
+    # - funlen # Function length
+    # Potential future additions (might be too strict initially)
+    # - goconst
+    # - gocritic
+    # - nakedret
+    # - prealloc
+    # - exportloopref
+
+issues:
+  # Maximum issues count per one linter. Set to 0 to disable.
+  # Default: 50
+  max-issues-per-linter: 0 # No limit per linter
+  # Maximum count of issues with the same text. Set to 0 to disable.
+  # Default: 3
+  max-same-issues: 0 # No limit for same issues
+
+output:
+  # print-issued-lines: true
+  # print-linter-name: true
+  # uniq-by-line: true
+  sort-results: true
