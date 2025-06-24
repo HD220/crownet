@@ -26,10 +26,11 @@ type CrowNet struct {
 	rng              *rand.Rand                   // Local random number generator for this network instance
 
 	// --- Neuron Collections and Management ---
-	Neurons         []*neuron.Neuron  // Slice of all neuron instances in the network
-	InputNeuronIDs  []common.NeuronID // Cache of IDs for input neurons, sorted
-	OutputNeuronIDs []common.NeuronID // Cache of IDs for output neurons, sorted
-	neuronIDCounter common.NeuronID   // Counter for generating unique neuron IDs
+	Neurons           []*neuron.Neuron            // Slice of all neuron instances in the network
+	InputNeuronIDs    []common.NeuronID           // Cache of IDs for input neurons, sorted
+	OutputNeuronIDs   []common.NeuronID           // Cache of IDs for output neurons, sorted
+	OutputNeuronIDSet map[common.NeuronID]struct{} // Set of output neuron IDs for efficient lookup
+	neuronIDCounter   common.NeuronID             // Counter for generating unique neuron IDs
 
 	// --- Dynamic Sub-systems of the Network ---
 	ActivePulses    *pulse.PulseList         // Manages active pulses propagating through the network
@@ -68,10 +69,11 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		rng:              localRng,
 
 		// Neuron collections and management
-		Neurons:         make([]*neuron.Neuron, 0, appCfg.Cli.TotalNeurons),
-		InputNeuronIDs:  make([]common.NeuronID, 0, simParams.MinInputNeurons),
-		OutputNeuronIDs: make([]common.NeuronID, 0, simParams.MinOutputNeurons),
-		neuronIDCounter: 0,
+		Neurons:           make([]*neuron.Neuron, 0, appCfg.Cli.TotalNeurons),
+		InputNeuronIDs:    make([]common.NeuronID, 0, simParams.MinInputNeurons),
+		OutputNeuronIDs:   make([]common.NeuronID, 0, simParams.MinOutputNeurons),
+		OutputNeuronIDSet: make(map[common.NeuronID]struct{}),
+		neuronIDCounter:   0,
 
 		// Dynamic sub-systems
 		ActivePulses:    pulse.NewPulseList(),
@@ -203,7 +205,11 @@ func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
 func (cn *CrowNet) finalizeInitialization() {
 	sort.Slice(cn.InputNeuronIDs, func(i, j int) bool { return cn.InputNeuronIDs[i] < cn.InputNeuronIDs[j] })
 	sort.Slice(cn.OutputNeuronIDs, func(i, j int) bool { return cn.OutputNeuronIDs[i] < cn.OutputNeuronIDs[j] })
+
+	// Populate OutputNeuronIDSet and initialize outputFiringHistory
+	cn.OutputNeuronIDSet = make(map[common.NeuronID]struct{}, len(cn.OutputNeuronIDs))
 	for _, outID := range cn.OutputNeuronIDs {
+		cn.OutputNeuronIDSet[outID] = struct{}{}
 		cn.outputFiringHistory[outID] = make([]common.CycleCount, 0)
 	}
 }
@@ -256,22 +262,34 @@ func (cn *CrowNet) RunCycle() {
 	cn.CycleCount++
 }
 
+// processActivePulses orchestrates the processing of existing pulses and handles newly generated ones.
+// 1. It delegates to PulseList to process the current cycle for existing pulses, which includes:
+//    - Moving pulses.
+//    - Applying pulse effects to neurons they hit (updating neuron potentials).
+//    - Generating new pulses from neurons that fire as a result.
+// 2. It then handles these newly generated pulses by:
+//    - Checking if any originated from output neurons and recording those firings.
+//    - Adding all new pulses to the active list for processing in subsequent cycles.
 func (cn *CrowNet) processActivePulses() {
+	// Step 1: Process existing pulses and get newly generated ones from firing neurons.
 	newlyGeneratedPulses := cn.ActivePulses.ProcessCycle(
 		cn.Neurons,
 		cn.SynapticWeights,
 		cn.CycleCount,
 		cn.SimParams,
 	)
+
+	// Step 2: Handle any pulses that were newly generated in this cycle.
 	if len(newlyGeneratedPulses) > 0 {
+		// Step 2a: Record firing if an output neuron emitted one of these new pulses.
 		for _, newP := range newlyGeneratedPulses {
-			for _, outID := range cn.OutputNeuronIDs {
-				if newP.EmittingNeuronID == outID {
-					cn.recordOutputFiring(outID)
-					break
-				}
+			if _, isOutputNeuron := cn.OutputNeuronIDSet[newP.EmittingNeuronID]; isOutputNeuron {
+				cn.recordOutputFiring(newP.EmittingNeuronID)
+				// Note: A single new pulse is assumed to be from one neuron, so no need to continue inner loop once found.
+				// If an output neuron fires, its pulse is recorded. We don't 'break' here because other new pulses might also be from other output neurons.
 			}
 		}
+		// Step 2b: Add all newly generated pulses to the main active list for the next cycle.
 		cn.ActivePulses.AddAll(newlyGeneratedPulses)
 	}
 }
