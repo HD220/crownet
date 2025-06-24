@@ -78,4 +78,11 @@ Para uma compreensão completa das funcionalidades, arquitetura técnica, requis
     ```
 
 Consulte o `guia_interface_linha_comando.md` para mais detalhes sobre os flags.
+
+## Reprodutibilidade
+
+Para garantir que as simulações possam ser repetidas com os mesmos resultados (útil para depuração e análise comparativa), a aplicação suporta uma flag de semente aleatória:
+
+*   `-seed <int64>`: Forneça um valor inteiro (longo) específico para a semente. Todas as operações estocásticas na simulação (posicionamento inicial de neurônios, inicialização de pesos, etc.) serão derivadas desta semente.
+*   Se o flag `-seed` não for fornecido ou for explicitamente `-seed 0`, a simulação usará uma semente baseada no tempo atual, resultando em variabilidade entre as execuções.
 ```
