@@ -1,3 +1,6 @@
+// Package neurochemical manages the simulation of neurochemical substances like
+// cortisol and dopamine, their production, decay, and modulatory effects on
+// neuron behavior, learning rates, and synaptogenesis.
 package neurochemical
 
 import (
@@ -26,14 +29,14 @@ func getNormalizedLevel(level common.Level, maxLevel float64) float64 {
 	return math.Min(1.0, math.Max(0.0, normalized))
 }
 
-// _applyChemicalInfluence applies the modulatory effect of a normalized chemical level
+// applyChemicalInfluence applies the modulatory effect of a normalized chemical level
 // on a given target value (e.g., a learning rate factor, a threshold).
 // The effect is multiplicative: newValue = currentValue * (1 + influenceStrength * normalizedLevel).
 // - currentValue: The value to be modified.
 // - chemicalInfluenceStrength: The parameter defining how strongly and in what direction the chemical affects the target value.
 // - normalizedChemicalLevel: The chemical's current level, normalized to [0,1].
 // Returns the new, modified value. If the normalized chemical level is zero or less, the original value is returned unchanged.
-func _applyChemicalInfluence(currentValue float64, chemicalInfluenceStrength common.Factor, normalizedChemicalLevel float64) float64 {
+func applyChemicalInfluence(currentValue float64, chemicalInfluenceStrength common.Factor, normalizedChemicalLevel float64) float64 {
 	if normalizedChemicalLevel > 0 { // Only apply influence if the chemical is present at some effective level.
 		return currentValue * (1.0 + float64(chemicalInfluenceStrength)*normalizedChemicalLevel)
 	}
@@ -109,10 +112,7 @@ func updateChemicalLevel(currentLevel common.Level, decayRate common.Rate, produ
 	level := float64(currentLevel) // Work with float64 for calculations
 
 	// Add event-based production.
-	level += common.Level(productionThisCycle)
-
-	// Apply decay (proportional to current level)
-	level += productionThisCycle
+	level += productionThisCycle // Correctly adds production amount
 
 	// Apply decay (proportional to current level).
 	level -= level * float64(decayRate)
@@ -189,9 +189,9 @@ func (env *Environment) recalculateModulationFactors(simParams *config.Simulatio
 	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, simParams.CortisolMaxLevel)
 
 	// Apply Dopamine effect on Learning Rate
-	lrFactor = _applyChemicalInfluence(lrFactor, simParams.DopamineInfluenceOnLR, normalizedDopamine)
+	lrFactor = applyChemicalInfluence(lrFactor, simParams.DopamineInfluenceOnLR, normalizedDopamine)
 	// Apply Cortisol effect on Learning Rate
-	lrFactor = _applyChemicalInfluence(lrFactor, simParams.CortisolInfluenceOnLR, normalizedCortisol)
+	lrFactor = applyChemicalInfluence(lrFactor, simParams.CortisolInfluenceOnLR, normalizedCortisol)
 
 	// Ensure learning rate factor does not fall below the minimum defined in SimParams.
 	lrFactor = math.Max(float64(simParams.MinLearningRateFactor), lrFactor)
@@ -199,9 +199,9 @@ func (env *Environment) recalculateModulationFactors(simParams *config.Simulatio
 
 	synFactor := 1.0
 	// Apply Dopamine effect on Synaptogenesis Factor
-	synFactor = _applyChemicalInfluence(synFactor, simParams.DopamineInfluenceOnSynapto, normalizedDopamine)
+	synFactor = applyChemicalInfluence(synFactor, simParams.DopamineInfluenceOnSynapto, normalizedDopamine)
 	// Apply Cortisol effect on Synaptogenesis Factor
-	synFactor = _applyChemicalInfluence(synFactor, simParams.CortisolInfluenceOnSynapto, normalizedCortisol)
+	synFactor = applyChemicalInfluence(synFactor, simParams.CortisolInfluenceOnSynapto, normalizedCortisol)
 
 	// Ensure synaptogenesis factor is not negative.
 	env.SynaptogenesisModulationFactor = common.Factor(math.Max(0.0, synFactor)) // Ensure factor is not negative.
@@ -221,10 +221,10 @@ func (env *Environment) ApplyEffectsToNeurons(neurons []*neuron.Neuron, simParam
 		modifiedThreshold := baseThreshold
 
 		// Apply Cortisol effect on Firing Threshold first.
-		modifiedThreshold = _applyChemicalInfluence(modifiedThreshold, simParams.FiringThresholdIncreaseOnCort, normalizedCortisol)
+		modifiedThreshold = applyChemicalInfluence(modifiedThreshold, simParams.FiringThresholdIncreaseOnCort, normalizedCortisol)
 
 		// Then apply Dopamine effect on the (potentially cortisol-modified) threshold.
-		modifiedThreshold = _applyChemicalInfluence(modifiedThreshold, simParams.FiringThresholdIncreaseOnDopa, normalizedDopamine)
+		modifiedThreshold = applyChemicalInfluence(modifiedThreshold, simParams.FiringThresholdIncreaseOnDopa, normalizedDopamine)
 
 		// Ensure the final threshold does not fall below a defined minimum positive value.
 		n.CurrentFiringThreshold = common.Threshold(math.Max(minFiringThresholdValue, modifiedThreshold))

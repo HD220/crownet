@@ -1,3 +1,7 @@
+// Package pulse defines the Pulse type, representing signals that propagate
+// through the neural network, and PulseList, a manager for collections of
+// active pulses. It handles pulse creation, propagation, and interaction
+// with neurons.
 package pulse
 
 import (
@@ -24,12 +28,13 @@ type Pulse struct {
 	MaxTravelRadius  float64           // Maximum distance this pulse can travel before becoming inactive.
 }
 
-// New creates and initializes a new Pulse instance.
-// emitterID: ID of the neuron emitting the pulse.
-// origin: The spatial position where the pulse starts.
-// signal: The base signal value of the pulse.
-// creationCycle: The simulation cycle when the pulse is generated.
-// maxRadius: The maximum distance the pulse can travel.
+// New creates and returns a new Pulse instance, initialized with the provided parameters.
+// Parameters:
+//   emitterID: ID of the neuron emitting the pulse.
+//   origin: The spatial position where the pulse starts.
+//   signal: The base signal value of the pulse.
+//   creationCycle: The simulation cycle when the pulse is generated.
+//   maxRadius: The maximum distance the pulse can travel before becoming inactive.
 func New(emitterID common.NeuronID, origin common.Point, signal common.PulseValue, creationCycle common.CycleCount, maxRadius float64) *Pulse {
 	return &Pulse{
 		EmittingNeuronID: emitterID,

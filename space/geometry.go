@@ -1,3 +1,8 @@
+// Package space provides geometric types and functions for operating in an
+// N-dimensional space, primarily focused on calculations relevant to the
+// spatial arrangement and interaction of neurons in the CrowNet simulation.
+// It includes utilities for distance calculation, point clamping, and random
+// position generation within hyperspheres.
 package space
 
 import (

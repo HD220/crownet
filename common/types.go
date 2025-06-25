@@ -1,39 +1,46 @@
+// Package common defines shared data types used throughout the CrowNet
+// application. These types provide a consistent representation for fundamental
+// concepts like identifiers, spatial coordinates, and simulation metrics.
+// Package common defines shared data types used throughout the CrowNet
+// application. These types provide a consistent representation for fundamental
+// concepts like identifiers, spatial coordinates, and simulation metrics.
 package common
 
-// NeuronID representa o identificador único de um neurônio.
+// NeuronID is a unique identifier for a neuron.
 type NeuronID int
 
-// CycleCount representa um contador de ciclos da simulação.
+// CycleCount represents a simulation cycle counter.
 type CycleCount int
 
-// Coordinate representa um valor em uma das dimensões do espaço.
+// Coordinate represents a value in one of the N spatial dimensions.
 type Coordinate float64
 
-// PulseValue representa o valor base de um pulso (antes da ponderação sináptica).
+// PulseValue represents the base value of a pulse before synaptic weighting.
 type PulseValue float64
 
-// SynapticWeight representa o peso de uma conexão sináptica.
+// SynapticWeight represents the strength of a synaptic connection.
 type SynapticWeight float64
 
-// Percentage representa um valor percentual (0.0 a 1.0).
+// Percentage represents a percentage value, typically ranging from 0.0 to 1.0.
 type Percentage float64
 
-// Rate representa uma taxa (ex: taxa de aprendizado, taxa de decaimento).
+// Rate represents a rate, such as a learning rate or decay rate.
 type Rate float64
 
-// Factor representa um fator de multiplicação, geralmente positivo.
+// Factor represents a multiplication factor, often used for modulation and typically positive.
 type Factor float64
 
-// Threshold representa um valor de limiar.
+// Threshold represents a threshold value, e.g., for neuron firing.
 type Threshold float64
 
-// Level representa o nível de uma substância química, tipicamente não-negativo.
+// Level represents the concentration or level of a neurochemical substance, typically non-negative.
 type Level float64
 
-// Point representa um ponto no espaço N-dimensional (especificamente 16D para CrowNet).
-// Usar um array de tamanho fixo garante a dimensionalidade.
+// Point represents a point in an N-dimensional space. For CrowNet, this is
+// specifically a 16-dimensional space, enforced by the fixed-size array.
 type Point [16]Coordinate
 
-// Vector representa um vetor no espaço N-dimensional, usado para velocidade ou força.
-// Usa Coordinate para consistência com Point.
+// Vector represents a vector in an N-dimensional space, used for quantities
+// like velocity or force. It uses Coordinate for consistency with Point and is
+// fixed to 16 dimensions for CrowNet.
 type Vector [16]Coordinate

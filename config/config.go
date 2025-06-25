@@ -1,3 +1,7 @@
+// Package config provides types and functions for managing application
+// configuration, including simulation parameters and command-line interface (CLI)
+// settings. It handles loading defaults, parsing CLI flags, and validating
+// the overall configuration.
 package config
 
 import (
@@ -9,16 +13,27 @@ import (
 )
 
 const (
-	ModeSim     = "sim"
-	ModeExpose  = "expose"
+	// ModeSim instructs the application to run a general simulation.
+	ModeSim = "sim"
+	// ModeExpose instructs the application to run in pattern exposure mode for training.
+	ModeExpose = "expose"
+	// ModeObserve instructs the application to observe network response to a specific input.
 	ModeObserve = "observe"
 )
 
+// SupportedModes lists all valid operation modes for the application.
+// It is used for validating the mode provided via CLI or configuration file.
 var SupportedModes = []string{ModeSim, ModeExpose, ModeObserve}
 
+// SimulationParameters defines the detailed parameters that govern the behavior
+// of the neural network simulation. These parameters control aspects from spatial
+// properties and neuron behavior to learning rules and neurochemical influences.
 type SimulationParameters struct {
 	// Spatial and General Network Parameters
-	SpaceMaxDimension float64 // Defines the boundary of the 16D space.
+
+	// SpaceMaxDimension defines the boundary of the N-dimensional simulation space.
+	// For example, if SpaceMaxDimension is 10.0, coordinates typically range from -5.0 to +5.0.
+	SpaceMaxDimension float64
 	CyclesPerSecond   float64 // Simulation cycles that represent one second of real time.
 
 	// Neuron Definition and Behavior
@@ -80,12 +95,18 @@ type SimulationParameters struct {
 	FiringThresholdIncreaseOnDopa common.Factor // How dopamine influences neuron firing thresholds.
 	FiringThresholdIncreaseOnCort common.Factor // How cortisol influences neuron firing thresholds.
 
-	CortisolGlandPosition common.Point // Position of the cortisol gland.
+	// CortisolGlandPosition defines the fixed N-dimensional coordinates of the cortisol gland
+	// within the simulation space.
+	CortisolGlandPosition common.Point
 }
 
+// CLIConfig holds configuration parameters that are typically set or overridden
+// via command-line flags. It includes general settings as well as mode-specific options.
 type CLIConfig struct {
 	// General Configuration
-	Mode             string      `json:"mode"`              // Operation mode: "sim", "expose", or "observe".
+
+	// Mode specifies the operation mode for the application (e.g., "sim", "expose", "observe").
+	Mode             string      `json:"mode"`
 	TotalNeurons     int         `json:"total_neurons"`     // Total number of neurons in the network.
 	Seed             int64       `json:"seed"`              // Seed for random number generator (0 for time-based).
 	WeightsFile      string      `json:"weights_file"`      // File to save/load synaptic weights.
@@ -109,11 +130,15 @@ type CLIConfig struct {
 	CyclesToSettle int `json:"cycles_to_settle"` // Number of cycles for network settling in 'observe' mode.
 }
 
+// AppConfig is the top-level configuration structure, aggregating both
+// SimulationParameters and CLIConfig.
 type AppConfig struct {
-	SimParams SimulationParameters
-	Cli       CLIConfig
+	SimParams SimulationParameters // Detailed parameters for the simulation behavior.
+	Cli       CLIConfig            // Parameters typically set via command-line flags.
 }
 
+// DefaultSimulationParameters returns a SimulationParameters struct populated with
+// sensible default values for all simulation settings.
 func DefaultSimulationParameters() SimulationParameters {
 	return SimulationParameters{
 		SpaceMaxDimension:             10.0,
@@ -167,8 +192,17 @@ func DefaultSimulationParameters() SimulationParameters {
 	}
 }
 
-// LoadCLIConfig loads configuration from command-line flags using the provided FlagSet and arguments.
-// This version is more testable as it doesn't rely on the global flag state or os.Args directly.
+// LoadCLIConfig populates a CLIConfig struct from command-line flags.
+// It uses the provided FlagSet and arguments, making it suitable for testing
+// without relying on the global flag state or os.Args.
+//
+// Parameters:
+//   fSet: The flag.FlagSet instance to define and parse flags.
+//   args: A slice of strings representing the command-line arguments (excluding the program name).
+//
+// Returns:
+//   A CLIConfig struct populated from the parsed flags and an error if parsing fails.
+//   If the "seed" flag is 0 after parsing, it's updated to the current time's nanoseconds.
 func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	cfg := CLIConfig{}
 
@@ -223,26 +257,48 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	return cfg, nil
 }
 
-// NewAppConfig loads configuration from CLI flags (via os.Args) and defaults, then validates.
-// This is the main entry point for configuration in production.
+// NewAppConfig creates a new AppConfig by loading default simulation parameters,
+// parsing command-line arguments to populate CLIConfig, and then validating
+// the combined configuration.
+// This function is intended as the primary entry point for obtaining application
+// configuration in a production environment.
+//
+// Parameters:
+//   args: A slice of strings representing the command-line arguments (excluding the program name).
+//
+// Returns:
+//  An *AppConfig struct containing the fully resolved and validated configuration,
+//  or an error if loading or validation fails.
 func NewAppConfig(args []string) (*AppConfig, error) {
 	// Create a new FlagSet for command-line parsing.
-	// os.Args[0] is the program name, actual flags start from os.Args[1:]
+	// os.Args[0] is the program name, actual flags start from os.Args[1:].
+	// Here, 'args' is expected to be os.Args[1:].
 	cliCfg, err := LoadCLIConfig(flag.NewFlagSet("crownet", flag.ContinueOnError), args)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load CLI config: %w", err)
 	}
 
 	appCfg := &AppConfig{
-		SimParams: DefaultSimulationParameters(),
-		Cli:       cliCfg,
+		SimParams: DefaultSimulationParameters(), // Start with defaults
+		Cli:       cliCfg,                        // Apply CLI overrides
 	}
+
+	// Future step: Insert loading from config file here if -configFile is specified in cliCfg.
+	// The order would be: Defaults -> Config File -> CLI Flags.
+
 	if err := appCfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 	return appCfg, nil
 }
 
+// Validate checks the AppConfig for consistency and valid values across
+// CLIConfig and SimulationParameters.
+// It ensures that parameters meet their required constraints (e.g., positivity,
+// ranges, interdependencies).
+//
+// Returns:
+//  An error if any validation rule is violated, nil otherwise.
 func (ac *AppConfig) Validate() error {
 	// General CLI parameter validation
 	if ac.Cli.TotalNeurons <= 0 { // Basic positivity check
