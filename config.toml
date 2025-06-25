@@ -1,0 +1,91 @@
+# Example Configuration File for CrowNet (config.toml)
+
+# This section configures parameters typically set via CLI flags.
+# Values here will be overridden by any corresponding CLI flags provided at runtime.
+[cli]
+mode = "sim"               # Operation mode: "sim", "expose", or "observe"
+total_neurons = 250        # Total number of neurons in the network
+seed = 12345               # Seed for random number generator (0 for time-based)
+weights_file = "custom_weights.json" # File to save/load synaptic weights
+base_learning_rate = 0.015 # Base learning rate for Hebbian plasticity
+
+# Sim mode specific CLI options
+cycles = 1500              # Total simulation cycles for 'sim' mode
+db_path = "custom_sim_run.db" # Path for the SQLite database file for logging
+save_interval = 50         # Cycle interval for saving to DB
+stim_input_id = 0          # ID of input neuron for continuous stimulus (-1 for first, -2 to disable)
+stim_input_freq_hz = 5.0   # Frequency (Hz) for stimulus (0.0 to disable)
+monitor_output_id = 0      # ID of output neuron to monitor (-1 for first, -2 to disable)
+debug_chem = true          # Enable debug prints for chemical production
+
+# Expose mode specific CLI options (uncomment and set if using 'expose' mode)
+# epochs = 60
+# cycles_per_pattern = 25
+
+# Observe mode specific CLI options (uncomment and set if using 'observe' mode)
+# digit = 1
+# cycles_to_settle = 60
+
+
+# This section configures detailed simulation parameters.
+# Values here will be overridden by any corresponding CLI flags if such flags exist for them,
+# or by specific logic if `SimulationParameters` are adjusted after CLI parsing based on CLIConfig values.
+[sim_params]
+space_max_dimension = 12.0
+cycles_per_second = 100.0
+
+base_firing_threshold = 1.0
+accumulated_pulse_decay_rate = 0.1
+absolute_refractory_cycles = 2
+relative_refractory_cycles = 3
+pulse_propagation_speed = 1.0
+
+dopaminergic_percent = 0.1
+inhibitory_percent = 0.2
+excitatory_radius_factor = 1.0
+dopaminergic_radius_factor = 0.8
+inhibitory_radius_factor = 0.9
+
+min_input_neurons = 35
+min_output_neurons = 10
+pattern_height = 7
+pattern_width = 5
+pattern_size = 35 # Should be pattern_height * pattern_width
+output_frequency_window_cycles = 50.0
+
+initial_synaptic_weight_min = 0.05
+initial_synaptic_weight_max = 0.45
+max_synaptic_weight = 0.9
+hebbian_weight_min = -0.05 # Allows weights to weaken below zero
+hebbian_weight_max = 0.9  # Max weight achievable through Hebbian learning
+synaptic_weight_decay_rate = 0.0001
+hebbian_coincidence_window = 2
+hebb_positive_reinforce_factor = 0.1
+hebb_negative_reinforce_factor = 0.05
+min_learning_rate_factor = 0.1
+
+synaptogenesis_influence_radius = 2.0
+attraction_force_factor = 0.01
+repulsion_force_factor = 0.005
+dampening_factor = 0.5
+max_movement_per_cycle = 0.1
+
+cortisol_production_rate = 0.01
+cortisol_decay_rate = 0.005
+cortisol_production_per_hit = 0.05
+cortisol_max_level = 1.0
+dopamine_production_rate = 0.02
+dopamine_decay_rate = 0.01
+dopamine_production_per_event = 0.1
+dopamine_max_level = 1.0
+
+cortisol_influence_on_lr = -0.5
+dopamine_influence_on_lr = 0.8
+cortisol_influence_on_synapto = -0.3
+dopamine_influence_on_synapto = 0.5
+firing_threshold_increase_on_dopa = -0.2
+firing_threshold_increase_on_cort = 0.3
+
+# Example for CortisolGlandPosition (assuming 16D, adjust as needed)
+# Ensure all 16 dimensions are specified if overriding.
+# cortisol_gland_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

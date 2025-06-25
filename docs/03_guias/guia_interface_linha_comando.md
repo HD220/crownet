@@ -20,6 +20,7 @@ A aplicação é executada como um único binário (`crownet` após compilação
 
 Estas flags podem ser aplicadas à maioria dos modos de operação:
 
+*   `-configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados primeiro. Flags CLI subsequentes podem sobrescrever os valores do arquivo. (Padrão: "", nenhum arquivo carregado por padrão)
 *   `-neurons <int>`: Número total de neurônios na rede. (Padrão: 200)
 *   `-weightsFile <string>`: Caminho para o arquivo JSON para salvar/carregar os pesos sinápticos. (Padrão: "crownet_weights.json")
 *   `-dbPath <string>`: Caminho para o arquivo SQLite para logging detalhado da simulação. Se fornecido, o logging é ativado. O arquivo é recriado a cada execução. (Padrão: "crownet_sim_run.db")
@@ -27,7 +28,51 @@ Estas flags podem ser aplicadas à maioria dos modos de operação:
 *   `-debugChem <bool>`: Habilita logs de depuração para produção/níveis de neuroquímicos. (Padrão: false)
 *   `-seed <int64>`: Semente para o gerador de números aleatórios (0 usa o tempo atual). (Padrão: 0)
 
-## 4. Formato da Saída no Console por Modo
+## 4. Arquivo de Configuração TOML (Opcional)
+
+A aplicação pode ser configurada usando um arquivo TOML (especificado pela flag `-configFile`). Este arquivo permite uma configuração mais detalhada e persistente do que apenas flags CLI.
+
+**Ordem de Precedência da Configuração:**
+1.  **Valores Padrão Internos:** Definidos no código da aplicação.
+2.  **Arquivo de Configuração TOML:** Se `-configFile` for fornecido e o arquivo for válido, seus valores sobrescrevem os padrões.
+3.  **Flags da Linha de Comando (CLI):** Quaisquer flags fornecidas na execução sobrescrevem os valores do arquivo de configuração e os padrões.
+
+**Estrutura do Arquivo TOML:**
+O arquivo TOML pode conter duas seções principais: `[cli]` e `[sim_params]`.
+
+*   **Seção `[cli]`:** Contém parâmetros que também podem ser definidos por flags CLI.
+    ```toml
+    [cli]
+    mode = "sim"
+    total_neurons = 250
+    seed = 12345
+    weights_file = "custom_weights.json"
+    base_learning_rate = 0.015
+    # ... outras flags CLI como cycles, db_path, etc.
+    ```
+
+*   **Seção `[sim_params]`:** Contém parâmetros detalhados da simulação (correspondentes à estrutura `SimulationParameters` no código).
+    ```toml
+    [sim_params]
+    space_max_dimension = 12.0
+    base_firing_threshold = 1.0
+    pulse_propagation_speed = 1.0
+    accumulated_pulse_decay_rate = 0.1
+    # ... todos os outros SimulationParameters
+    ```
+
+**Exemplo de Uso:**
+```bash
+./crownet -configFile my_config.toml -mode observe -digit 5
+```
+Neste exemplo:
+1.  A aplicação carrega os padrões.
+2.  Lê `my_config.toml`. Se `my_config.toml` definir `mode = "sim"`, ele será sobrescrito.
+3.  As flags CLI `-mode observe` e `-digit 5` sobrescrevem quaisquer valores para `mode` e `digit` definidos no arquivo `my_config.toml` ou nos padrões.
+
+Se o arquivo `config.toml` não for encontrado ou for inválido (e a flag `-configFile` for especificada), um erro será emitido. Se `-configFile` não for usada, a aplicação procede com padrões e flags CLI.
+
+## 5. Formato da Saída no Console por Modo
 
 ### 4.1. Saída de Inicialização Comum (Todos os Modos)
 
