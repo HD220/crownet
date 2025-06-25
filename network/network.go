@@ -89,6 +89,10 @@ type CrowNet struct {
 	isSynaptogenesisEnabled bool
 	// isChemicalModulationEnabled, if true, allows neurochemicals to modulate network behavior.
 	isChemicalModulationEnabled bool
+
+	// SynaptogenesisStrategy components
+	SynaptogenesisForceCalculator ForceCalculator // REFACTOR-006
+	SynaptogenesisMovementUpdater MovementUpdater // REFACTOR-006
 }
 
 // NewCrowNet creates and initializes a new CrowNet simulation environment.
@@ -164,6 +168,11 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		isLearningEnabled:      true,
 		isSynaptogenesisEnabled: true,
 		isChemicalModulationEnabled: true,
+
+		// REFACTOR-006: Initialize synaptogenesis strategy components
+		// Placeholder for actual default implementation structs/constructors
+		SynaptogenesisForceCalculator:   &DefaultForceCalculator{},
+		SynaptogenesisMovementUpdater: &DefaultMovementUpdater{},
 	}
 	// Ensure SynapticWeights is properly initialized (it was missing its params before)
 	// This assumes NewNetworkWeights might also return an error or needs simParams & rng
