@@ -23,6 +23,12 @@ const epsilonVelocityMagnitude = 1e-9
 // Resting neurons exert a repulsive force.
 // The force is only considered if n2 is within n1's SynaptogenesisInfluenceRadius.
 func calculateNetForceOnNeuron(n1 *neuron.Neuron, allNeurons []*neuron.Neuron, simParams *config.SimulationParameters, modulationFactor float64) common.Vector {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Log or handle error appropriately. Returning zero vector if simParams are missing.
+		// Consider logging: log.Println("Warning: calculateNetForceOnNeuron called with nil simParams")
+		return common.Vector{}
+	}
 	netForce := common.Vector{} // Initialize zero vector for accumulating forces
 
 	for _, n2 := range allNeurons {
@@ -68,6 +74,12 @@ func calculateNetForceOnNeuron(n1 *neuron.Neuron, allNeurons []*neuron.Neuron, s
 // The new position is also clamped to stay within the simulation space boundaries.
 // Time step is implicitly 1 cycle.
 func updateNeuronMovement(n *neuron.Neuron, netForce common.Vector, simParams *config.SimulationParameters) (newPosition common.Point, newVelocity common.Vector) {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Log or handle error appropriately. Returning current position and velocity if simParams are missing.
+		// Consider logging: log.Println("Warning: updateNeuronMovement called with nil simParams")
+		return n.Position, n.Velocity
+	}
 	currentVelocity := n.Velocity
 	updatedVelocity := common.Vector{}
 	var velocityMagnitudeSq float64 // Use float64 for sum of squares

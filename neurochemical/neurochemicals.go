@@ -60,6 +60,11 @@ type Environment struct {
 // Each such pulse contributes an amount defined by SimParams.CortisolProductionPerHit.
 // cortisolGlandPosition is the fixed location of the gland, sourced from SimParams.
 func calculateCortisolStimulation(activePulses []*pulse.Pulse, cortisolGlandPosition common.Point, simParams *config.SimulationParameters) float64 {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Consider logging: log.Println("Warning: calculateCortisolStimulation called with nil simParams")
+		return 0.0
+	}
 	if simParams.CortisolProductionPerHit <= 0 {
 		return 0.0 // No production if the per-hit amount is zero or negative.
 	}
@@ -87,6 +92,11 @@ func calculateCortisolStimulation(activePulses []*pulse.Pulse, cortisolGlandPosi
 // Production is triggered by dopaminergic neurons that are currently firing.
 // Each firing dopaminergic neuron contributes an amount defined by SimParams.DopamineProductionPerEvent.
 func calculateDopamineProduction(neurons []*neuron.Neuron, simParams *config.SimulationParameters) float64 {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Consider logging: log.Println("Warning: calculateDopamineProduction called with nil simParams")
+		return 0.0
+	}
 	if simParams.DopamineProductionPerEvent <= 0 {
 		return 0.0 // No production if the per-event amount is zero or negative.
 	}
@@ -155,6 +165,12 @@ func (env *Environment) UpdateLevels(
 	cortisolGlandPosition common.Point, // Explicitly passed, though now part of simParams.
 	simParams *config.SimulationParameters,
 ) {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Consider logging: log.Println("Warning: Environment.UpdateLevels called with nil simParams. Levels will not update.")
+		return
+	}
+
 	// Calculate production amounts for this cycle based on network events.
 	cortisolProduction := calculateCortisolStimulation(activePulses, cortisolGlandPosition, simParams) // cortisolGlandPosition is from simParams too.
 	dopamineProduction := calculateDopamineProduction(neurons, simParams)
@@ -184,6 +200,13 @@ func (env *Environment) UpdateLevels(
 // to scale their respective processes.
 // Effects are multiplicative and sequential (dopamine first, then cortisol).
 func (env *Environment) recalculateModulationFactors(simParams *config.SimulationParameters) {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Consider logging: log.Println("Warning: Environment.recalculateModulationFactors called with nil simParams. Factors remain default.")
+		env.LearningRateModulationFactor = 1.0
+		env.SynaptogenesisModulationFactor = 1.0
+		return
+	}
 	lrFactor := 1.0 // Start with a base factor of 1.0 (no modulation)
 	normalizedDopamine := getNormalizedLevel(env.DopamineLevel, simParams.DopamineMaxLevel)
 	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, simParams.CortisolMaxLevel)
@@ -213,6 +236,18 @@ func (env *Environment) recalculateModulationFactors(simParams *config.Simulatio
 // Cortisol and Dopamine effects are applied sequentially.
 // The final threshold is clamped by minFiringThresholdValue.
 func (env *Environment) ApplyEffectsToNeurons(neurons []*neuron.Neuron, simParams *config.SimulationParameters) {
+	// REFACTOR-007: Add nil check for simParams
+	if simParams == nil {
+		// Consider logging: log.Println("Warning: Environment.ApplyEffectsToNeurons called with nil simParams. Neuron thresholds not changed.")
+		// Ensure thresholds are at least base if this happens, though they should be if not modified.
+		// This path implies an issue, but we avoid panic.
+		for _, n := range neurons {
+			if n != nil { // Defensive check for nil neuron in slice
+				n.CurrentFiringThreshold = n.BaseFiringThreshold
+			}
+		}
+		return
+	}
 	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, simParams.CortisolMaxLevel)
 	normalizedDopamine := getNormalizedLevel(env.DopamineLevel, simParams.DopamineMaxLevel)
 

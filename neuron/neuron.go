@@ -5,6 +5,7 @@ package neuron
 import (
 	"crownet/common"
 	"crownet/config"
+	"fmt"  // Added for panic message in New
 	"math" // Added for math.Abs in DecayPotential, was missing from original import list if nearZeroThreshold was used.
 )
 
@@ -67,6 +68,9 @@ func New(id common.NeuronID, neuronType Type, initialPosition common.Point, simP
 		//
 		// NOTE: The duplicate 'n := &Neuron{...}' block below was removed as it caused a compile error.
 		// It appeared to be a copy-paste artifact. The first initialization block is the correct one.
+		// REFACTOR-007: Adding explicit nil check for simParams.
+		// This is a critical setup error; the caller (e.g., NewCrowNet) should ensure simParams is valid.
+		panic(fmt.Sprintf("neuron.New called with nil simParams for neuron ID %d", id))
 	}
 	n := &Neuron{
 		ID:                     id,
