@@ -1,44 +1,29 @@
-# Rastreador de Tarefas do Projeto
+# Tabela Principal de Tarefas - CrowNet
 
-Esta tabela rastreia as tarefas de desenvolvimento de alto nível para o projeto.
+**Status:** Pendente, Em Andamento, Concluído, Bloqueado, Revisão, Cancelado
+**Prioridade (P0-P4):** P0 (Crítica), P1 (Alta), P2 (Média), P3 (Baixa), P4 (Muito Baixa)
 
-| ID da Tarefa | Descrição da Tarefa                                  | Status      | Complexidade (1-5) | Responsável                     | Dependências (IDs) | Data de Criação | Data de Conclusão (Estimada/Real) | Notas                                                                 |
-| :----------- | :--------------------------------------------------- | :---------- | :----------------- | :------------------------------ | :----------------- | :-------------- | :-------------------------------- | :-------------------------------------------------------------------- |
-| SYS-MIG-001  | Migrar gerenciamento de tarefas para novo formato (índice + arquivos de detalhe) | Subdividido | 4 - Alta           | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Tarefa estrutural para implementar novo sistema de gerenciamento de tarefas. Prioridade P0. Sub-tarefas: SYS-MIG-001.1, SYS-MIG-001.2, SYS-MIG-001.3. |
-| SYS-MIG-001.1| Criar arquivos de detalhe para tarefas existentes.     | Concluído   | 3 - Média          | AgenteJules                     | SYS-MIG-001        | 2025-06-24      | 2025-06-24                        | Todos os 18 arquivos de detalhe de tarefas (TSK-TEST-002 a TSK-REFACTOR-007) foram criados em /.jules/tasks/. Prioridade P0. |
-| SYS-MIG-001.2| Criar novo arquivo de índice TASKS.md e popular com tarefas migradas. | Pendente    | 2 - Baixa          | AgenteJules                     | SYS-MIG-001, SYS-MIG-001.1 | 2025-06-24      | AAAA-MM-DD                        | Segundo passo: criar o arquivo de índice mestre. Prioridade P0. |
-| SYS-MIG-001.3| (Interno) Adaptar lógica do agente para o novo formato de tarefas. | Pendente    | 3 - Média          | AgenteJules                     | SYS-MIG-001, SYS-MIG-001.2 | 2025-06-24      | AAAA-MM-DD                        | Ajuste interno do agente. Não altera arquivos do repositório. Prioridade P0. |
-| TEST-002     | Executar testes unitários/integração, depurar e garantir passagem | Pendente    | 3 - Média          | AgenteJules                     | TEST-001           | 2025-06-24      | AAAA-MM-DD                        | Requer ambiente de execução funcional (go test ./...). Focar na estabilização dos testes criados em TEST-001. |
-| TEST-003     | Desenvolver testes de integração para cenários chave de simulação | Pendente    | 4 - Alta           | AgenteJules                     | TEST-002           | 2025-06-24      | AAAA-MM-DD                        | Testar fluxo completo dos modos CLI (expose, observe, sim) com configs e dados específicos. |
-| FEATURE-003  | Implementar carregamento de configuração via arquivo (TOML/YAML) | Pendente    | 3 - Média          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Modificar config/config.go. Flags CLI podem sobrescrever valores do arquivo. |
-| REFACTOR-004 | Refatorar comportamento neuronal para usar interfaces (Extensibilidade) | Pendente    | 4 - Alta           | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Definir interfaces (FiringCondition, etc.) em neuron/neuron.go. |
-| CHORE-003    | Criar Makefile para build, lint e teste automatizados | Pendente    | 2 - Baixa          | AgenteJules                     | FEAT-001.2         | 2025-06-24      | AAAA-MM-DD                        | Incluir targets 'make build', 'make lint', 'make test'. |
-| DOC-003      | Revisão e aprimoramento global dos GoDocs para APIs públicas | Pendente    | 3 - Média          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Garantir documentação clara e completa para pacotes, funções e tipos exportados. |
-| SEC-001      | Analisar e validar caminhos de arquivo para E/S (weights, SQLite DB) | Pendente    | 2 - Baixa          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Verificar limpeza/validação de caminhos para -weightsFile e -dbPath. |
-| CHORE-004    | Verificar e documentar o status de manutenção das dependências externas | Pendente    | 1 - Muito Baixa    | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Foco em github.com/mattn/go-sqlite3. |
-| UX-001       | Revisar a usabilidade da CLI: mensagens de ajuda, erros e feedback | Pendente    | 2 - Baixa          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Avaliar clareza das mensagens da CLI em diversos cenários. |
-| REFACTOR-005 | Avaliar e propor interfaces para estratégias de propagação de pulso | Pendente    | 3 - Média          | AgenteJules                     | PERF-002           | 2025-06-24      | AAAA-MM-DD                        | Considerar extensibilidade de pulse.ProcessCycle para diferentes modelos de propagação. |
-| REFACTOR-006 | Avaliar e propor interfaces para estratégias de sinaptogênese | Pendente    | 3 - Média          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Considerar extensibilidade de network.applySynaptogenesis para diferentes regras de movimento. |
-| PERF-004     | Realizar profiling básico da aplicação nos modos 'expose' e 'sim' | Pendente    | 3 - Média          | AgenteJules                     | TEST-002           | 2025-06-24      | AAAA-MM-DD                        | Usar pprof para identificar gargalos de CPU/memória. Documentar resultados. |
-| DOC-004      | Criar arquivo CONTRIBUTING.md com diretrizes para contribuição | Pendente    | 2 - Baixa          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Incluir estilo de código, fluxo de commit/PR, setup de ambiente. |
-| CHORE-005    | Adicionar um arquivo LICENSE (ex: MIT ou Apache 2.0) | Pendente    | 1 - Muito Baixa    | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Pesquisar e adicionar texto da licença apropriada. |
-| CHORE-006    | Configurar GitHub Issue Templates para bugs e feature requests | Pendente    | 1 - Muito Baixa    | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Criar arquivos de template em .github/ISSUE_TEMPLATE/. |
-| FEATURE-004  | Desenvolver script/utilitário para exportar/visualizar dados do SQLite log | Pendente    | 3 - Média          | AgenteJules                     | RF-PERSIST-003     | 2025-06-24      | AAAA-MM-DD                        | Script Go/Python para CSVs, plots básicos ou resumo textual. |
-| UX-002       | Melhorar representação visual do output no modo 'observe' | Pendente    | 2 - Baixa          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Considerar ASCII art para padrão 5x7 de output. |
-| REFACTOR-007 | Revisão e adição de nil checks para *config.SimulationParameters | Pendente    | 2 - Baixa          | AgenteJules                     | -                  | 2025-06-24      | AAAA-MM-DD                        | Verificar e adicionar nil checks em funções críticas que usam SimParams. |
-
-**Legenda de Status:**
-
-*   **Pendente:** A tarefa ainda não foi iniciada.
-*   **Em Andamento:** A tarefa está sendo trabalhada ativamente.
-*   **Concluído:** A tarefa foi finalizada e verificada.
-*   **Bloqueado:** A tarefa não pode progredir devido a dependências ou outros problemas.
-*   **Revisão:** A tarefa foi concluída e está aguardando revisão/aprovação.
-
-**Legenda de Complexidade:**
-
-*   **1 (Muito Baixa):** Tarefa simples, rápida de executar.
-*   **2 (Baixa):** Requer um pouco mais de esforço ou conhecimento.
-*   **3 (Média):** Tarefa com complexidade moderada, pode envolver múltiplas etapas.
-*   **4 (Alta):** Requer esforço significativo, pesquisa ou design.
-*   **5 (Muito Alta):** Tarefa muito complexa, pode precisar ser subdividida.
+| ID da Tarefa | Título Breve da Tarefa                     | Status    | Dependências (IDs) | Prioridade | Responsável | Link para Detalhes                            | Notas Breves                                  |
+|--------------|--------------------------------------------|-----------|--------------------|------------|-------------|-----------------------------------------------|-----------------------------------------------|
+| SYS-MIG-001  | Migrar para novo formato de tarefas        | Subdividido | -                  | P0         | AgenteJules | [TSK-SYS-MIG-001.md](./tasks/TSK-SYS-MIG-001.md) | Sub-tarefas: .1 (Concluído), .2, .3.          |
+| SYS-MIG-001.1| Criar arquivos de detalhe para tarefas     | Concluído | SYS-MIG-001        | P0         | AgenteJules | [TSK-SYS-MIG-001.1.md](./tasks/TSK-SYS-MIG-001.1.md) | 18 arquivos de detalhe criados.              |
+| SYS-MIG-001.2| Criar novo índice TASKS.md                 | Concluído | SYS-MIG-001,SYS-MIG-001.1 | P0         | AgenteJules | [TSK-SYS-MIG-001.2.md](./tasks/TSK-SYS-MIG-001.2.md) | Novo arquivo de índice TASKS.md criado e populado. |
+| SYS-MIG-001.3| (Interno) Adaptar agente ao novo formato   | Pendente  | SYS-MIG-001,SYS-MIG-001.2 | P0         | AgenteJules | [TSK-SYS-MIG-001.3.md](./tasks/TSK-SYS-MIG-001.3.md) | Ajuste interno do agente.                   |
+| TEST-002     | Executar testes, depurar e garantir passagem | Pendente  | -                  | P2         | AgenteJules | [TSK-TEST-002.md](./tasks/TSK-TEST-002.md)    | Requer ambiente funcional.                   |
+| TEST-003     | Desenvolver testes de integração chave     | Pendente  | TEST-002           | P2         | AgenteJules | [TSK-TEST-003.md](./tasks/TSK-TEST-003.md)    | Testar modos CLI.      |
+| FEATURE-003  | Configuração via arquivo (TOML/YAML)       | Pendente  | -                  | P2         | AgenteJules | [TSK-FEATURE-003.md](./tasks/TSK-FEATURE-003.md)| Modificar config/config.go.                   |
+| REFACTOR-004 | Interfaces neuronais (Extensibilidade)   | Pendente  | -                  | P2         | AgenteJules | [TSK-REFACTOR-004.md](./tasks/TSK-REFACTOR-004.md)| Definir FiringCondition, etc.               |
+| CHORE-003    | Criar Makefile (build, lint, teste)      | Pendente  | FEAT-001.2         | P2         | AgenteJules | [TSK-CHORE-003.md](./tasks/TSK-CHORE-003.md)  | Targets: build, lint, test.                 |
+| DOC-003      | Revisão global dos GoDocs                  | Pendente  | -                  | P2         | AgenteJules | [TSK-DOC-003.md](./tasks/TSK-DOC-003.md)      | Para APIs públicas.                         |
+| SEC-001      | Validar caminhos de arquivo para E/S       | Pendente  | -                  | P2         | AgenteJules | [TSK-SEC-001.md](./tasks/TSK-SEC-001.md)      | Para -weightsFile, -dbPath.                 |
+| CHORE-004    | Verificar status de dependências externas  | Pendente  | -                  | P3         | AgenteJules | [TSK-CHORE-004.md](./tasks/TSK-CHORE-004.md)  | Foco: go-sqlite3.                           |
+| UX-001       | Revisar usabilidade da CLI                 | Pendente  | -                  | P2         | AgenteJules | [TSK-UX-001.md](./tasks/TSK-UX-001.md)        | Mensagens de ajuda, erros, feedback.        |
+| REFACTOR-005 | Interfaces para propagação de pulso        | Pendente  | PERF-002           | P3         | AgenteJules | [TSK-REFACTOR-005.md](./tasks/TSK-REFACTOR-005.md)| Extensibilidade de pulse.ProcessCycle.      |
+| REFACTOR-006 | Interfaces para sinaptogênese            | Pendente  | -                  | P3         | AgenteJules | [TSK-REFACTOR-006.md](./tasks/TSK-REFACTOR-006.md)| Extensibilidade de applySynaptogenesis.     |
+| PERF-004     | Realizar profiling básico da aplicação     | Pendente  | TEST-002           | P2         | AgenteJules | [TSK-PERF-004.md](./tasks/TSK-PERF-004.md)    | Modos 'expose' e 'sim'.                     |
+| DOC-004      | Criar CONTRIBUTING.md                      | Pendente  | -                  | P3         | AgenteJules | [TSK-DOC-004.md](./tasks/TSK-DOC-004.md)      | Diretrizes para contribuição.               |
+| CHORE-005    | Adicionar arquivo LICENSE                  | Pendente  | -                  | P1         | AgenteJules | [TSK-CHORE-005.md](./tasks/TSK-CHORE-005.md)  | Ex: MIT ou Apache 2.0.                      |
+| CHORE-006    | Configurar GitHub Issue Templates          | Pendente  | -                  | P3         | AgenteJules | [TSK-CHORE-006.md](./tasks/TSK-CHORE-006.md)  | Para bugs e feature requests.               |
+| FEATURE-004  | Utilitário para log SQLite               | Pendente  | -                  | P3         | AgenteJules | [TSK-FEATURE-004.md](./tasks/TSK-FEATURE-004.md)| Exportar/visualizar dados.                  |
+| UX-002       | Melhorar visualização output 'observe'     | Pendente  | -                  | P3         | AgenteJules | [TSK-UX-002.md](./tasks/TSK-UX-002.md)        | Considerar ASCII art.                       |
+| REFACTOR-007 | Adicionar nil checks para SimParams        | Pendente  | -                  | P2         | AgenteJules | [TSK-REFACTOR-007.md](./tasks/TSK-REFACTOR-007.md)| Em funções críticas.                        |
