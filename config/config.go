@@ -32,37 +32,48 @@ var SupportedModes = []string{ModeSim, ModeExpose, ModeObserve, ModeLogUtil} // 
 // SimulationParameters defines the detailed parameters that govern the behavior
 // of the neural network simulation. These parameters control aspects from spatial
 // properties and neuron behavior to learning rules and neurochemical influences.
-type SimulationParameters struct {
-	// Spatial and General Network Parameters
+// REFACTOR-CONFIG-001: Grouped parameters into sub-structs.
 
-	// SpaceMaxDimension defines the boundary of the N-dimensional simulation space.
-	// For example, if SpaceMaxDimension is 10.0, coordinates typically range from -5.0 to +5.0.
-	SpaceMaxDimension float64
-	CyclesPerSecond   float64 // Simulation cycles that represent one second of real time.
+// GeneralParams defines general spatial and time-related simulation parameters.
+type GeneralParams struct {
+	SpaceMaxDimension     float64     // Boundary of the N-dimensional simulation space.
+	CyclesPerSecond       float64     // Simulation cycles representing one second of real time.
+	PulsePropagationSpeed common.Rate // Speed at which pulses travel in the space.
+}
 
-	// Neuron Definition and Behavior
-	BaseFiringThreshold      common.Threshold // Base threshold for a neuron to fire.
-	AccumulatedPulseDecayRate common.Rate    // Rate at which accumulated pulse potential decays per cycle.
-	AbsoluteRefractoryCycles common.CycleCount // Cycles a neuron cannot fire after firing.
-	RelativeRefractoryCycles common.CycleCount // Cycles a neuron has increased threshold after firing.
-	PulsePropagationSpeed    common.Rate    // Speed at which pulses travel in the space.
+// NeuronBehaviorParams defines parameters related to individual neuron behavior.
+type NeuronBehaviorParams struct {
+	BaseFiringThreshold       common.Threshold // Base threshold for a neuron to fire.
+	AccumulatedPulseDecayRate common.Rate      // Rate at which accumulated pulse potential decays.
+	AbsoluteRefractoryCycles  common.CycleCount  // Cycles a neuron cannot fire after firing.
+	RelativeRefractoryCycles  common.CycleCount  // Cycles a neuron has increased threshold after firing.
+}
 
-	// Neuron Type Distribution and Influence Radii
+// NeuronDistributionParams defines parameters for neuron type distribution and influence radii.
+type NeuronDistributionParams struct {
 	DopaminergicPercent      common.Percentage // Percentage of internal neurons that are dopaminergic.
 	InhibitoryPercent        common.Percentage // Percentage of internal neurons that are inhibitory.
-	ExcitatoryRadiusFactor   common.Factor     // Factor for excitatory neuron influence radius relative to a base.
+	ExcitatoryRadiusFactor   common.Factor     // Factor for excitatory neuron influence radius.
 	DopaminergicRadiusFactor common.Factor     // Factor for dopaminergic neuron influence radius.
 	InhibitoryRadiusFactor   common.Factor     // Factor for inhibitory neuron influence radius.
+}
 
-	// Input/Output and Pattern Definition
-	MinInputNeurons  int // Minimum number of input neurons required.
-	MinOutputNeurons int // Minimum number of output neurons required.
-	PatternHeight    int // Height of the input patterns (e.g., for digits).
-	PatternWidth     int // Width of the input patterns.
-	PatternSize      int // Total size of the input patterns (Height * Width).
+// NetworkStructureParams defines parameters for overall network structure like I/O neurons.
+type NetworkStructureParams struct {
+	MinInputNeurons             int     // Minimum number of input neurons required.
+	MinOutputNeurons            int     // Minimum number of output neurons required.
 	OutputFrequencyWindowCycles float64 // Number of cycles to average output neuron firing frequency.
+}
 
-	// Synaptic Weights and Learning Parameters
+// PatternParams defines parameters related to input/output patterns.
+type PatternParams struct {
+	PatternHeight int // Height of the input patterns (e.g., for digits).
+	PatternWidth  int // Width of the input patterns.
+	PatternSize   int // Total size of the input patterns (Height * Width).
+}
+
+// LearningParams defines parameters for synaptic weights and learning rules.
+type LearningParams struct {
 	InitialSynapticWeightMin    common.SynapticWeight // Minimum initial synaptic weight.
 	InitialSynapticWeightMax    common.SynapticWeight // Maximum initial synaptic weight.
 	MaxSynapticWeight           common.SynapticWeight // Absolute maximum for any synaptic weight.
@@ -73,35 +84,46 @@ type SimulationParameters struct {
 	HebbPositiveReinforceFactor common.Factor         // Factor for strengthening synaptic weights in Hebbian learning.
 	HebbNegativeReinforceFactor common.Factor         // Factor for weakening synaptic weights (if applicable, or for LTD).
 	MinLearningRateFactor       common.Factor         // Minimum modulation factor for learning rate.
+}
 
-	// Synaptogenesis (Neuronal Movement) Parameters
+// SynaptogenesisParams defines parameters for neuronal movement and structural plasticity.
+type SynaptogenesisParams struct {
 	SynaptogenesisInfluenceRadius common.Coordinate // Radius within which neurons influence each other for movement.
 	AttractionForceFactor         common.Factor     // Factor for attractive forces between neurons.
 	RepulsionForceFactor          common.Factor     // Factor for repulsive forces between neurons.
 	DampeningFactor               common.Factor     // Dampening factor for neuron movement.
 	MaxMovementPerCycle           common.Coordinate // Maximum distance a neuron can move in one cycle.
+}
 
-	// Neurochemical System Parameters
-	CortisolProductionRate        common.Rate    // Base rate of cortisol production.
-	CortisolDecayRate             common.Rate    // Rate at which cortisol decays.
-	CortisolProductionPerHit    common.Level   // Amount of cortisol produced per 'stress' event.
-	CortisolMaxLevel              common.Level   // Maximum possible cortisol level.
-	DopamineProductionRate        common.Rate    // Base rate of dopamine production.
-	DopamineDecayRate             common.Rate    // Rate at which dopamine decays.
-	DopamineProductionPerEvent  common.Level   // Amount of dopamine produced per 'reward' event.
-	DopamineMaxLevel              common.Level   // Maximum possible dopamine level.
-
-	// Neurochemical Influence Factors
+// NeurochemicalParams defines parameters for the neurochemical system and its influences.
+type NeurochemicalParams struct {
+	CortisolProductionRate        common.Rate   // Base rate of cortisol production.
+	CortisolDecayRate             common.Rate   // Rate at which cortisol decays.
+	CortisolProductionPerHit    common.Level  // Amount of cortisol produced per 'stress' event.
+	CortisolMaxLevel              common.Level  // Maximum possible cortisol level.
+	CortisolGlandPosition         common.Point  // Fixed N-dimensional coordinates of the cortisol gland.
+	DopamineProductionRate        common.Rate   // Base rate of dopamine production.
+	DopamineDecayRate             common.Rate   // Rate at which dopamine decays.
+	DopamineProductionPerEvent  common.Level  // Amount of dopamine produced per 'reward' event.
+	DopamineMaxLevel              common.Level  // Maximum possible dopamine level.
 	CortisolInfluenceOnLR         common.Factor // How cortisol influences the learning rate.
 	DopamineInfluenceOnLR         common.Factor // How dopamine influences the learning rate.
 	CortisolInfluenceOnSynapto    common.Factor // How cortisol influences synaptogenesis.
 	DopamineInfluenceOnSynapto    common.Factor // How dopamine influences synaptogenesis.
 	FiringThresholdIncreaseOnDopa common.Factor // How dopamine influences neuron firing thresholds.
 	FiringThresholdIncreaseOnCort common.Factor // How cortisol influences neuron firing thresholds.
+}
 
-	// CortisolGlandPosition defines the fixed N-dimensional coordinates of the cortisol gland
-	// within the simulation space.
-	CortisolGlandPosition common.Point
+// SimulationParameters is the main struct holding all simulation parameters, grouped into sub-structs.
+type SimulationParameters struct {
+	General        GeneralParams            `toml:"general"`
+	NeuronBehavior NeuronBehaviorParams     `toml:"neuron_behavior"`
+	Distribution   NeuronDistributionParams `toml:"distribution"`
+	Structure      NetworkStructureParams   `toml:"structure"`
+	Pattern        PatternParams            `toml:"pattern"`
+	Learning       LearningParams           `toml:"learning"`
+	Synaptogenesis SynaptogenesisParams     `toml:"synaptogenesis"`
+	Neurochemical  NeurochemicalParams      `toml:"neurochemical"`
 }
 
 // CLIConfig holds configuration parameters that are typically set or overridden
@@ -144,62 +166,79 @@ type CLIConfig struct {
 // AppConfig is the top-level configuration structure, aggregating both
 // SimulationParameters and CLIConfig.
 type AppConfig struct {
-	SimParams SimulationParameters // Detailed parameters for the simulation behavior.
-	Cli       CLIConfig            // Parameters typically set via command-line flags.
+	SimParams SimulationParameters `json:"sim_params" toml:"sim_params"` // Detailed parameters for the simulation behavior.
+	Cli       CLIConfig            `json:"cli" toml:"cli"`               // Parameters typically set via command-line flags.
 }
 
 // DefaultSimulationParameters returns a SimulationParameters struct populated with
 // sensible default values for all simulation settings.
+// REFACTOR-CONFIG-001: Updated to initialize new sub-structs.
 func DefaultSimulationParameters() SimulationParameters {
 	return SimulationParameters{
-		SpaceMaxDimension:             10.0,
-		CortisolGlandPosition:         common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // Default to origin
-		BaseFiringThreshold:           1.0,
-		PulsePropagationSpeed:         1.0,
-		HebbianCoincidenceWindow:      2,
-		DopaminergicPercent:           0.1,
-		InhibitoryPercent:             0.2,
-		ExcitatoryRadiusFactor:        1.0,
-		DopaminergicRadiusFactor:      0.8,
-		InhibitoryRadiusFactor:        0.9,
-		MinInputNeurons:               35,
-		MinOutputNeurons:              10,
-		PatternHeight:                 7,
-		PatternWidth:                  5,
-		PatternSize:                   7 * 5,
-		AccumulatedPulseDecayRate:     common.Rate(0.1),
-		AbsoluteRefractoryCycles:      common.CycleCount(2),
-		RelativeRefractoryCycles:      common.CycleCount(3),
-		SynaptogenesisInfluenceRadius: common.Coordinate(2.0),
-		AttractionForceFactor:         common.Factor(0.01),
-		RepulsionForceFactor:          common.Factor(0.005),
-		DampeningFactor:               common.Factor(0.5),
-		MaxMovementPerCycle:           common.Coordinate(0.1),
-		CyclesPerSecond:               100.0,
-		OutputFrequencyWindowCycles:   50.0,
-		InitialSynapticWeightMin:      common.SynapticWeight(0.1),
-		InitialSynapticWeightMax:      common.SynapticWeight(0.5),
-		MaxSynapticWeight:             common.SynapticWeight(1.0),
-		HebbianWeightMin:              common.SynapticWeight(-0.1), // Allow weakening below zero
-		HebbianWeightMax:              common.SynapticWeight(1.0),  // Can reach absolute max
-		HebbPositiveReinforceFactor:   common.Factor(0.1),
-		HebbNegativeReinforceFactor:   common.Factor(0.05),
-		CortisolProductionRate:        common.Rate(0.01),
-		CortisolDecayRate:             common.Rate(0.005),
-		DopamineProductionRate:        common.Rate(0.02),
-		DopamineDecayRate:             common.Rate(0.01),
-		CortisolInfluenceOnLR:         common.Factor(-0.5),
-		DopamineInfluenceOnLR:         common.Factor(0.8),
-		CortisolInfluenceOnSynapto:    common.Factor(-0.3),
-		DopamineInfluenceOnSynapto:    common.Factor(0.5),
-		FiringThresholdIncreaseOnDopa: common.Factor(-0.2),
-		FiringThresholdIncreaseOnCort: common.Factor(0.3),
-		SynapticWeightDecayRate:       common.Rate(0.0001),
-		CortisolProductionPerHit:    common.Level(0.05),
-		CortisolMaxLevel:            common.Level(1.0),
-		DopamineProductionPerEvent:  common.Level(0.1),
-		DopamineMaxLevel:            common.Level(1.0),
-		MinLearningRateFactor:         common.Factor(0.1),
+		General: GeneralParams{
+			SpaceMaxDimension:     10.0,
+			CyclesPerSecond:       100.0,
+			PulsePropagationSpeed: 1.0,
+		},
+		NeuronBehavior: NeuronBehaviorParams{
+			BaseFiringThreshold:       1.0,
+			AccumulatedPulseDecayRate: common.Rate(0.1),
+			AbsoluteRefractoryCycles:  common.CycleCount(2),
+			RelativeRefractoryCycles:  common.CycleCount(3),
+		},
+		Distribution: NeuronDistributionParams{
+			DopaminergicPercent:      0.1,
+			InhibitoryPercent:        0.2,
+			ExcitatoryRadiusFactor:   1.0,
+			DopaminergicRadiusFactor: 0.8,
+			InhibitoryRadiusFactor:   0.9,
+		},
+		Structure: NetworkStructureParams{
+			MinInputNeurons:             35,
+			MinOutputNeurons:            10,
+			OutputFrequencyWindowCycles: 50.0,
+		},
+		Pattern: PatternParams{
+			PatternHeight: 7,
+			PatternWidth:  5,
+			PatternSize:   7 * 5,
+		},
+		Learning: LearningParams{
+			InitialSynapticWeightMin:    common.SynapticWeight(0.1),
+			InitialSynapticWeightMax:    common.SynapticWeight(0.5),
+			MaxSynapticWeight:           common.SynapticWeight(1.0),
+			HebbianWeightMin:            common.SynapticWeight(-0.1),
+			HebbianWeightMax:            common.SynapticWeight(1.0),
+			SynapticWeightDecayRate:     common.Rate(0.0001),
+			HebbianCoincidenceWindow:    common.CycleCount(2),
+			HebbPositiveReinforceFactor: common.Factor(0.1),
+			HebbNegativeReinforceFactor: common.Factor(0.05),
+			MinLearningRateFactor:       common.Factor(0.1),
+		},
+		Synaptogenesis: SynaptogenesisParams{
+			SynaptogenesisInfluenceRadius: common.Coordinate(2.0),
+			AttractionForceFactor:         common.Factor(0.01),
+			RepulsionForceFactor:          common.Factor(0.005),
+			DampeningFactor:               common.Factor(0.5),
+			MaxMovementPerCycle:           common.Coordinate(0.1),
+		},
+		Neurochemical: NeurochemicalParams{
+			CortisolProductionRate:        common.Rate(0.01),
+			CortisolDecayRate:             common.Rate(0.005),
+			CortisolProductionPerHit:    common.Level(0.05),
+			CortisolMaxLevel:              common.Level(1.0),
+			CortisolGlandPosition:         common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // Default to origin
+			DopamineProductionRate:        common.Rate(0.02),
+			DopamineDecayRate:             common.Rate(0.01),
+			DopamineProductionPerEvent:  common.Level(0.1),
+			DopamineMaxLevel:              common.Level(1.0),
+			CortisolInfluenceOnLR:         common.Factor(-0.5),
+			DopamineInfluenceOnLR:         common.Factor(0.8),
+			CortisolInfluenceOnSynapto:    common.Factor(-0.3),
+			DopamineInfluenceOnSynapto:    common.Factor(0.5),
+			FiringThresholdIncreaseOnDopa: common.Factor(-0.2),
+			FiringThresholdIncreaseOnCort: common.Factor(0.3),
+		},
 	}
 }
 
@@ -430,108 +469,106 @@ func (ac *AppConfig) Validate() error {
 
 	// SimulationParameters validation (Order can be important for dependent checks)
 	// This section is skipped if Mode is LogUtil due to the early exit above.
-	if ac.SimParams.MinInputNeurons <= 0 {
-		return fmt.Errorf("MinInputNeurons must be positive, got %d", ac.SimParams.MinInputNeurons)
+	// REFACTOR-CONFIG-001: Updated to use new sub-structs
+	if ac.SimParams.Structure.MinInputNeurons <= 0 {
+		return fmt.Errorf("MinInputNeurons must be positive, got %d", ac.SimParams.Structure.MinInputNeurons)
 	}
-	if ac.SimParams.MinOutputNeurons <= 0 {
-		return fmt.Errorf("MinOutputNeurons must be positive, got %d", ac.SimParams.MinOutputNeurons)
+	if ac.SimParams.Structure.MinOutputNeurons <= 0 {
+		return fmt.Errorf("MinOutputNeurons must be positive, got %d", ac.SimParams.Structure.MinOutputNeurons)
 	}
 
 	// Check TotalNeurons from CLI against the (now validated positive) MinInput/Output from SimParams
-	if ac.Cli.TotalNeurons < (ac.SimParams.MinInputNeurons + ac.SimParams.MinOutputNeurons) {
+	if ac.Cli.TotalNeurons < (ac.SimParams.Structure.MinInputNeurons + ac.SimParams.Structure.MinOutputNeurons) {
 		return fmt.Errorf("total neurons from CLI (%d) is less than the sum of required MinInputNeurons (%d) and MinOutputNeurons (%d)",
-			ac.Cli.TotalNeurons, ac.SimParams.MinInputNeurons, ac.SimParams.MinOutputNeurons)
+			ac.Cli.TotalNeurons, ac.SimParams.Structure.MinInputNeurons, ac.SimParams.Structure.MinOutputNeurons)
 	}
 
-	if ac.SimParams.PatternSize <= 0 {
-		return fmt.Errorf("PatternSize must be positive, got %d", ac.SimParams.PatternSize)
+	if ac.SimParams.Pattern.PatternSize <= 0 {
+		return fmt.Errorf("PatternSize must be positive, got %d", ac.SimParams.Pattern.PatternSize)
 	}
-	if ac.SimParams.PatternHeight <= 0 {
-		return fmt.Errorf("PatternHeight must be positive, got %d", ac.SimParams.PatternHeight)
+	if ac.SimParams.Pattern.PatternHeight <= 0 {
+		return fmt.Errorf("PatternHeight must be positive, got %d", ac.SimParams.Pattern.PatternHeight)
 	}
-	if ac.SimParams.PatternWidth <= 0 {
-		return fmt.Errorf("PatternWidth must be positive, got %d", ac.SimParams.PatternWidth)
+	if ac.SimParams.Pattern.PatternWidth <= 0 {
+		return fmt.Errorf("PatternWidth must be positive, got %d", ac.SimParams.Pattern.PatternWidth)
 	}
-	if ac.SimParams.PatternSize != (ac.SimParams.PatternHeight * ac.SimParams.PatternWidth) {
+	if ac.SimParams.Pattern.PatternSize != (ac.SimParams.Pattern.PatternHeight * ac.SimParams.Pattern.PatternWidth) {
 		return fmt.Errorf("PatternSize (%d) must equal PatternHeight (%d) * PatternWidth (%d) = %d",
-			ac.SimParams.PatternSize, ac.SimParams.PatternHeight, ac.SimParams.PatternWidth,
-			ac.SimParams.PatternHeight*ac.SimParams.PatternWidth)
+			ac.SimParams.Pattern.PatternSize, ac.SimParams.Pattern.PatternHeight, ac.SimParams.Pattern.PatternWidth,
+			ac.SimParams.Pattern.PatternHeight*ac.SimParams.Pattern.PatternWidth)
 	}
-	if ac.SimParams.CyclesPerSecond <= 0 {
-		return fmt.Errorf("CyclesPerSecond must be positive, got %f", ac.SimParams.CyclesPerSecond)
+	if ac.SimParams.General.CyclesPerSecond <= 0 {
+		return fmt.Errorf("CyclesPerSecond must be positive, got %f", ac.SimParams.General.CyclesPerSecond)
 	}
-	if ac.SimParams.DopaminergicPercent < 0 || ac.SimParams.DopaminergicPercent > 1.0 {
-		return fmt.Errorf("DopaminergicPercent must be between 0.0 and 1.0, got %f", ac.SimParams.DopaminergicPercent)
+	if ac.SimParams.Distribution.DopaminergicPercent < 0 || ac.SimParams.Distribution.DopaminergicPercent > 1.0 {
+		return fmt.Errorf("DopaminergicPercent must be between 0.0 and 1.0, got %f", ac.SimParams.Distribution.DopaminergicPercent)
 	}
-	if ac.SimParams.InhibitoryPercent < 0 || ac.SimParams.InhibitoryPercent > 1.0 {
-		return fmt.Errorf("InhibitoryPercent must be between 0.0 and 1.0, got %f", ac.SimParams.InhibitoryPercent)
+	if ac.SimParams.Distribution.InhibitoryPercent < 0 || ac.SimParams.Distribution.InhibitoryPercent > 1.0 {
+		return fmt.Errorf("InhibitoryPercent must be between 0.0 and 1.0, got %f", ac.SimParams.Distribution.InhibitoryPercent)
 	}
-	if ac.SimParams.DopaminergicPercent+ac.SimParams.InhibitoryPercent > 1.0 {
-		return fmt.Errorf("sum of DopaminergicPercent (%f) and InhibitoryPercent (%f) cannot exceed 1.0", ac.SimParams.DopaminergicPercent, ac.SimParams.InhibitoryPercent)
+	if ac.SimParams.Distribution.DopaminergicPercent+ac.SimParams.Distribution.InhibitoryPercent > 1.0 {
+		return fmt.Errorf("sum of DopaminergicPercent (%f) and InhibitoryPercent (%f) cannot exceed 1.0", ac.SimParams.Distribution.DopaminergicPercent, ac.SimParams.Distribution.InhibitoryPercent)
 	}
 
 	// Validate non-negative or positive constraints for SimParams
-	if ac.SimParams.SpaceMaxDimension <= 0 {
-		return fmt.Errorf("SpaceMaxDimension must be positive, got %f", ac.SimParams.SpaceMaxDimension)
+	if ac.SimParams.General.SpaceMaxDimension <= 0 {
+		return fmt.Errorf("SpaceMaxDimension must be positive, got %f", ac.SimParams.General.SpaceMaxDimension)
 	}
-	if ac.SimParams.BaseFiringThreshold <= 0 { // Assuming threshold should be positive
-		return fmt.Errorf("BaseFiringThreshold must be positive, got %f", ac.SimParams.BaseFiringThreshold)
+	if ac.SimParams.NeuronBehavior.BaseFiringThreshold <= 0 { // Assuming threshold should be positive
+		return fmt.Errorf("BaseFiringThreshold must be positive, got %f", ac.SimParams.NeuronBehavior.BaseFiringThreshold)
 	}
-	if ac.SimParams.AccumulatedPulseDecayRate < 0 {
-		return fmt.Errorf("AccumulatedPulseDecayRate must be non-negative, got %f", ac.SimParams.AccumulatedPulseDecayRate)
+	if ac.SimParams.NeuronBehavior.AccumulatedPulseDecayRate < 0 {
+		return fmt.Errorf("AccumulatedPulseDecayRate must be non-negative, got %f", ac.SimParams.NeuronBehavior.AccumulatedPulseDecayRate)
 	}
-	if ac.SimParams.AbsoluteRefractoryCycles < 0 { // Should likely be >= 0
-		return fmt.Errorf("AbsoluteRefractoryCycles must be non-negative, got %d", ac.SimParams.AbsoluteRefractoryCycles)
+	if ac.SimParams.NeuronBehavior.AbsoluteRefractoryCycles < 0 { // Should likely be >= 0
+		return fmt.Errorf("AbsoluteRefractoryCycles must be non-negative, got %d", ac.SimParams.NeuronBehavior.AbsoluteRefractoryCycles)
 	}
-	if ac.SimParams.RelativeRefractoryCycles < 0 { // Should likely be >= 0
-		return fmt.Errorf("RelativeRefractoryCycles must be non-negative, got %d", ac.SimParams.RelativeRefractoryCycles)
+	if ac.SimParams.NeuronBehavior.RelativeRefractoryCycles < 0 { // Should likely be >= 0
+		return fmt.Errorf("RelativeRefractoryCycles must be non-negative, got %d", ac.SimParams.NeuronBehavior.RelativeRefractoryCycles)
 	}
-	if ac.SimParams.PulsePropagationSpeed <= 0 {
-		return fmt.Errorf("PulsePropagationSpeed must be positive, got %f", ac.SimParams.PulsePropagationSpeed)
+	if ac.SimParams.General.PulsePropagationSpeed <= 0 {
+		return fmt.Errorf("PulsePropagationSpeed must be positive, got %f", ac.SimParams.General.PulsePropagationSpeed)
 	}
-	if ac.SimParams.OutputFrequencyWindowCycles <= 0 {
-		return fmt.Errorf("OutputFrequencyWindowCycles must be positive, got %f", ac.SimParams.OutputFrequencyWindowCycles)
+	if ac.SimParams.Structure.OutputFrequencyWindowCycles <= 0 {
+		return fmt.Errorf("OutputFrequencyWindowCycles must be positive, got %f", ac.SimParams.Structure.OutputFrequencyWindowCycles)
 	}
-	if ac.SimParams.InitialSynapticWeightMin < 0 { // Assuming weights can be 0 but not negative
-		return fmt.Errorf("InitialSynapticWeightMin must be non-negative, got %f", ac.SimParams.InitialSynapticWeightMin)
+	if ac.SimParams.Learning.InitialSynapticWeightMin < 0 { // Assuming weights can be 0 but not negative
+		return fmt.Errorf("InitialSynapticWeightMin must be non-negative, got %f", ac.SimParams.Learning.InitialSynapticWeightMin)
 	}
-	if ac.SimParams.InitialSynapticWeightMax < ac.SimParams.InitialSynapticWeightMin {
-		return fmt.Errorf("InitialSynapticWeightMax (%f) must be >= InitialSynapticWeightMin (%f)", ac.SimParams.InitialSynapticWeightMax, ac.SimParams.InitialSynapticWeightMin)
+	if ac.SimParams.Learning.InitialSynapticWeightMax < ac.SimParams.Learning.InitialSynapticWeightMin {
+		return fmt.Errorf("InitialSynapticWeightMax (%f) must be >= InitialSynapticWeightMin (%f)", ac.SimParams.Learning.InitialSynapticWeightMax, ac.SimParams.Learning.InitialSynapticWeightMin)
 	}
-    if ac.SimParams.MaxSynapticWeight < ac.SimParams.InitialSynapticWeightMax {
-        return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)", ac.SimParams.MaxSynapticWeight, ac.SimParams.InitialSynapticWeightMax)
+    if ac.SimParams.Learning.MaxSynapticWeight < ac.SimParams.Learning.InitialSynapticWeightMax {
+        return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)", ac.SimParams.Learning.MaxSynapticWeight, ac.SimParams.Learning.InitialSynapticWeightMax)
     }
-	if ac.SimParams.SynapticWeightDecayRate < 0 {
-		return fmt.Errorf("SynapticWeightDecayRate must be non-negative, got %f", ac.SimParams.SynapticWeightDecayRate)
+	if ac.SimParams.Learning.SynapticWeightDecayRate < 0 {
+		return fmt.Errorf("SynapticWeightDecayRate must be non-negative, got %f", ac.SimParams.Learning.SynapticWeightDecayRate)
 	}
-	if ac.SimParams.HebbianCoincidenceWindow <= 0 { // Should be positive for a window to exist
-		return fmt.Errorf("HebbianCoincidenceWindow must be positive, got %d", ac.SimParams.HebbianCoincidenceWindow)
+	if ac.SimParams.Learning.HebbianCoincidenceWindow <= 0 { // Should be positive for a window to exist
+		return fmt.Errorf("HebbianCoincidenceWindow must be positive, got %d", ac.SimParams.Learning.HebbianCoincidenceWindow)
 	}
-	// Factors can be positive or negative depending on their meaning, e.g. CortisolInfluenceOnLR is negative.
-	// For now, not adding generic positive checks for all factors, but specific ones like ReinforceFactor.
-	if ac.SimParams.HebbPositiveReinforceFactor < 0 {
-		return fmt.Errorf("HebbPositiveReinforceFactor must be non-negative, got %f", ac.SimParams.HebbPositiveReinforceFactor)
+	if ac.SimParams.Learning.HebbPositiveReinforceFactor < 0 {
+		return fmt.Errorf("HebbPositiveReinforceFactor must be non-negative, got %f", ac.SimParams.Learning.HebbPositiveReinforceFactor)
 	}
-	if ac.SimParams.MinLearningRateFactor < 0 {
-		return fmt.Errorf("MinLearningRateFactor must be non-negative, got %f", ac.SimParams.MinLearningRateFactor)
+	if ac.SimParams.Learning.MinLearningRateFactor < 0 {
+		return fmt.Errorf("MinLearningRateFactor must be non-negative, got %f", ac.SimParams.Learning.MinLearningRateFactor)
 	}
-	if ac.SimParams.SynaptogenesisInfluenceRadius <= 0 {
-		return fmt.Errorf("SynaptogenesisInfluenceRadius must be positive, got %f", ac.SimParams.SynaptogenesisInfluenceRadius)
+	if ac.SimParams.Synaptogenesis.SynaptogenesisInfluenceRadius <= 0 {
+		return fmt.Errorf("SynaptogenesisInfluenceRadius must be positive, got %f", ac.SimParams.Synaptogenesis.SynaptogenesisInfluenceRadius)
 	}
-	if ac.SimParams.MaxMovementPerCycle < 0 {
-		return fmt.Errorf("MaxMovementPerCycle must be non-negative, got %f", ac.SimParams.MaxMovementPerCycle)
+	if ac.SimParams.Synaptogenesis.MaxMovementPerCycle < 0 {
+		return fmt.Errorf("MaxMovementPerCycle must be non-negative, got %f", ac.SimParams.Synaptogenesis.MaxMovementPerCycle)
 	}
-	if ac.SimParams.CortisolProductionRate < 0 || ac.SimParams.CortisolDecayRate < 0 || ac.SimParams.CortisolProductionPerHit < 0 || ac.SimParams.CortisolMaxLevel < 0 {
+	if ac.SimParams.Neurochemical.CortisolProductionRate < 0 || ac.SimParams.Neurochemical.CortisolDecayRate < 0 || ac.SimParams.Neurochemical.CortisolProductionPerHit < 0 || ac.SimParams.Neurochemical.CortisolMaxLevel < 0 {
 		return fmt.Errorf("Cortisol parameters (ProductionRate, DecayRate, ProductionPerHit, MaxLevel) must be non-negative")
 	}
-	if ac.SimParams.DopamineProductionRate < 0 || ac.SimParams.DopamineDecayRate < 0 || ac.SimParams.DopamineProductionPerEvent < 0 || ac.SimParams.DopamineMaxLevel < 0 {
+	if ac.SimParams.Neurochemical.DopamineProductionRate < 0 || ac.SimParams.Neurochemical.DopamineDecayRate < 0 || ac.SimParams.Neurochemical.DopamineProductionPerEvent < 0 || ac.SimParams.Neurochemical.DopamineMaxLevel < 0 {
 		return fmt.Errorf("Dopamine parameters (ProductionRate, DecayRate, ProductionPerEvent, MaxLevel) must be non-negative")
 	}
-	if ac.SimParams.CortisolMaxLevel < ac.SimParams.CortisolProductionPerHit {
+	if ac.SimParams.Neurochemical.CortisolMaxLevel < ac.SimParams.Neurochemical.CortisolProductionPerHit {
 		// This is a logical check, a single hit shouldn't exceed max. Could be more complex if rate also contributes significantly before decay.
-		// For simplicity, basic check.
 	}
-	if ac.SimParams.DopamineMaxLevel < ac.SimParams.DopamineProductionPerEvent {
+	if ac.SimParams.Neurochemical.DopamineMaxLevel < ac.SimParams.Neurochemical.DopamineProductionPerEvent {
 		// Similar logical check for dopamine
 	}
 

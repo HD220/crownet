@@ -118,14 +118,14 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	// Define the grid origin (min corner of the simulation space)
 	var gridMinBound common.Point
 	for i := 0; i < common.PointDimension; i++ {
-		gridMinBound[i] = common.Coordinate(-simParams.SpaceMaxDimension)
+		gridMinBound[i] = common.Coordinate(-simParams.General.SpaceMaxDimension)
 	}
 	// Determine cell size, e.g., based on pulse propagation speed or a fraction of space size.
 	// Using a factor of pulse speed for now. Ensure it's not zero.
 	const defaultGridCellSizeMultiplier = 2.0
-	cellSize := simParams.PulsePropagationSpeed * defaultGridCellSizeMultiplier
+	cellSize := simParams.General.PulsePropagationSpeed * defaultGridCellSizeMultiplier
 	if cellSize < 1e-6 { // Avoid zero or too small cell size
-		cellSize = simParams.SpaceMaxDimension / 10.0 // Fallback to a fraction of space dimension
+		cellSize = simParams.General.SpaceMaxDimension / 10.0 // Fallback to a fraction of space dimension
 		if cellSize < 1e-6 {
 			cellSize = 1.0 // Absolute fallback
 		}
@@ -143,8 +143,8 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 
 		// Neuron collections and management
 		Neurons:           make([]*neuron.Neuron, 0, appCfg.Cli.TotalNeurons),
-		InputNeuronIDs:    make([]common.NeuronID, 0, simParams.MinInputNeurons),
-		OutputNeuronIDs:   make([]common.NeuronID, 0, simParams.MinOutputNeurons),
+		InputNeuronIDs:    make([]common.NeuronID, 0, simParams.Structure.MinInputNeurons),
+		OutputNeuronIDs:   make([]common.NeuronID, 0, simParams.Structure.MinOutputNeurons),
 		OutputNeuronIDSet: make(map[common.NeuronID]struct{}),
 		InputNeuronIDSet:  make(map[common.NeuronID]struct{}),
 		neuronMap:         make(map[common.NeuronID]*neuron.Neuron),
@@ -225,7 +225,7 @@ func (cn *CrowNet) addNeuronsOfType(count int, neuronType neuron.Type, radiusFac
 	}
 	for i := 0; i < count; i++ {
 		id := cn.getNextNeuronID()
-		effectiveRadius := radiusFactor * cn.SimParams.SpaceMaxDimension
+		effectiveRadius := radiusFactor * cn.SimParams.General.SpaceMaxDimension
 		pos := space.GenerateRandomPositionInHyperSphere(effectiveRadius, cn.rng) // cn.rng is *rand.Rand
 
 		n := neuron.New(id, neuronType, pos, cn.SimParams)
@@ -260,28 +260,28 @@ func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP f
 // Assumes totalNeuronsInput has been validated by config.Validate() to be >= MinInputNeurons and MinOutputNeurons.
 // It returns an error if the final neuron count does not match the expected count, indicating an internal logic issue.
 func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
-	simParams := cn.SimParams
+	simParams := cn.SimParams // This is *config.SimulationParameters
 	actualTotalNeurons := totalNeuronsInput // totalNeuronsInput is pre-validated by config.Validate()
-	numInput := simParams.MinInputNeurons
-	numOutput := simParams.MinOutputNeurons
+	numInput := simParams.Structure.MinInputNeurons
+	numOutput := simParams.Structure.MinOutputNeurons
 
 	// Note: The check for actualTotalNeurons < numInput+numOutput and associated adjustment/warning
 	// has been moved to config.Validate() to handle configuration errors upfront.
 	// initializeNeurons now assumes totalNeuronsInput is sufficient.
 
-	cn.addNeuronsOfType(numInput, neuron.Input, simParams.ExcitatoryRadiusFactor)
-	cn.addNeuronsOfType(numOutput, neuron.Output, simParams.ExcitatoryRadiusFactor)
+	cn.addNeuronsOfType(numInput, neuron.Input, simParams.Distribution.ExcitatoryRadiusFactor)
+	cn.addNeuronsOfType(numOutput, neuron.Output, simParams.Distribution.ExcitatoryRadiusFactor)
 
 	remainingForInternalDistribution := actualTotalNeurons - numInput - numOutput
 	numDopaminergic, numInhibitory, numExcitatory := calculateInternalNeuronCounts(
 		remainingForInternalDistribution,
-		simParams.DopaminergicPercent,
-		simParams.InhibitoryPercent,
+		simParams.Distribution.DopaminergicPercent,
+		simParams.Distribution.InhibitoryPercent,
 	)
 
-	cn.addNeuronsOfType(numDopaminergic, neuron.Dopaminergic, simParams.DopaminergicRadiusFactor)
-	cn.addNeuronsOfType(numInhibitory, neuron.Inhibitory, simParams.InhibitoryRadiusFactor)
-	cn.addNeuronsOfType(numExcitatory, neuron.Excitatory, simParams.ExcitatoryRadiusFactor)
+	cn.addNeuronsOfType(numDopaminergic, neuron.Dopaminergic, simParams.Distribution.DopaminergicRadiusFactor)
+	cn.addNeuronsOfType(numInhibitory, neuron.Inhibitory, simParams.Distribution.InhibitoryRadiusFactor)
+	cn.addNeuronsOfType(numExcitatory, neuron.Excitatory, simParams.Distribution.ExcitatoryRadiusFactor)
 
 	if len(cn.Neurons) != actualTotalNeurons {
 		// This is a critical failure in setup.
@@ -330,8 +330,8 @@ func (cn *CrowNet) _updateAllNeuronStates() {
 // if chemical modulation is enabled. Otherwise, it resets modulation factors and neuron thresholds.
 func (cn *CrowNet) _applyChemicalModulationEffects() {
 	if cn.isChemicalModulationEnabled {
-		// Note: CortisolGlandPosition is accessed from SimParams.
-		cn.ChemicalEnv.UpdateLevels(cn.Neurons, cn.ActivePulses.GetAll(), cn.CortisolGlandPosition, cn.SimParams)
+		// Pass the specific CortisolGlandPosition from the nested SimParams struct
+		cn.ChemicalEnv.UpdateLevels(cn.Neurons, cn.ActivePulses.GetAll(), cn.SimParams.Neurochemical.CortisolGlandPosition, cn.SimParams)
 		cn.ChemicalEnv.ApplyEffectsToNeurons(cn.Neurons, cn.SimParams)
 	} else {
 		// Reset modulation factors and thresholds if chemical modulation is off
@@ -416,7 +416,7 @@ func (cn *CrowNet) applyHebbianLearning() {
 		return
 	}
 
-	coincidenceWindow := common.CycleCount(cn.SimParams.HebbianCoincidenceWindow)
+	coincidenceWindow := common.CycleCount(cn.SimParams.Learning.HebbianCoincidenceWindow)
 
 	// Iterate over all possible presynaptic neurons.
 	for _, preSynapticNeuron := range cn.Neurons {

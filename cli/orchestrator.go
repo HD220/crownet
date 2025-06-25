@@ -384,7 +384,7 @@ func (o *Orchestrator) reportMonitoredOutputFrequency() error {
 		return fmt.Errorf("failed to get frequency for output neuron %d: %w", monitorID, err)
 	}
 	fmt.Printf("Frequency for Output Neuron %d: %.2f Hz (over last %.0f cycles).\n",
-		monitorID, freq, o.AppCfg.SimParams.OutputFrequencyWindowCycles)
+		monitorID, freq, o.AppCfg.SimParams.Structure.OutputFrequencyWindowCycles)
 	return nil
 }
 

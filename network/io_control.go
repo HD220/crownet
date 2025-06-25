@@ -57,14 +57,14 @@ func (cn *CrowNet) PresentPattern(patternData []float64) error {
 	if cn.SimParams == nil {
 		return fmt.Errorf("PresentPattern: SimParams not initialized in CrowNet")
 	}
-	if len(patternData) != cn.SimParams.PatternSize {
-		return fmt.Errorf("pattern data size (%d) does not match configured PatternSize (%d)", len(patternData), cn.SimParams.PatternSize)
+	if len(patternData) != cn.SimParams.Pattern.PatternSize {
+		return fmt.Errorf("pattern data size (%d) does not match configured PatternSize (%d)", len(patternData), cn.SimParams.Pattern.PatternSize)
 	}
-	if len(cn.InputNeuronIDs) < cn.SimParams.PatternSize {
-		return fmt.Errorf("insufficient input neurons (%d) for PatternSize (%d)", len(cn.InputNeuronIDs), cn.SimParams.PatternSize)
+	if len(cn.InputNeuronIDs) < cn.SimParams.Pattern.PatternSize {
+		return fmt.Errorf("insufficient input neurons (%d) for PatternSize (%d)", len(cn.InputNeuronIDs), cn.SimParams.Pattern.PatternSize)
 	}
 
-	for i := 0; i < cn.SimParams.PatternSize; i++ {
+	for i := 0; i < cn.SimParams.Pattern.PatternSize; i++ {
 		if patternData[i] > 0.5 { // Consider this pixel/feature active
 			if i >= len(cn.InputNeuronIDs) { // Defensive check
 				return fmt.Errorf("pattern index %d out of bounds for InputNeuronIDs (len %d)", i, len(cn.InputNeuronIDs))
@@ -87,7 +87,7 @@ func (cn *CrowNet) PresentPattern(patternData []float64) error {
 					targetNeuron.Position,
 					emittedSignal,
 					cn.CycleCount,
-					cn.SimParams.SpaceMaxDimension*2.0, // Max travel distance for these pulses
+					cn.SimParams.General.SpaceMaxDimension*2.0, // Max travel distance for these pulses
 				)
 				cn.ActivePulses.Add(newP)
 			}
@@ -110,12 +110,12 @@ func (cn *CrowNet) GetOutputActivation() ([]float64, error) {
 	if cn.SimParams == nil {
 		return nil, fmt.Errorf("GetOutputActivation: SimParams not initialized in CrowNet")
 	}
-	if len(cn.OutputNeuronIDs) < cn.SimParams.MinOutputNeurons {
+	if len(cn.OutputNeuronIDs) < cn.SimParams.Structure.MinOutputNeurons {
 		return nil, fmt.Errorf("actual number of output neurons (%d) is less than configured MinOutputNeurons (%d)",
-			len(cn.OutputNeuronIDs), cn.SimParams.MinOutputNeurons)
+			len(cn.OutputNeuronIDs), cn.SimParams.Structure.MinOutputNeurons)
 	}
 
-	numOutputsToReport := cn.SimParams.MinOutputNeurons
+	numOutputsToReport := cn.SimParams.Structure.MinOutputNeurons
 	outputActivations := make([]float64, numOutputsToReport)
 
 	for i := 0; i < numOutputsToReport; i++ {
@@ -167,10 +167,10 @@ func (cn *CrowNet) ConfigureFrequencyInput(neuronID common.NeuronID, hz float64)
 		delete(cn.timeToNextInputFire, neuronID)
 	} else {
 		cn.inputTargetFrequencies[neuronID] = hz
-		if cn.SimParams.CyclesPerSecond <= 0 { // Avoid division by zero or negative
-			return fmt.Errorf("CyclesPerSecond must be positive to calculate cyclesPerFiring, got %f", cn.SimParams.CyclesPerSecond)
+		if cn.SimParams.General.CyclesPerSecond <= 0 { // Avoid division by zero or negative
+			return fmt.Errorf("CyclesPerSecond must be positive to calculate cyclesPerFiring, got %f", cn.SimParams.General.CyclesPerSecond)
 		}
-		cyclesPerFiring := cn.SimParams.CyclesPerSecond / hz
+		cyclesPerFiring := cn.SimParams.General.CyclesPerSecond / hz
 		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1.0))
 	}
 	return nil
@@ -190,7 +190,7 @@ func (cn *CrowNet) recordOutputFiring(neuronID common.NeuronID) {
 	history := cn.outputFiringHistory[neuronID]
 	history = append(history, cn.CycleCount)
 
-	cutoffCycle := cn.CycleCount - common.CycleCount(cn.SimParams.OutputFrequencyWindowCycles)
+	cutoffCycle := cn.CycleCount - common.CycleCount(cn.SimParams.Structure.OutputFrequencyWindowCycles)
 
 	startIndex := 0
 	for i, fireCycle := range history {
@@ -235,14 +235,14 @@ func (cn *CrowNet) GetOutputFrequency(neuronID common.NeuronID) (float64, error)
 
 	firingsInWindow := len(history)
 
-	if cn.SimParams.CyclesPerSecond <= 0 {
-		return 0, fmt.Errorf("CyclesPerSecond (%f) must be positive to calculate frequency", cn.SimParams.CyclesPerSecond)
+	if cn.SimParams.General.CyclesPerSecond <= 0 {
+		return 0, fmt.Errorf("CyclesPerSecond (%f) must be positive to calculate frequency", cn.SimParams.General.CyclesPerSecond)
 	}
-	if cn.SimParams.OutputFrequencyWindowCycles <= 0 {
-		return 0, fmt.Errorf("OutputFrequencyWindowCycles (%f) must be positive to calculate frequency", cn.SimParams.OutputFrequencyWindowCycles)
+	if cn.SimParams.Structure.OutputFrequencyWindowCycles <= 0 {
+		return 0, fmt.Errorf("OutputFrequencyWindowCycles (%f) must be positive to calculate frequency", cn.SimParams.Structure.OutputFrequencyWindowCycles)
 	}
 
-	windowDurationSeconds := cn.SimParams.OutputFrequencyWindowCycles / cn.SimParams.CyclesPerSecond
+	windowDurationSeconds := cn.SimParams.Structure.OutputFrequencyWindowCycles / cn.SimParams.General.CyclesPerSecond
 	// Epsilon check for windowDurationSeconds is implicitly handled by positive checks above for its components.
 
 	frequencyHz := float64(firingsInWindow) / windowDurationSeconds
@@ -278,20 +278,20 @@ func (cn *CrowNet) processFrequencyInputs() {
 					targetNeuron.Position,
 					emittedSignal,
 					cn.CycleCount,
-					cn.SimParams.SpaceMaxDimension*2.0,
+					cn.SimParams.General.SpaceMaxDimension*2.0,
 				)
 				cn.ActivePulses.Add(newP)
 			}
 
 			targetHz, stillConfigured := cn.inputTargetFrequencies[neuronID]
 			if stillConfigured && targetHz > 0 {
-				if cn.SimParams.CyclesPerSecond <=0 { // Should be caught by config validation
+				if cn.SimParams.General.CyclesPerSecond <=0 { // Should be caught by config validation
 					// Log error or handle, for now just stop stimulating this neuron
 					delete(cn.inputTargetFrequencies, neuronID)
 					delete(cn.timeToNextInputFire, neuronID)
 					continue
 				}
-				cyclesPerFiring := cn.SimParams.CyclesPerSecond / targetHz
+				cyclesPerFiring := cn.SimParams.General.CyclesPerSecond / targetHz
 				cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1.0))
 			} else {
 				// If targetHz became <=0 or was deleted (e.g. configured off)
