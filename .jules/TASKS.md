@@ -39,3 +39,4 @@
 | DOC-GODOCS-001 | Revisar e adicionar GoDocs recentes      | Concluído | -                  | P2         | AgenteJules | ./tasks/DOC-GODOCS-001.md                     | GoDocs revisados/adicionados para cmd, storage, network. Teste de geração bloqueado. |
 | DOC-DESIGN-001 | Revisão de alto nível docs de design     | Pendente  | -                  | P3         | AgenteJules | ./tasks/DOC-DESIGN-001.md                     | Revisar docs/02_arquitetura.md e outros.     |
 | TEST-PKG-SPACE-001| Testes unitários para space/geometry.go| Pendente  | TEST-002           | P2         | AgenteJules | ./tasks/TEST-PKG-SPACE-001.md                 | Adicionar testes para ClampToHyperSphere, etc. |
+| CHORE-DOC-AGENT-001 | Consolidar documentação do agente      | Concluído | -                  | P1         | AgenteJules | ./tasks/TSK-CHORE-DOC-AGENT-001.md            | AGENT_WORKFLOW.md mesclado em AGENTS.md (raiz) e excluído. |
