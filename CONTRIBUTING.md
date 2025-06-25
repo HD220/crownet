@@ -66,7 +66,11 @@ Please refer to the [Environment Setup Guide](docs/03_guias/guia_configuracao_am
 ### Go Code
 
 All Go code should adhere to the guidelines outlined in our [Go Code Style Guide](docs/03_guias/guia_estilo_codigo.md).
-Before submitting code, please run `go fmt` and ensure your code is linted (e.g., using `golangci-lint run`). <!-- TODO: Confirm linter when CHORE-003 (Makefile) is addressed -->
+Before submitting code, please run `go fmt`. You can use the Makefile to run the linter:
+`make lint`
+This command uses `golangci-lint` (which you may need to install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`).
+
+*(Note: The `run_in_bash_session` tool required for running linters via make is currently experiencing issues. You might need to run linters manually if `make lint` fails due to tool errors.)*
 
 ### Commit Messages
 
@@ -90,17 +94,22 @@ Example:
 ## Testing
 
 All contributions that include new features or bug fixes should be accompanied by unit tests.
-<!-- TODO: When CHORE-003 (Makefile) is done, add instructions like `make test` or `go test ./...`. -->
-Currently, running tests via `go test ./...` is the standard. Ensure all tests pass before submitting a pull request.
+You can run the test suite using the Makefile:
+`make test`
+This command will run all tests verbosely (`go test ./... -v`). Ensure all tests pass before submitting a pull request.
 
-*(Note: The `run_in_bash_session` tool required for running tests is currently experiencing issues. Test execution might be temporarily hindered.)*
+*(Note: The `run_in_bash_session` tool required for running `make test` or `go test` is currently experiencing issues. Test execution might be temporarily hindered.)*
 
 ## Building the Project
 
-<!-- TODO: When CHORE-003 (Makefile) is done, add instructions like `make build` or `go build ./...`. -->
-To build the project, you can typically use `go build -o crownet main.go`.
+To build the project executable (`crownet`), you can use the Makefile:
+`make build`
+This will compile `main.go` and place the output binary named `crownet` in the project root.
 
-*(Note: The `run_in_bash_session` tool required for building is currently experiencing issues.)*
+Alternatively, you can use the standard Go command:
+`go build -o crownet main.go`
+
+*(Note: The `run_in_bash_session` tool required for building via `make build` or `go build` is currently experiencing issues.)*
 
 ---
 
