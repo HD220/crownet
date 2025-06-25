@@ -586,6 +586,25 @@ func min(a, b int) int {
 }
 
 // --- Test Wrappers (Exported for use in _test package) ---
+// The following methods (XxxForTest) expose unexported functionality of the Orchestrator
+// for testing purposes.
+//
+// REFACTOR-TEST-001 Analysis:
+// Current State: These wrappers are functional for testing from external _test packages.
+// Future Considerations (Post TEST-002 unlock):
+// - Evaluate making the underlying unexported methods (e.g., createNetwork, initializeLogger,
+//   runSimMode) directly exportable if they represent a sensible public API for the Orchestrator
+//   or if their logic can be refactored into smaller, testable, exportable units.
+// - For methods like runXxxMode, which are high-level integration points, these wrappers
+//   might remain the most pragmatic way to test the full mode execution flow from an
+//   external test package. The internal refactoring of these runXxxMode methods to improve
+//   their own unit testability (by breaking them down) is a separate concern.
+// - For Orchestrator.Close(), consider implementing io.Closer if other resources beyond
+//   the logger might need closing in the future, making CloseLoggerForTest part of a
+//   general exported Close() method.
+//
+// Decision for REFACTOR-TEST-001 (current task): No code changes due to TEST-002 being blocked.
+// Analysis documented here.
 // These allow tests to call unexported methods or specific parts of the orchestrator's logic.
 
 // SetupContinuousInputStimulusForTest wraps setupContinuousInputStimulus for testing.
@@ -604,11 +623,13 @@ func (o *Orchestrator) RunExposeModeForTest() error {
 }
 
 // SetLoadWeightsFn allows tests to inject a mock loadWeightsFn.
+// This is a good practice for testability (Dependency Injection) and should be maintained.
 func (o *Orchestrator) SetLoadWeightsFn(fn func(filepath string) (synaptic.NetworkWeights, error)) {
 	o.loadWeightsFn = fn
 }
 
 // SetSaveWeightsFn allows tests to inject a mock saveWeightsFn.
+// This is a good practice for testability (Dependency Injection) and should be maintained.
 func (o *Orchestrator) SetSaveWeightsFn(fn func(weights synaptic.NetworkWeights, filepath string) error) {
 	o.saveWeightsFn = fn
 }
