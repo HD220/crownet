@@ -21,7 +21,7 @@
 | REFACTOR-005 | Interfaces para propagação de pulso        | Pendente  | PERF-002           | P3         | AgenteJules | [TSK-REFACTOR-005.md](./tasks/TSK-REFACTOR-005.md)| Extensibilidade de pulse.ProcessCycle.      |
 | REFACTOR-006 | Interfaces para sinaptogênese            | Pendente  | -                  | P3         | AgenteJules | [TSK-REFACTOR-006.md](./tasks/TSK-REFACTOR-006.md)| Extensibilidade de applySynaptogenesis.     |
 | PERF-004     | Realizar profiling básico da aplicação     | Pendente  | TEST-002           | P2         | AgenteJules | [TSK-PERF-004.md](./tasks/TSK-PERF-004.md)    | Modos 'expose' e 'sim'.                     |
-| DOC-004      | Criar CONTRIBUTING.md                      | Pendente  | -                  | P3         | AgenteJules | [TSK-DOC-004.md](./tasks/TSK-DOC-004.md)      | Diretrizes para contribuição.               |
+| DOC-004      | Criar CONTRIBUTING.md                      | Concluído | -                  | P3         | AgenteJules | [TSK-DOC-004.md](./tasks/TSK-DOC-004.md)      | Diretrizes para contribuição.               |
 | CHORE-005    | Adicionar arquivo LICENSE                  | Concluído | -                  | P1         | AgenteJules | [TSK-CHORE-005.md](./tasks/TSK-CHORE-005.md)  | Ex: MIT ou Apache 2.0.                      |
 | CHORE-006    | Configurar GitHub Issue Templates          | Pendente  | -                  | P3         | AgenteJules | [TSK-CHORE-006.md](./tasks/TSK-CHORE-006.md)  | Para bugs e feature requests.               |
 | FEATURE-004  | Utilitário para log SQLite               | Pendente  | -                  | P3         | AgenteJules | [TSK-FEATURE-004.md](./tasks/TSK-FEATURE-004.md)| Exportar/visualizar dados.                  |
