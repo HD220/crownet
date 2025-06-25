@@ -1,0 +1,8 @@
+blank_issues_enabled: false # Encourage users to select a template
+contact_links:
+  - name: CrowNet Project Documentation
+    url: https://github.com/your-repo/crownet#readme # TODO: Replace with actual repo link or specific doc site
+    about: Please check our documentation for answers to common questions.
+  - name: CrowNet Community Discussions (if applicable)
+    url: https://github.com/your-repo/crownet/discussions # TODO: Replace with actual repo link if Discussions are enabled
+    about: Please ask and answer questions here.

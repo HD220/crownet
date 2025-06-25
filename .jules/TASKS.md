@@ -23,7 +23,7 @@
 | PERF-004     | Realizar profiling básico da aplicação     | Pendente  | TEST-002           | P2         | AgenteJules | [TSK-PERF-004.md](./tasks/TSK-PERF-004.md)    | Modos 'expose' e 'sim'.                     |
 | DOC-004      | Criar CONTRIBUTING.md                      | Concluído | -                  | P3         | AgenteJules | [TSK-DOC-004.md](./tasks/TSK-DOC-004.md)      | Diretrizes para contribuição.               |
 | CHORE-005    | Adicionar arquivo LICENSE                  | Concluído | -                  | P1         | AgenteJules | [TSK-CHORE-005.md](./tasks/TSK-CHORE-005.md)  | Ex: MIT ou Apache 2.0.                      |
-| CHORE-006    | Configurar GitHub Issue Templates          | Pendente  | -                  | P3         | AgenteJules | [TSK-CHORE-006.md](./tasks/TSK-CHORE-006.md)  | Para bugs e feature requests.               |
+| CHORE-006    | Configurar GitHub Issue Templates          | Concluído | -                  | P3         | AgenteJules | [TSK-CHORE-006.md](./tasks/TSK-CHORE-006.md)  | Para bugs e feature requests.               |
 | FEATURE-004  | Utilitário para log SQLite               | Pendente  | -                  | P3         | AgenteJules | [TSK-FEATURE-004.md](./tasks/TSK-FEATURE-004.md)| Exportar/visualizar dados.                  |
 | UX-002       | Melhorar visualização output 'observe'     | Pendente  | -                  | P3         | AgenteJules | [TSK-UX-002.md](./tasks/TSK-UX-002.md)        | Considerar ASCII art.                       |
 | REFACTOR-007 | Adicionar nil checks para SimParams        | Pendente  | -                  | P2         | AgenteJules | [TSK-REFACTOR-007.md](./tasks/TSK-REFACTOR-007.md)| Em funções críticas.                        |
