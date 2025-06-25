@@ -483,16 +483,57 @@ func (o *Orchestrator) runObservationPattern() ([]float64, error) {
 	return outputActivation, nil
 }
 
-// displayOutputActivation prints the activation levels of output neurons.
+// displayOutputActivation prints the activation levels of output neurons with ASCII art bars.
 func (o *Orchestrator) displayOutputActivation(outputActivation []float64) {
 	fmt.Printf("Digit Presented: %d\n", o.AppCfg.Cli.Digit)
 	fmt.Println("Output Neuron Activation Pattern (Accumulated Potential):")
+
+	if len(outputActivation) == 0 {
+		fmt.Println("  No output activation data to display.")
+		return
+	}
+
+	const maxBarLength = 20 // Length of the ASCII bar
+
+	// Find min and max activation for normalization
+	minAct := outputActivation[0]
+	maxAct := outputActivation[0]
+	for _, val := range outputActivation {
+		if val < minAct {
+			minAct = val
+		}
+		if val > maxAct {
+			maxAct = val
+		}
+	}
+
+	activationRange := maxAct - minAct
+
 	for i, val := range outputActivation {
 		neuronIDStr := "N/A" // Fallback if ID mapping is off
 		if i < len(o.Net.OutputNeuronIDs) {
 			neuronIDStr = fmt.Sprintf("%d", o.Net.OutputNeuronIDs[i])
 		}
-		fmt.Printf("  OutputNeuron[%d] (ID %s): %.4f\n", i, neuronIDStr, val)
+
+		bar := ""
+		if activationRange == 0 { // All values are the same
+			if maxAct > 0 { // Or some other threshold for "active"
+				bar = strings.Repeat("|", maxBarLength)
+			} else {
+				bar = strings.Repeat(" ", maxBarLength)
+			}
+		} else {
+			normalizedVal := (val - minAct) / activationRange
+			numChars := int(normalizedVal*float64(maxBarLength) + 0.5) // +0.5 for rounding
+			if numChars < 0 {
+				numChars = 0
+			}
+			if numChars > maxBarLength {
+				numChars = maxBarLength
+			}
+			bar = strings.Repeat("|", numChars) + strings.Repeat(" ", maxBarLength-numChars)
+		}
+		fmt.Printf("  OutputNeuron[%2d] (ID %4s) | [%s] | %.4f\n", i, neuronIDStr, bar, val)
 	}
 }
 

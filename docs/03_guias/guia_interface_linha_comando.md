@@ -152,15 +152,19 @@ Initial State: Cortisol=<nivel_C>, Dopamine=<nivel_D>
     Loaded weights from <arquivo_pesos> for observation.
     Failed to load weights from <arquivo_pesos> for observation: <erro>. Expose the network first. (se falhar ao carregar)
 
-    Presented Digit: <digito_obs>
-    Output Neuron Activation Pattern (AccumulatedPulse):
-      OutNeuron[0] (ID <id_out_0>): <ativacao_0>
-      OutNeuron[1] (ID <id_out_1>): <ativacao_1>
+    Digit Presented: <digito_obs>
+    Output Neuron Activation Pattern (Accumulated Potential):
+      OutputNeuron[ 0] (ID NNNN) | [BARRA_ASCII_0       ] | VALOR_0
+      OutputNeuron[ 1] (ID MMMM) | [BARRA_ASCII_1       ] | VALOR_1
       ...
-      OutNeuron[9] (ID <id_out_9>): <ativacao_9>
+      OutputNeuron[ 9] (ID KKKK) | [BARRA_ASCII_9       ] | VALOR_9
 
     CrowNet session finished.
     ```
+    Onde:
+    *   `OutputNeuron[idx] (ID NNNN)`: Identifica o neurônio de saída (índice na lista de saída e seu ID global).
+    *   `[BARRA_ASCII_X       ]`: É uma representação visual da ativação do neurônio. O comprimento da barra (preenchida com `|`) é proporcional à ativação do neurônio em relação aos outros neurônios de saída. Uma barra mais longa indica maior ativação relativa. O comprimento total da barra entre colchetes é fixo (ex: 20 caracteres).
+    *   `VALOR_X`: É o valor numérico bruto do potencial acumulado do neurônio (ex: `0.5234`).
 
 ### 4.5. Mensagens de Erro Comuns
 
