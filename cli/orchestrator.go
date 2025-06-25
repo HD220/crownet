@@ -26,8 +26,9 @@ type Orchestrator struct {
 	Logger *storage.SQLiteLogger
 
 	// loadWeightsFn and saveWeightsFn allow for mocking persistence operations in tests.
-	loadWeightsFn func(filepath string) (synaptic.NetworkWeights, error)
-	saveWeightsFn func(weights synaptic.NetworkWeights, filepath string) error
+	// BUG-STORAGE-001: Changed signature of loadWeightsFn to reflect change in storage.LoadNetworkWeightsFromJSON
+	loadWeightsFn func(filepath string) (map[common.NeuronID]synaptic.WeightMap, error)
+	saveWeightsFn func(weights *synaptic.NetworkWeights, filepath string) error // Assuming saveWeightsFn takes *NetworkWeights
 }
 
 // NewOrchestrator creates a new orchestrator with the given application configuration.
@@ -35,8 +36,8 @@ type Orchestrator struct {
 func NewOrchestrator(appCfg *config.AppConfig) *Orchestrator {
 	return &Orchestrator{
 		AppCfg:        appCfg,
-		loadWeightsFn: storage.LoadNetworkWeightsFromJSON,
-		saveWeightsFn: storage.SaveNetworkWeightsToJSON,
+		loadWeightsFn: storage.LoadNetworkWeightsFromJSON, // BUG-STORAGE-001: This now returns map, handled by o.loadWeights
+		saveWeightsFn: storage.SaveNetworkWeightsToJSON, // BUG-STORAGE-001: This will be updated to take *NetworkWeights
 	}
 }
 
@@ -234,11 +235,17 @@ func (o *Orchestrator) loadWeights(rawFilepath string) error {
 	}
 	// At this point, validatedFilepath is a valid, existing file path.
 
-	loadedWeights, errLoad := o.loadWeightsFn(validatedFilepath)
+	// BUG-STORAGE-001: Call the refactored LoadNetworkWeightsFromJSON which returns a map
+	weightsMap, errLoad := o.loadWeightsFn(validatedFilepath)
 	if errLoad != nil {
-		return fmt.Errorf("failed to load weights from %s: %w", validatedFilepath, errLoad)
+		return fmt.Errorf("failed to load weights data from %s: %w", validatedFilepath, errLoad)
 	}
-	o.Net.SynapticWeights = loadedWeights
+
+	// Ensure o.Net.SynapticWeights is not nil (it should be initialized by createNetwork via NewCrowNet)
+	if o.Net.SynapticWeights == nil {
+		return fmt.Errorf("critical error: SynapticWeights not initialized in CrowNet before loading")
+	}
+	o.Net.SynapticWeights.LoadWeights(weightsMap) // Populate the existing *NetworkWeights instance
 	fmt.Printf("Existing weights loaded from %s\n", validatedFilepath)
 	return nil
 }
@@ -251,6 +258,10 @@ func (o *Orchestrator) saveWeights(rawFilepath string) error {
 		return fmt.Errorf("invalid weights file path '%s' for saving: %w", rawFilepath, err)
 	}
 
+	// BUG-STORAGE-001: Pass pointer to o.Net.SynapticWeights
+	if o.Net.SynapticWeights == nil {
+		return fmt.Errorf("cannot save weights: SynapticWeights not initialized in CrowNet")
+	}
 	if err := o.saveWeightsFn(o.Net.SynapticWeights, validatedFilepath); err != nil {
 		return fmt.Errorf("failed to save trained weights to %s: %w", validatedFilepath, err)
 	}

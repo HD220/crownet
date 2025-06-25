@@ -26,10 +26,16 @@ import (
 //
 // Returns:
 //   - error: An error if serialization or file writing fails, nil otherwise.
-func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) error {
+func SaveNetworkWeightsToJSON(networkWeights *synaptic.NetworkWeights, filePath string) error {
+	if networkWeights == nil {
+		return fmt.Errorf("cannot save nil NetworkWeights")
+	}
+	// BUG-STORAGE-001: Use networkWeights.GetAllWeights() to get the map for serialization
+	weightsToSerialize := networkWeights.GetAllWeights()
+
 	// Prepare a structure with string keys for JSON serialization.
 	serializableWeights := make(map[string]map[string]float64)
-	for fromID, toMap := range weights {
+	for fromID, toMap := range weightsToSerialize {
 		strFromID := strconv.FormatInt(int64(fromID), 10)
 		serializableWeights[strFromID] = make(map[string]float64)
 		for toID, weightVal := range toMap {
@@ -59,10 +65,10 @@ func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) 
 //   - filePath: The path to the JSON file containing the weights.
 //
 // Returns:
-//   - synaptic.NetworkWeights: The loaded synaptic weights.
+//   - map[common.NeuronID]synaptic.WeightMap: The loaded synaptic weights as a raw map.
 //   - error: An error if file reading, JSON unmarshalling, or NeuronID parsing fails.
 //            Specific error for os.IsNotExist if the file is not found.
-func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error) {
+func LoadNetworkWeightsFromJSON(filePath string) (map[common.NeuronID]synaptic.WeightMap, error) {
 	// Read the JSON file content.
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -78,27 +84,24 @@ func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error
 		return nil, fmt.Errorf("failed to unmarshal weights from JSON from %s: %w", filePath, err)
 	}
 
-	// TODO: The following instantiation of synaptic.NetworkWeights is problematic
-	// as NewNetworkWeights requires simParams and rng, and returns an error.
-	// This function should ideally return map[common.NeuronID]synaptic.WeightMap
-	// or handle NetworkWeights creation differently. For now, proceeding with original logic.
-	loadedWeights := synaptic.NewNetworkWeights()
+	// BUG-STORAGE-001: Changed to return the map directly instead of attempting to create NetworkWeights struct.
+	deserializedMap := make(map[common.NeuronID]synaptic.WeightMap)
 	for strFromID, toMap := range serializableWeights {
-		fromIDVal, err := strconv.ParseInt(strFromID, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid source neuron ID in JSON '%s': %w", strFromID, err)
+		fromIDVal, errConv := strconv.ParseInt(strFromID, 10, 64)
+		if errConv != nil {
+			return nil, fmt.Errorf("invalid source neuron ID in JSON '%s': %w", strFromID, errConv)
 		}
 		fromID := common.NeuronID(fromIDVal)
 
-		loadedWeights[fromID] = make(synaptic.WeightMap)
+		deserializedMap[fromID] = make(synaptic.WeightMap)
 		for strToID, weightVal := range toMap {
-			toIDVal, err := strconv.ParseInt(strToID, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid target neuron ID in JSON '%s' for source '%s': %w", strToID, strFromID, err)
+			toIDVal, errConvTo := strconv.ParseInt(strToID, 10, 64)
+			if errConvTo != nil {
+				return nil, fmt.Errorf("invalid target neuron ID in JSON '%s' for source '%s': %w", strToID, strFromID, errConvTo)
 			}
 			toID := common.NeuronID(toIDVal)
-			loadedWeights[fromID][toID] = common.SynapticWeight(weightVal)
+			deserializedMap[fromID][toID] = common.SynapticWeight(weightVal)
 		}
 	}
-	return loadedWeights, nil
+	return deserializedMap, nil
 }
