@@ -204,6 +204,10 @@ func DefaultSimulationParameters() SimulationParameters {
 }
 
 // LoadCLIConfig populates a CLIConfig struct from command-line flags.
+// NOTE: With the introduction of Cobra for CLI handling (REFACTOR-CLI-001),
+// this function is no longer the primary mechanism for parsing application flags.
+// Cobra commands now define and parse their own flags. This function might still
+// be useful for specific testing scenarios or if a non-Cobra entry point is needed.
 // It uses the provided FlagSet and arguments, making it suitable for testing
 // without relying on the global flag state or os.Args.
 //
@@ -288,9 +292,13 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 }
 
 // NewAppConfig creates a new AppConfig by loading default simulation parameters,
-// parsing command-line arguments to populate CLIConfig, and then validating
-// the combined configuration.
-// This function is intended as the primary entry point for obtaining application
+// parsing command-line arguments (via LoadCLIConfig) to populate CLIConfig,
+// and then validating the combined configuration.
+// NOTE: With the introduction of Cobra (REFACTOR-CLI-001), this function is no
+// longer called directly by main.go. Each Cobra command is now responsible for
+// constructing its AppConfig. This function might be repurposed or removed
+// in the future, especially when TOML file configuration (FEATURE-CONFIG-001) is fully integrated.
+// This function was originally intended as the primary entry point for obtaining application
 // configuration in a production environment.
 //
 // Parameters:

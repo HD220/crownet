@@ -4,33 +4,96 @@ Este documento descreve o estilo e a estrutura da interface de linha de comando 
 
 ## 1. Formato Geral dos Comandos
 
-A aplicação é executada como um único binário (`crownet` após compilação) e suas operações são controladas por flags.
+A aplicação é executada como um único binário (`crownet` após compilação). Suas operações são controladas por subcomandos e flags associadas.
 
+**Estrutura Geral:**
 ```bash
-./crownet -mode <modo> [outras flags específicas do modo e globais]
+./crownet [comando_global_flags] <comando> [subcomando_opcional] [flags_do_comando]
+```
+Exemplos:
+```bash
+./crownet --seed 12345 sim --cycles 1000 --neurons 150
+./crownet logutil export --dbPath ./run.db --table NetworkSnapshots
+```
+Para obter ajuda sobre um comando específico:
+```bash
+./crownet <comando> --help
+./crownet <comando> <subcomando> --help
 ```
 
-## 2. Padrões para Nomes de Flags
+## 2. Flags Globais Persistentes
 
-*   As flags seguem o formato `-flagName valor` (ex: `-neurons 100`, `-mode expose`).
-*   Para flags booleanas, a presença da flag (ex: `-debugChem`) implica `true`. Para definir explicitamente como `false`, use `-flagName=false` (ex: `-debugChem=false`).
-*   Os nomes das flags são geralmente curtos e usam camelCase (ex: `-lrBase`, `-weightsFile`, `-stimInputID`) ou são palavras únicas em minúsculas (ex: `-mode`, `-epochs`, `-digit`).
+Estas flags podem ser aplicadas ao comando raiz (`crownet`) e são herdadas por seus subcomandos:
 
-## 3. Flags Globais Comuns
+*   `--configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados primeiro. Flags de comando subsequentes podem sobrescrever os valores do arquivo. (Padrão: "", nenhum arquivo carregado por padrão) **Nota: A funcionalidade de carregar de arquivo TOML está planejada mas não completamente implementada.**
+*   `--seed <int64>`: Semente para o gerador de números aleatórios (0 usa o tempo atual). (Padrão: 0)
 
-Estas flags podem ser aplicadas à maioria dos modos de operação:
+## 3. Comandos Principais e Suas Flags
 
-*   `-configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados primeiro. Flags CLI subsequentes podem sobrescrever os valores do arquivo. (Padrão: "", nenhum arquivo carregado por padrão) **Nota: A funcionalidade de carregar de arquivo TOML está planejada mas não completamente implementada.**
-*   `-neurons <int>`: Número total de neurônios na rede. (Padrão: 200)
-*   `-weightsFile <string>`: Caminho para o arquivo JSON para salvar/carregar os pesos sinápticos. (Padrão: "crownet_weights.json")
-*   `-dbPath <string>`: Caminho para o arquivo SQLite para logging detalhado da simulação. Se fornecido, o logging é ativado. Se o arquivo não existir, será criado. Se já existir, será aberto (não é recriado a cada execução). (Padrão: "crownet_sim_run.db")
-*   `-saveInterval <int>`: Intervalo de ciclos para salvar o estado no SQLite (0 para desabilitar saves periódicos, apenas final se aplicável). (Padrão: 100)
-*   `-debugChem <bool>`: Habilita logs de depuração para produção/níveis de neuroquímicos. (Padrão: false)
-*   `-seed <int64>`: Semente para o gerador de números aleatórios (0 usa o tempo atual). (Padrão: 0)
+A funcionalidade que antes era controlada pela flag `-mode` agora é acessada através de subcomandos diretos de `crownet`.
 
-## 4. Arquivo de Configuração TOML (Opcional)
+### 3.1. Comando `sim`
 
-A aplicação pode ser configurada usando um arquivo TOML (especificado pela flag `-configFile`). Este arquivo permite uma configuração mais detalhada e persistente do que apenas flags CLI.
+Executa uma simulação geral da rede.
+**Uso:** `./crownet sim [flags]`
+
+**Flags para `sim`:**
+*   `-n, --neurons <int>`: Número total de neurônios na rede. (Padrão: 200)
+*   `-w, --weightsFile <string>`: Caminho para o arquivo JSON para salvar/carregar os pesos sinápticos. (Padrão: "crownet_weights.json")
+*   `--dbPath <string>`: Caminho para o arquivo SQLite para logging. Se o arquivo não existir, será criado. Se já existir, será aberto. (Padrão: "crownet_sim_run.db")
+*   `--saveInterval <int>`: Intervalo de ciclos para salvar no SQLite (0 desabilita saves periódicos). (Padrão: 100)
+*   `--lrBase <float64>`: Taxa de aprendizado base. (Padrão: 0.01)
+*   `-c, --cycles <int>`: Total de ciclos de simulação. (Padrão: 1000)
+*   `--stimInputID <int>`: ID do neurônio de entrada para estímulo contínuo (-1: primeiro, -2: desabilitado). (Padrão: -1)
+*   `--stimInputFreqHz <float64>`: Frequência (Hz) para estímulo contínuo (0.0 desabilita). (Padrão: 0.0)
+*   `--monitorOutputID <int>`: ID do neurônio de saída para monitorar frequência (-1: primeiro, -2: desabilitado). (Padrão: -1)
+*   `--debugChem <bool>`: Habilita logs de depuração para neuroquímicos. (Padrão: false)
+
+### 3.2. Comando `expose`
+
+Treina a rede expondo-a a padrões de dígitos.
+**Uso:** `./crownet expose [flags]`
+
+**Flags para `expose`:**
+*   `-n, --neurons <int>`: Total de neurônios. (Padrão: 200)
+*   `-w, --weightsFile <string>`: Arquivo para salvar/carregar pesos. **Obrigatório para salvar após o treino.** (Padrão: "crownet_weights.json")
+*   `--lrBase <float64>`: Taxa de aprendizado base. (Padrão: 0.01)
+*   `-e, --epochs <int>`: Número de épocas de exposição. (Padrão: 50)
+*   `--cyclesPerPattern <int>`: Ciclos por apresentação de padrão. (Padrão: 20)
+*   `--dbPath <string>`: (Opcional) Caminho para SQLite para logging durante o treino.
+*   `--saveInterval <int>`: (Opcional) Intervalo de ciclos para salvar no BD durante o treino.
+*   `--debugChem <bool>`: Habilita logs de depuração para neuroquímicos. (Padrão: false)
+
+### 3.3. Comando `observe`
+
+Observa a resposta da rede a um dígito específico.
+**Uso:** `./crownet observe [flags]`
+
+**Flags para `observe`:**
+*   `-n, --neurons <int>`: Total de neurônios (deve corresponder à rede dos pesos). (Padrão: 200)
+*   `-w, --weightsFile <string>`: Arquivo para carregar pesos. **Obrigatório.** (Padrão: "crownet_weights.json")
+*   `-d, --digit <0-9>`: O dígito a ser apresentado. (Padrão: 0)
+*   `--cyclesToSettle <int>`: Número de ciclos para acomodação da rede. (Padrão: 50)
+*   `--debugChem <bool>`: Habilita logs de depuração para neuroquímicos. (Padrão: false)
+
+### 3.4. Comando `logutil`
+
+Utilitários para interagir com logs SQLite.
+**Uso:** `./crownet logutil <subcomando> [flags]`
+
+#### 3.4.1. Subcomando `logutil export`
+Exporta dados de tabelas do log para CSV.
+**Uso:** `./crownet logutil export [flags]`
+
+**Flags para `logutil export`:**
+*   `-d, --dbPath <string>`: Caminho para o arquivo SQLite DB. **Obrigatório.**
+*   `-t, --table <string>`: Tabela a ser exportada ('NetworkSnapshots' ou 'NeuronStates'). **Obrigatório.**
+*   `-f, --format <string>`: Formato de saída (atualmente apenas 'csv'). (Padrão: "csv")
+*   `-o, --output <string>`: Arquivo de saída (stdout se não especificado).
+
+## 4. Arquivo de Configuração TOML (Opcional - Funcionalidade Planejada)
+
+A aplicação pode ser configurada usando um arquivo TOML (especificado pela flag global `--configFile`). **Nota: Esta funcionalidade está planejada mas ainda não completamente implementada.**
 
 **Ordem de Precedência da Configuração:**
 1.  **Valores Padrão Internos:** Definidos no código da aplicação.

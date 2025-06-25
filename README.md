@@ -23,16 +23,24 @@ O **Minimum Viable Product (MVP)** atual foca em demonstrar a **autoaprendizagem
 *   **Codificação de Entrada:** Padrões binários 5x7 para dígitos 0-9.
 *   **Representação de Saída:** Padrões de ativação distintos nos 10 neurônios de output.
 
-## Modos de Operação (CLI)
+## Comandos Principais (CLI)
 
-A aplicação suporta três modos principais, controlados pelo flag `-mode`:
+A aplicação é controlada através de subcomandos. Os principais são:
 
-1.  **`expose`**: Para treinar a rede, apresentando padrões de dígitos repetidamente, permitindo que o aprendizado Hebbiano ocorra.
-    *   Flags chave: `-epochs`, `-lrBase`, `-cyclesPerPattern`, `-weightsFile`.
-2.  **`observe`**: Para testar uma rede treinada, carregando pesos salvos e observando o padrão de saída da rede para um dígito específico.
-    *   Flags chave: `-digit <0-9>`, `-weightsFile`, `-cyclesToSettle`.
-3.  **`sim`**: Para rodar uma simulação geral com todas as dinâmicas ativas, útil para observação de comportamento ou logging detalhado.
-    *   Flags chave: `-cycles`, `-stimInputID`, `-stimInputFreqHz`, `-dbPath`, `-saveInterval`.
+1.  **`sim`**: Executa uma simulação geral da rede com todas as dinâmicas ativas.
+    *   Exemplo: `./crownet sim --cycles 1000 --neurons 150`
+    *   Use `./crownet sim --help` para todas as flags.
+2.  **`expose`**: Treina a rede expondo-a a padrões de dígitos.
+    *   Exemplo: `./crownet expose --epochs 50 --weightsFile pesos.json`
+    *   Use `./crownet expose --help` para todas as flags.
+3.  **`observe`**: Testa uma rede treinada com um dígito específico.
+    *   Exemplo: `./crownet observe --digit 7 --weightsFile pesos.json`
+    *   Use `./crownet observe --help` para todas as flags.
+4.  **`logutil export`**: Exporta dados de logs SQLite para CSV.
+    *   Exemplo: `./crownet logutil export --dbPath sim.db --table NetworkSnapshots`
+    *   Use `./crownet logutil export --help` para todas as flags.
+
+Consulte o [Guia de Interface de Linha de Comando](./docs/03_guias/guia_interface_linha_comando.md) para detalhes completos sobre todos os comandos e flags.
 
 ## Tecnologias Utilizadas (MVP)
 
@@ -111,16 +119,20 @@ Para exportar dados de tabelas específicas do arquivo de log para o formato CSV
     ```bash
     go build .
     ```
-2.  **Executar (exemplo modo expose):**
+2.  **Executar (exemplo comando `expose`):**
     ```bash
-    ./crownet -mode expose -neurons 150 -epochs 20 -lrBase 0.005 -cyclesPerPattern 5 -weightsFile my_digit_weights.json
+    ./crownet expose --neurons 150 --epochs 20 --lrBase 0.005 --cyclesPerPattern 5 --weightsFile my_digit_weights.json
     ```
-3.  **Executar (exemplo modo observe):**
+3.  **Executar (exemplo comando `observe`):**
     ```bash
-    ./crownet -mode observe -digit 7 -weightsFile my_digit_weights.json -cyclesToSettle 5
+    ./crownet observe --digit 7 --weightsFile my_digit_weights.json --cyclesToSettle 5
+    ```
+4.  **Executar (exemplo comando `sim` com seed):**
+    ```bash
+    ./crownet --seed 42 sim --cycles 500 --dbPath simulation_log.db
     ```
 
-Consulte o `guia_interface_linha_comando.md` para mais detalhes sobre os flags.
+Consulte o `guia_interface_linha_comando.md` (ou use `--help` nos comandos) para mais detalhes sobre os flags.
 
 ## Reprodutibilidade
 
