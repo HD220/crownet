@@ -1,0 +1,99 @@
+# Arquivo de Exemplo de Configuração TOML para CrowNet
+
+# Esta seção corresponde à struct config.CLIConfig em Go.
+# Os nomes das chaves aqui são geralmente snake_case e serão mapeados
+# para os campos CamelCase na struct Go.
+[cli]
+# mode = "sim" # O modo é agora determinado pelo subcomando CLI (ex: ./crownet sim)
+total_neurons = 250
+seed = 123456789
+weights_file = "custom_weights_from_toml.json"
+base_learning_rate = 0.015
+
+# Parâmetros específicos do modo 'sim'
+cycles = 1500
+db_path = "toml_simulation_log.db"
+save_interval = 50
+stim_input_id = 0
+stim_input_freq_hz = 2.5
+monitor_output_id = 0
+debug_chem = true
+
+# Parâmetros específicos do modo 'expose'
+epochs = 60
+cycles_per_pattern = 25
+
+# Parâmetros específicos do modo 'observe'
+digit = 7
+cycles_to_settle = 60
+
+# Nota: Parâmetros de logutil não são tipicamente configurados via TOML,
+# mas via flags diretas do subcomando 'logutil export'.
+
+
+# Esta seção corresponde à struct config.SimulationParameters em Go.
+[sim_params]
+space_max_dimension = 12.0
+cycles_per_second = 100.0
+
+base_firing_threshold = 0.8
+accumulated_pulse_decay_rate = 0.12
+absolute_refractory_cycles = 3
+relative_refractory_cycles = 4
+pulse_propagation_speed = 1.2
+
+dopaminergic_percent = 0.15
+inhibitory_percent = 0.25
+excitatory_radius_factor = 1.0
+dopaminergic_radius_factor = 0.8
+inhibitory_radius_factor = 0.9
+
+min_input_neurons = 35
+min_output_neurons = 10
+pattern_height = 7
+pattern_width = 5
+pattern_size = 35 # (PatternHeight * PatternWidth)
+output_frequency_window_cycles = 60.0
+
+initial_synaptic_weight_min = 0.05
+initial_synaptic_weight_max = 0.55
+max_synaptic_weight = 1.0
+hebbian_weight_min = -0.05
+hebbian_weight_max = 0.95
+synaptic_weight_decay_rate = 0.0002
+hebbian_coincidence_window = 3
+hebb_positive_reinforce_factor = 0.12
+hebb_negative_reinforce_factor = 0.06 # Usado se a lógica LTD for expandida
+min_learning_rate_factor = 0.05
+
+synaptogenesis_influence_radius = 2.2
+attraction_force_factor = 0.012
+repulsion_force_factor = 0.006
+dampening_factor = 0.45
+max_movement_per_cycle = 0.12
+
+cortisol_production_rate = 0.011
+cortisol_decay_rate = 0.006
+cortisol_production_per_hit = 0.06
+cortisol_max_level = 1.0
+dopamine_production_rate = 0.022
+dopamine_decay_rate = 0.011
+dopamine_production_per_event = 0.11
+dopamine_max_level = 1.0
+
+cortisol_influence_on_lr = -0.6
+dopamine_influence_on_lr = 0.9
+cortisol_influence_on_synapto = -0.35
+dopamine_influence_on_synapto = 0.55
+firing_threshold_increase_on_dopa = -0.25
+firing_threshold_increase_on_cort = 0.35
+
+# CortisolGlandPosition é uma Point [16]Coordinate.
+# Exemplo (apenas 3 dimensões mostradas para brevidade, o real é 16D):
+# cortisol_gland_position = [1.0, -0.5, 2.0, 0,0,0,0,0,0,0,0,0,0,0,0,0]
+# Se omitido, usará o padrão de config.DefaultSimulationParameters().
+# A desserialização de arrays para common.Point pode precisar de atenção
+# ou ser tratada como um tipo especial pela biblioteca TOML se não for automático.
+# Por enquanto, vamos assumir que o padrão Go é usado se não especificado aqui.
+# Para definir explicitamente, a sintaxe TOML para arrays é:
+# cortisol_gland_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

@@ -33,32 +33,69 @@ var simCmd = &cobra.Command{
 	Long: `Executa uma simulação geral com todas as dinâmicas da rede (aprendizado,
 sinaptogênese, neuromodulação) ativas. Útil para observação de comportamento
 ou logging detalhado para análise posterior.`,
+	"github.com/BurntSushi/toml" // FEATURE-CONFIG-001: Adicionar import TOML
+)
+
+var (
+// ... (variáveis de flag existentes) ...
+
+// simCmd represents the sim command
+// ... (definição de comando existente) ...
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Executando modo sim via Cobra...")
 
-		cliCfg := config.CLIConfig{
-			Mode:             config.ModeSim, // Definido pelo comando
-			TotalNeurons:     simTotalNeurons,
-			Seed:             seed, // Flag global/persistente de rootCmd
-			WeightsFile:      simWeightsFile,
-			BaseLearningRate: common.Rate(simBaseLearningRate),
-			Cycles:           simCycles,
-			DbPath:           simDbPath,
-			SaveInterval:     simSaveInterval,
-			StimInputID:      simStimInputID,
-			StimInputFreqHz:  simStimInputFreqHz,
-			MonitorOutputID:  simMonitorOutputID,
-			DebugChem:        simDebugChem,
-			// Outras flags de outros modos não são relevantes aqui
-		}
-
+		// 1. Inicializar AppConfig com valores padrão das flags Cobra e SimParams defaults
 		appCfg := &config.AppConfig{
-			SimParams: config.DefaultSimulationParameters(), // Começa com padrões
-			Cli:       cliCfg,
+			SimParams: config.DefaultSimulationParameters(),
+			Cli: config.CLIConfig{ // Populate com os valores padrão das flags (que já estão nas vars)
+				Mode:             config.ModeSim,
+				TotalNeurons:     simTotalNeurons,
+				Seed:             seed, // da flag global
+				WeightsFile:      simWeightsFile,
+				BaseLearningRate: common.Rate(simBaseLearningRate),
+				Cycles:           simCycles,
+				DbPath:           simDbPath,
+				SaveInterval:     simSaveInterval,
+				StimInputID:      simStimInputID,
+				StimInputFreqHz:  simStimInputFreqHz,
+				MonitorOutputID:  simMonitorOutputID,
+				DebugChem:        simDebugChem,
+			},
 		}
 
-		// TODO: Implementar carregamento de configFile se fornecido globalmente,
-		// e mesclar com appCfg ANTES da validação.
+		// 2. Carregar de arquivo TOML se especificado (sobrescreve os padrões acima)
+		if configFile != "" {
+			fmt.Printf("Carregando configuração do arquivo TOML: %s\n", configFile)
+			// Salvar uma cópia da CLIConfig antes de DecodeFile, para aplicar flags CLI depois
+			cliCfgBeforeToml := appCfg.Cli
+			if _, err := toml.DecodeFile(configFile, appCfg); err != nil {
+				log.Printf("Aviso: erro ao decodificar arquivo TOML '%s': %v. Continuando com padrões/flags CLI.", configFile, err)
+				// Restaurar CLIConfig se TOML falhou, para que flags CLI ainda possam funcionar sobre defaults
+				appCfg.Cli = cliCfgBeforeToml
+			}
+		}
+
+		// 3. Aplicar flags CLI que foram *explicitamente setadas* pelo usuário,
+		//    sobrescrevendo valores do TOML ou dos padrões das flags.
+		//    A flag global 'seed' já foi aplicada na inicialização de appCfg.Cli.Seed.
+		//    Se 'configFile' setou 'seed', a flag global '--seed' (se usada) irá sobrescrevê-la.
+		if cmd.Flags().Changed("seed") { appCfg.Cli.Seed = seed }
+
+
+		if cmd.Flags().Changed("neurons") { appCfg.Cli.TotalNeurons = simTotalNeurons }
+		if cmd.Flags().Changed("weightsFile") { appCfg.Cli.WeightsFile = simWeightsFile }
+		if cmd.Flags().Changed("lrBase") { appCfg.Cli.BaseLearningRate = common.Rate(simBaseLearningRate) }
+		if cmd.Flags().Changed("cycles") { appCfg.Cli.Cycles = simCycles }
+		if cmd.Flags().Changed("dbPath") { appCfg.Cli.DbPath = simDbPath }
+		if cmd.Flags().Changed("saveInterval") { appCfg.Cli.SaveInterval = simSaveInterval }
+		if cmd.Flags().Changed("stimInputID") { appCfg.Cli.StimInputID = simStimInputID }
+		if cmd.Flags().Changed("stimInputFreqHz") { appCfg.Cli.StimInputFreqHz = simStimInputFreqHz }
+		if cmd.Flags().Changed("monitorOutputID") { appCfg.Cli.MonitorOutputID = simMonitorOutputID }
+		if cmd.Flags().Changed("debugChem") { appCfg.Cli.DebugChem = simDebugChem }
+
+		// Nota: Se flags CLI puderem modificar SimParams diretamente, essa lógica de merge
+		// precisaria ser estendida para SimParams também. Por ora, SimParams só vem de
+		// DefaultSimulationParameters() e do arquivo TOML.
 
 		if err := appCfg.Validate(); err != nil {
 			return fmt.Errorf("configuração inválida para o modo sim: %w", err)

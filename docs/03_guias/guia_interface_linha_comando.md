@@ -25,7 +25,7 @@ Para obter ajuda sobre um comando específico:
 
 Estas flags podem ser aplicadas ao comando raiz (`crownet`) e são herdadas por seus subcomandos:
 
-*   `--configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados primeiro. Flags de comando subsequentes podem sobrescrever os valores do arquivo. (Padrão: "", nenhum arquivo carregado por padrão) **Nota: A funcionalidade de carregar de arquivo TOML está planejada mas não completamente implementada.**
+*   `--configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados e podem ser sobrescritos por flags de comando. (Padrão: "", nenhum arquivo carregado por padrão) Veja `config.example.toml` para a estrutura.
 *   `--seed <int64>`: Semente para o gerador de números aleatórios (0 usa o tempo atual). (Padrão: 0)
 
 ## 3. Comandos Principais e Suas Flags
@@ -91,9 +91,9 @@ Exporta dados de tabelas do log para CSV.
 *   `-f, --format <string>`: Formato de saída (atualmente apenas 'csv'). (Padrão: "csv")
 *   `-o, --output <string>`: Arquivo de saída (stdout se não especificado).
 
-## 4. Arquivo de Configuração TOML (Opcional - Funcionalidade Planejada)
+## 4. Arquivo de Configuração TOML (Opcional)
 
-A aplicação pode ser configurada usando um arquivo TOML (especificado pela flag global `--configFile`). **Nota: Esta funcionalidade está planejada mas ainda não completamente implementada.**
+A aplicação pode ser configurada usando um arquivo TOML (especificado pela flag global `--configFile`). Consulte o arquivo `config.example.toml` na raiz do repositório para um exemplo detalhado da estrutura e dos campos disponíveis.
 
 **Ordem de Precedência da Configuração:**
 1.  **Valores Padrão Internos:** Definidos no código da aplicação.

@@ -8,49 +8,56 @@ import (
 	"crownet/common"
 	"crownet/config"
 	"github.com/spf13/cobra"
+	"github.com/BurntSushi/toml" // FEATURE-CONFIG-001
 )
 
 var (
 	// Flags para o comando expose
-	exposeEpochs           int
-	exposeCyclesPerPattern int
-	// Flags de simulação também usadas por expose
-	exposeTotalNeurons     int
-	exposeWeightsFile      string
-	exposeBaseLearningRate float64
-	exposeDbPath           string // Opcional para expose
-	exposeSaveInterval    int    // Opcional para expose
-	exposeDebugChem        bool
-)
+// ... (variáveis de flag existentes) ...
 
-var exposeCmd = &cobra.Command{
-	Use:   "expose",
-	Short: "Treina a rede expondo-a a padrões de dígitos.",
-	Long: `Executa a fase de treinamento da rede. Durante esta fase, a rede é
-apresentada repetidamente a padrões de dígitos (0-9), permitindo que o
-aprendizado Hebbiano ocorra e os pesos sinápticos sejam ajustados.`,
+// exposeCmd represents the expose command
+// ... (definição de comando existente) ...
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Executando modo expose via Cobra...")
 
-		cliCfg := config.CLIConfig{
-			Mode:             config.ModeExpose,
-			TotalNeurons:     exposeTotalNeurons,
-			Seed:             seed, // Flag global/persistente de rootCmd
-			WeightsFile:      exposeWeightsFile,
-			BaseLearningRate: common.Rate(exposeBaseLearningRate),
-			Epochs:           exposeEpochs,
-			CyclesPerPattern: exposeCyclesPerPattern,
-			DbPath:           exposeDbPath,       // Usado se saveInterval > 0
-			SaveInterval:     exposeSaveInterval, // Para logging opcional durante expose
-			DebugChem:        exposeDebugChem,
-		}
-
+		// 1. Inicializar AppConfig com valores padrão das flags Cobra e SimParams defaults
 		appCfg := &config.AppConfig{
 			SimParams: config.DefaultSimulationParameters(),
-			Cli:       cliCfg,
+			Cli: config.CLIConfig{
+				Mode:             config.ModeExpose,
+				TotalNeurons:     exposeTotalNeurons,
+				Seed:             seed,
+				WeightsFile:      exposeWeightsFile,
+				BaseLearningRate: common.Rate(exposeBaseLearningRate),
+				Epochs:           exposeEpochs,
+				CyclesPerPattern: exposeCyclesPerPattern,
+				DbPath:           exposeDbPath,
+				SaveInterval:     exposeSaveInterval,
+				DebugChem:        exposeDebugChem,
+			},
 		}
 
-		// TODO: Lógica de configFile
+		// 2. Carregar de arquivo TOML se especificado
+		if configFile != "" {
+			fmt.Printf("Carregando configuração do arquivo TOML: %s\n", configFile)
+			cliCfgBeforeToml := appCfg.Cli
+			if _, err := toml.DecodeFile(configFile, appCfg); err != nil {
+				log.Printf("Aviso: erro ao decodificar arquivo TOML '%s': %v. Continuando.", configFile, err)
+				appCfg.Cli = cliCfgBeforeToml
+			}
+		}
+
+		// 3. Aplicar flags CLI explicitamente setadas
+		if cmd.Flags().Changed("seed") { appCfg.Cli.Seed = seed }
+		if cmd.Flags().Changed("neurons") { appCfg.Cli.TotalNeurons = exposeTotalNeurons }
+		if cmd.Flags().Changed("weightsFile") { appCfg.Cli.WeightsFile = exposeWeightsFile }
+		if cmd.Flags().Changed("lrBase") { appCfg.Cli.BaseLearningRate = common.Rate(exposeBaseLearningRate) }
+		if cmd.Flags().Changed("epochs") { appCfg.Cli.Epochs = exposeEpochs }
+		if cmd.Flags().Changed("cyclesPerPattern") { appCfg.Cli.CyclesPerPattern = exposeCyclesPerPattern }
+		if cmd.Flags().Changed("dbPath") { appCfg.Cli.DbPath = exposeDbPath }
+		if cmd.Flags().Changed("saveInterval") { appCfg.Cli.SaveInterval = exposeSaveInterval }
+		if cmd.Flags().Changed("debugChem") { appCfg.Cli.DebugChem = exposeDebugChem }
+
 		if err := appCfg.Validate(); err != nil {
 			return fmt.Errorf("configuração inválida para o modo expose: %w", err)
 		}

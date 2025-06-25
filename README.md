@@ -45,6 +45,7 @@ Consulte o [Guia de Interface de Linha de Comando](./docs/03_guias/guia_interfac
 ## Tecnologias Utilizadas (MVP)
 
 *   **Go:** Linguagem de implementação.
+*   **TOML:** Para configuração opcional via arquivo (veja `config.example.toml`).
 *   **JSON:** Para salvar e carregar os pesos sinápticos aprendidos.
 *   **SQLite:** (Opcional) Para salvar snapshots detalhados do estado da simulação para análise.
 

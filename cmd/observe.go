@@ -7,43 +7,50 @@ import (
 	"crownet/cli"
 	"crownet/config"
 	"github.com/spf13/cobra"
+	"github.com/BurntSushi/toml" // FEATURE-CONFIG-001
 )
 
 var (
 	// Flags para o comando observe
-	observeDigit          int
-	observeCyclesToSettle int
-	// Flags de simulação também usadas por observe
-	observeTotalNeurons int
-	observeWeightsFile  string
-	observeDebugChem    bool
-)
+// ... (variáveis de flag existentes) ...
 
-var observeCmd = &cobra.Command{
-	Use:   "observe",
-	Short: "Observa a resposta da rede a um dígito específico.",
-	Long: `Carrega pesos sinápticos previamente treinados e apresenta um padrão
-de dígito específico à rede, observando o padrão de ativação resultante
-nos neurônios de saída.`,
+// observeCmd represents the observe command
+// ... (definição de comando existente) ...
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Executando modo observe via Cobra...")
 
-		cliCfg := config.CLIConfig{
-			Mode:           config.ModeObserve,
-			TotalNeurons:   observeTotalNeurons,
-			Seed:           seed, // Flag global/persistente de rootCmd
-			WeightsFile:    observeWeightsFile,
-			Digit:          observeDigit,
-			CyclesToSettle: observeCyclesToSettle,
-			DebugChem:      observeDebugChem, // Embora menos usado, mantido por consistência
-		}
-
+		// 1. Inicializar AppConfig com valores padrão das flags Cobra e SimParams defaults
 		appCfg := &config.AppConfig{
 			SimParams: config.DefaultSimulationParameters(),
-			Cli:       cliCfg,
+			Cli: config.CLIConfig{
+				Mode:           config.ModeObserve,
+				TotalNeurons:   observeTotalNeurons,
+				Seed:           seed,
+				WeightsFile:    observeWeightsFile,
+				Digit:          observeDigit,
+				CyclesToSettle: observeCyclesToSettle,
+				DebugChem:      observeDebugChem,
+			},
 		}
 
-		// TODO: Lógica de configFile
+		// 2. Carregar de arquivo TOML se especificado
+		if configFile != "" {
+			fmt.Printf("Carregando configuração do arquivo TOML: %s\n", configFile)
+			cliCfgBeforeToml := appCfg.Cli
+			if _, err := toml.DecodeFile(configFile, appCfg); err != nil {
+				log.Printf("Aviso: erro ao decodificar arquivo TOML '%s': %v. Continuando.", configFile, err)
+				appCfg.Cli = cliCfgBeforeToml
+			}
+		}
+
+		// 3. Aplicar flags CLI explicitamente setadas
+		if cmd.Flags().Changed("seed") { appCfg.Cli.Seed = seed }
+		if cmd.Flags().Changed("neurons") { appCfg.Cli.TotalNeurons = observeTotalNeurons }
+		if cmd.Flags().Changed("weightsFile") { appCfg.Cli.WeightsFile = observeWeightsFile }
+		if cmd.Flags().Changed("digit") { appCfg.Cli.Digit = observeDigit }
+		if cmd.Flags().Changed("cyclesToSettle") { appCfg.Cli.CyclesToSettle = observeCyclesToSettle }
+		if cmd.Flags().Changed("debugChem") { appCfg.Cli.DebugChem = observeDebugChem }
+
 		if err := appCfg.Validate(); err != nil {
 			return fmt.Errorf("configuração inválida para o modo observe: %w", err)
 		}
