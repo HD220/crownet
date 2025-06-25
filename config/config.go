@@ -203,13 +203,23 @@ func DefaultSimulationParameters() SimulationParameters {
 	}
 }
 
-// LoadCLIConfig populates a CLIConfig struct from command-line flags.
+// LoadCLIConfig populates a CLIConfig struct by parsing flags from the given
+// arguments string slice using the provided FlagSet.
+//
 // NOTE: With the introduction of Cobra for CLI handling (REFACTOR-CLI-001),
-// this function is no longer the primary mechanism for parsing application flags.
-// Cobra commands now define and parse their own flags. This function might still
-// be useful for specific testing scenarios or if a non-Cobra entry point is needed.
-// It uses the provided FlagSet and arguments, making it suitable for testing
-// without relying on the global flag state or os.Args.
+// this function is no longer the primary mechanism for parsing application-wide CLI flags
+// during normal execution (main.go now uses cmd.Execute()). Cobra commands define
+// and parse their own flags.
+//
+// This function remains useful for:
+// 1. Testing: To parse a controlled set of arguments into a CLIConfig struct.
+// 2. Programmatic Configuration: If there's a need to build CLIConfig from a
+//    string slice outside the Cobra execution flow.
+//
+// The `args` slice should not include the program name. If `args` is nil,
+// and fSet is a named FlagSet (not flag.CommandLine), no arguments will be parsed,
+// which is typically the desired behavior for isolated tests. Ginkgo/test-specific
+// flags are filtered out from the provided `args`.
 //
 // Parameters:
 //   fSet: The flag.FlagSet instance to define and parse flags.
@@ -291,15 +301,24 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	return cfg, nil
 }
 
-// NewAppConfig creates a new AppConfig by loading default simulation parameters,
-// parsing command-line arguments (via LoadCLIConfig) to populate CLIConfig,
-// and then validating the combined configuration.
-// NOTE: With the introduction of Cobra (REFACTOR-CLI-001), this function is no
-// longer called directly by main.go. Each Cobra command is now responsible for
-// constructing its AppConfig. This function might be repurposed or removed
-// in the future, especially when TOML file configuration (FEATURE-CONFIG-001) is fully integrated.
-// This function was originally intended as the primary entry point for obtaining application
-// configuration in a production environment.
+// NewAppConfig creates a new AppConfig primarily for testing or programmatic use,
+// by loading default simulation parameters, parsing a given slice of command-line
+// arguments (via LoadCLIConfig) to populate CLIConfig, and then validating the
+// combined configuration.
+//
+// NOTE: With the introduction of Cobra for CLI handling (REFACTOR-CLI-001),
+// this function is **no longer the primary entry point for application configuration**
+// called by `main.go`. Cobra commands now construct `AppConfig` instances by
+// combining default parameters, TOML file loading (if specified via `--configFile`),
+// and parsed CLI flags.
+//
+// This function can still be useful for:
+// 1. Testing: To create an AppConfig from a controlled set of string arguments
+//    as if they were passed on the command line (without Cobra's involvement).
+// 2. Programmatic Setup: If an AppConfig needs to be built from arguments
+//    outside the main Cobra CLI flow.
+//
+// It does NOT handle TOML file loading; that logic is now within the Cobra command handlers.
 //
 // Parameters:
 //   args: A slice of strings representing the command-line arguments (excluding the program name).
