@@ -189,15 +189,20 @@ func (o *Orchestrator) validatePath(rawPath string, forRead bool) (string, error
 // Note: This function assumes network.NewCrowNet handles detailed setup based on AppConfig.
 func (o *Orchestrator) createNetwork() {
 	cliCfg := &o.AppCfg.Cli
-	// TODO: The call to network.NewCrowNet here needs to be updated
+	// TODO: The call to network.NewCrowNet here needs to be updated -> This TODO is now being addressed by BUG-CORE-001
 	// to match the signature network.NewCrowNet(appCfg *config.AppConfig).
 	// For now, documenting intent.
-	o.Net = network.NewCrowNet(
-		cliCfg.TotalNeurons,
-		common.Rate(cliCfg.BaseLearningRate),
-		&o.AppCfg.SimParams,
-		cliCfg.Seed,
-	)
+
+	// BUG-CORE-001: Corrected the call to NewCrowNet to pass the AppConfig directly.
+	var err error
+	o.Net, err = network.NewCrowNet(o.AppCfg)
+	if err != nil {
+		// This is a critical failure during network initialization.
+		// Log and potentially panic or return an error that stops the orchestrator.
+		// For now, let's log.Fatalf which will print and exit.
+		// This aligns with how main.go handles errors from NewAppConfig.
+		log.Fatalf("Failed to create network: %v", err)
+	}
 
 	// Log initial network state.
 	// Showing only the first few input/output neuron IDs for brevity.
