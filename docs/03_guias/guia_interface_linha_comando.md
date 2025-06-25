@@ -20,10 +20,10 @@ A aplicação é executada como um único binário (`crownet` após compilação
 
 Estas flags podem ser aplicadas à maioria dos modos de operação:
 
-*   `-configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados primeiro. Flags CLI subsequentes podem sobrescrever os valores do arquivo. (Padrão: "", nenhum arquivo carregado por padrão)
+*   `-configFile <string>`: Caminho para um arquivo de configuração TOML. Se especificado, os valores deste arquivo são carregados primeiro. Flags CLI subsequentes podem sobrescrever os valores do arquivo. (Padrão: "", nenhum arquivo carregado por padrão) **Nota: A funcionalidade de carregar de arquivo TOML está planejada mas não completamente implementada.**
 *   `-neurons <int>`: Número total de neurônios na rede. (Padrão: 200)
 *   `-weightsFile <string>`: Caminho para o arquivo JSON para salvar/carregar os pesos sinápticos. (Padrão: "crownet_weights.json")
-*   `-dbPath <string>`: Caminho para o arquivo SQLite para logging detalhado da simulação. Se fornecido, o logging é ativado. O arquivo é recriado a cada execução. (Padrão: "crownet_sim_run.db")
+*   `-dbPath <string>`: Caminho para o arquivo SQLite para logging detalhado da simulação. Se fornecido, o logging é ativado. Se o arquivo não existir, será criado. Se já existir, será aberto (não é recriado a cada execução). (Padrão: "crownet_sim_run.db")
 *   `-saveInterval <int>`: Intervalo de ciclos para salvar o estado no SQLite (0 para desabilitar saves periódicos, apenas final se aplicável). (Padrão: 100)
 *   `-debugChem <bool>`: Habilita logs de depuração para produção/níveis de neuroquímicos. (Padrão: false)
 *   `-seed <int64>`: Semente para o gerador de números aleatórios (0 usa o tempo atual). (Padrão: 0)
@@ -207,15 +207,15 @@ Se o logging para SQLite estiver ativado, duas tabelas principais são criadas:
     *   `StateID` (INTEGER, PK, AI)
     *   `SnapshotID` (INTEGER, FK para `NetworkSnapshots.SnapshotID`)
     *   `NeuronID` (INTEGER)
-    *   `Position0` ... `Position15` (REAL): Coordenadas do neurônio.
-    *   `Velocity0` ... `Velocity15` (REAL): Componentes de velocidade do neurônio.
+    *   `Position` (TEXT): Coordenadas do neurônio (armazenadas como uma string JSON array).
+    *   `Velocity` (TEXT): Componentes de velocidade do neurônio (armazenados como uma string JSON array).
     *   `Type` (INTEGER): Tipo numérico do neurônio.
-    *   `State` (INTEGER): Estado numérico do neurônio.
-    *   `AccumulatedPulse` (REAL)
+    *   `CurrentState` (INTEGER): Estado numérico do neurônio (nome da coluna atualizado de `State` para `CurrentState` para corresponder ao código).
+    *   `AccumulatedPotential` (REAL): (Nome da coluna atualizado de `AccumulatedPulse` para `AccumulatedPotential`).
     *   `BaseFiringThreshold` (REAL)
     *   `CurrentFiringThreshold` (REAL)
     *   `LastFiredCycle` (INTEGER)
     *   `CyclesInCurrentState` (INTEGER)
 
-(O arquivo de banco de dados é recriado em cada execução que especifica `-dbPath`.)
+(Nota: Se o arquivo de banco de dados especificado por `-dbPath` não existir, ele será criado. Se já existir, será aberto.)
 ```
