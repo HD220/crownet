@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath" // Added for path validation
+	"strings"       // Added for path validation messages
 	"time"
 )
 
@@ -88,9 +90,17 @@ func (o *Orchestrator) Run() error {
 func (o *Orchestrator) initializeLogger() error {
 	cfg := &o.AppCfg.Cli
 	// Logging is active for 'sim' mode, or 'expose' mode if periodic saving to DB is enabled.
-	if cfg.DbPath != "" &&
-		(cfg.Mode == config.ModeSim || (cfg.Mode == config.ModeExpose && cfg.SaveInterval > 0)) {
-		var err error
+	if cfg.DbPath != "" && (cfg.Mode == config.ModeSim || (cfg.Mode == config.ModeExpose && cfg.SaveInterval > 0)) {
+		validatedDbPath, err := o.validatePath(cfg.DbPath, false) // false: for writing
+		if err != nil {
+			// Allow DbPath to be empty if not in sim mode or expose with saveInterval
+			// This condition might be redundant if cfg.DbPath == "" is checked first,
+			// but validatePath itself checks for empty path.
+			// If DbPath was provided but invalid, it's an error.
+			return fmt.Errorf("invalid DbPath '%s': %w", cfg.DbPath, err)
+		}
+		cfg.DbPath = validatedDbPath // Update with cleaned, absolute path
+
 		o.Logger, err = storage.NewSQLiteLogger(cfg.DbPath)
 		if err != nil {
 			return fmt.Errorf("failed to initialize SQLite logger at %s: %w", cfg.DbPath, err)
@@ -99,6 +109,77 @@ func (o *Orchestrator) initializeLogger() error {
 	}
 	return nil
 }
+
+// validatePath cleans, absolutizes, and performs basic checks on a file path.
+// - rawPath: the user-provided path string.
+// - forRead: true if the path is intended for reading, false for writing.
+// Returns the cleaned, absolute path or an error if validation fails.
+func (o *Orchestrator) validatePath(rawPath string, forRead bool) (string, error) {
+	if strings.TrimSpace(rawPath) == "" {
+		return "", fmt.Errorf("path cannot be empty")
+	}
+
+	// Clean the path to resolve ".." etc.
+	cleanedPath := filepath.Clean(rawPath)
+
+	// Convert to absolute path
+	absPath, err := filepath.Abs(cleanedPath)
+	if err != nil {
+		return "", fmt.Errorf("could not determine absolute path for '%s': %w", cleanedPath, err)
+	}
+
+	// At this point, absPath is a cleaned, absolute path.
+	// Further checks for path traversal vulnerabilities could involve ensuring
+	// it's within a known-good base directory, but for a general CLI tool,
+	// this is harder to enforce without more context or a sandbox.
+	// The TSK-SEC-001 asks to "Consider if there is a need to restrict... to a subdiretory".
+	// For now, we'll focus on existence and basic type checks.
+
+	fileInfo, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if forRead {
+				return "", fmt.Errorf("path '%s' (resolved to '%s') does not exist", rawPath, absPath)
+			}
+			// If for writing, the path itself might not exist, but its parent directory must.
+			parentDir := filepath.Dir(absPath)
+			parentInfo, parentErr := os.Stat(parentDir)
+			if parentErr != nil {
+				if os.IsNotExist(parentErr) {
+					return "", fmt.Errorf("parent directory for '%s' (resolved to '%s') does not exist", rawPath, parentDir)
+				}
+				return "", fmt.Errorf("could not stat parent directory '%s' for path '%s': %w", parentDir, rawPath, parentErr)
+			}
+			if !parentInfo.IsDir() {
+				return "", fmt.Errorf("parent path '%s' for '%s' is not a directory", parentDir, rawPath)
+			}
+			// Note: Checking actual write permissions is complex and OS-dependent.
+			// We rely on the OS to prevent writing to unauthorized locations during the actual write operation.
+			return absPath, nil // Parent exists and is a dir, path is OK for writing.
+		}
+		return "", fmt.Errorf("could not stat path '%s' (resolved to '%s'): %w", rawPath, absPath, err)
+	}
+
+	// Path exists.
+	if forRead {
+		if fileInfo.IsDir() {
+			return "", fmt.Errorf("path '%s' (resolved to '%s') is a directory, expected a file for reading", rawPath, absPath)
+		}
+		// Note: Actual read permission check is typically handled by os.Open().
+	} else { // For writing (e.g. weights file, potentially overwriting)
+		if fileInfo.IsDir() {
+			// This case is for dbPath, which *can* be a directory (SQLite creates file in it).
+			// However, for weights file, we expect to write a file.
+			// For now, let's assume if it exists and is a dir, it's problematic for a file write.
+			// This logic might need refinement based on how DbPath is handled if it points to a dir.
+			// The current SQLite logger seems to expect a file path.
+			return "", fmt.Errorf("path '%s' (resolved to '%s') exists and is a directory, expected a file path for writing", rawPath, absPath)
+		}
+	}
+
+	return absPath, nil
+}
+
 
 // createNetwork initializes the main CrowNet neural network instance (o.Net)
 // using the application configuration. It passes the necessary parameters
@@ -134,29 +215,39 @@ func (o *Orchestrator) createNetwork() {
 
 // loadWeights loads synaptic weights from the specified file.
 // Uses the injected loadWeightsFn for testability.
-func (o *Orchestrator) loadWeights(filepath string) error {
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
-		// File not existing is not an error here; expose mode can start with random weights.
-		// The calling mode (e.g., observe) will determine if this is a fatal condition.
-		return fmt.Errorf("weights file %s not found", filepath)
+func (o *Orchestrator) loadWeights(rawFilepath string) error {
+	validatedFilepath, err := o.validatePath(rawFilepath, true) // true: for reading
+	if err != nil {
+		// For loadWeights, if the error is specifically IsNotExist, it might be handled differently
+		// by the caller (e.g., expose mode might proceed with random weights).
+		// However, validatePath already returns a specific error for IsNotExist.
+		// Let's make it clear: if path is invalid (not just not existing), it's an error.
+		// If it's valid but doesn't exist, that's also an error from validatePath if forRead=true.
+		return fmt.Errorf("invalid weights file path '%s': %w", rawFilepath, err)
 	}
+	// At this point, validatedFilepath is a valid, existing file path.
 
-	loadedWeights, errLoad := o.loadWeightsFn(filepath)
+	loadedWeights, errLoad := o.loadWeightsFn(validatedFilepath)
 	if errLoad != nil {
-		return fmt.Errorf("failed to load weights from %s: %w", filepath, errLoad)
+		return fmt.Errorf("failed to load weights from %s: %w", validatedFilepath, errLoad)
 	}
 	o.Net.SynapticWeights = loadedWeights
-	fmt.Printf("Existing weights loaded from %s\n", filepath)
+	fmt.Printf("Existing weights loaded from %s\n", validatedFilepath)
 	return nil
 }
 
 // saveWeights saves the current synaptic weights to the specified file.
 // Uses the injected saveWeightsFn for testability.
-func (o *Orchestrator) saveWeights(filepath string) error {
-	if err := o.saveWeightsFn(o.Net.SynapticWeights, filepath); err != nil {
-		return fmt.Errorf("failed to save trained weights to %s: %w", filepath, err)
+func (o *Orchestrator) saveWeights(rawFilepath string) error {
+	validatedFilepath, err := o.validatePath(rawFilepath, false) // false: for writing
+	if err != nil {
+		return fmt.Errorf("invalid weights file path '%s' for saving: %w", rawFilepath, err)
 	}
-	fmt.Printf("Trained weights saved to %s\n", filepath)
+
+	if err := o.saveWeightsFn(o.Net.SynapticWeights, validatedFilepath); err != nil {
+		return fmt.Errorf("failed to save trained weights to %s: %w", validatedFilepath, err)
+	}
+	fmt.Printf("Trained weights saved to %s\n", validatedFilepath)
 	return nil
 }
 

@@ -7,8 +7,10 @@ package config
 import (
 	"flag"
 	"fmt"
+	"path/filepath" // Added for path cleaning
 	"strings"
 	"time"
+
 	"crownet/common"
 )
 
@@ -254,6 +256,15 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	if cfg.Seed == 0 {
 		cfg.Seed = time.Now().UnixNano()
 	}
+
+	// Clean file paths
+	if cfg.WeightsFile != "" {
+		cfg.WeightsFile = filepath.Clean(cfg.WeightsFile)
+	}
+	if cfg.DbPath != "" {
+		cfg.DbPath = filepath.Clean(cfg.DbPath)
+	}
+
 	return cfg, nil
 }
 
