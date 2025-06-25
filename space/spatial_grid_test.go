@@ -231,5 +231,3 @@ func TestGetCellID_WithOffset(t *testing.T) {
         })
     }
 }
-
-```

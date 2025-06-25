@@ -200,5 +200,3 @@ func TestEnvironment_ApplyEffectsToNeurons(t *testing.T) {
 		 t.Errorf("ApplyEffects (threshold clamping): Threshold got %f, want %f", n1.CurrentFiringThreshold, MinimumFiringThreshold)
 	}
 }
-
-```

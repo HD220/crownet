@@ -60,8 +60,11 @@ func (nw *NetworkWeights) InitializeAllToAllWeights(neuronIDs []common.NeuronID)
 				nw.weights[fromID][toID] = 0.0
 			} else {
 				randomFactor := nw.rng.Float64() // Usa o rng da struct
-				weightValue := minW + randomFactor*(maxW-minW)
-				nw.weights[fromID][toID] = common.SynapticWeight(weightValue)
+				// Ensure arithmetic operations use consistent float64 types before converting to SynapticWeight
+				base := float64(minW)
+				diff := float64(maxW) - float64(minW)
+				calculatedWeight := base + randomFactor*diff
+				nw.weights[fromID][toID] = common.SynapticWeight(calculatedWeight)
 			}
 		}
 	}
@@ -140,7 +143,8 @@ func (nw *NetworkWeights) ApplyHebbianUpdate(
 	// LTP - Long-Term Potentiation
 	if preSynapticActivity > 0 && postSynapticActivity > 0 {
 		// Aumenta o peso se ambos os neurônios estiverem ativos
-		deltaWeight = common.SynapticWeight(float64(effectiveLearningRate) * nw.simParams.HebbPositiveReinforceFactor)
+		reinforceFactor := float64(nw.simParams.HebbPositiveReinforceFactor)
+		deltaWeight = common.SynapticWeight(float64(effectiveLearningRate) * reinforceFactor)
 	} else {
 		// LTD - Long-Term Depression (opcional, baseado em parâmetros)
 		// Exemplo: se HebbNegativeReinforceFactor > 0 e um dos neurônios (mas não ambos) está ativo.

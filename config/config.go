@@ -47,6 +47,8 @@ type SimulationParameters struct {
 	InitialSynapticWeightMin    common.SynapticWeight // Minimum initial synaptic weight.
 	InitialSynapticWeightMax    common.SynapticWeight // Maximum initial synaptic weight.
 	MaxSynapticWeight           common.SynapticWeight // Absolute maximum for any synaptic weight.
+	HebbianWeightMin            common.SynapticWeight // Minimum weight for Hebbian learning (can be negative).
+	HebbianWeightMax            common.SynapticWeight // Maximum weight for Hebbian learning.
 	SynapticWeightDecayRate     common.Rate           // Rate at which synaptic weights decay per cycle.
 	HebbianCoincidenceWindow    common.CycleCount     // Time window (cycles) for Hebbian learning co-activation.
 	HebbPositiveReinforceFactor common.Factor         // Factor for strengthening synaptic weights in Hebbian learning.
@@ -142,6 +144,8 @@ func DefaultSimulationParameters() SimulationParameters {
 		InitialSynapticWeightMin:      common.SynapticWeight(0.1),
 		InitialSynapticWeightMax:      common.SynapticWeight(0.5),
 		MaxSynapticWeight:             common.SynapticWeight(1.0),
+		HebbianWeightMin:              common.SynapticWeight(-0.1), // Allow weakening below zero
+		HebbianWeightMax:              common.SynapticWeight(1.0),  // Can reach absolute max
 		HebbPositiveReinforceFactor:   common.Factor(0.1),
 		HebbNegativeReinforceFactor:   common.Factor(0.05),
 		CortisolProductionRate:        common.Rate(0.01),
