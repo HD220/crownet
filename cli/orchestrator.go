@@ -1,3 +1,7 @@
+// Package cli provides the command-line interface (CLI) orchestrator for the
+// CrowNet simulation. It interprets CLI arguments, sets up the simulation
+// environment, and manages the execution flow for different modes of operation
+// (e.g., simulation, training, observation).
 package cli
 
 import (
@@ -96,9 +100,15 @@ func (o *Orchestrator) initializeLogger() error {
 	return nil
 }
 
-// createNetwork initializes the CrowNet neural network instance.
+// createNetwork initializes the main CrowNet neural network instance (o.Net)
+// using the application configuration. It passes the necessary parameters
+// to network.NewCrowNet to construct and set up the network.
+// Note: This function assumes network.NewCrowNet handles detailed setup based on AppConfig.
 func (o *Orchestrator) createNetwork() {
 	cliCfg := &o.AppCfg.Cli
+	// TODO: The call to network.NewCrowNet here needs to be updated
+	// to match the signature network.NewCrowNet(appCfg *config.AppConfig).
+	// For now, documenting intent.
 	o.Net = network.NewCrowNet(
 		cliCfg.TotalNeurons,
 		common.Rate(cliCfg.BaseLearningRate),

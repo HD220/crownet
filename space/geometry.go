@@ -108,78 +108,59 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 	return clampedP, true
 }
 
-// GenerateRandomPositionInHyperSphere cria uma posição aleatória dentro de uma hiperesfera
-// de raio `maxRadius` centrada na origem.
-// Utiliza amostragem por rejeição dentro de um hipercubo envolvente.
+// GenerateRandomPositionInHyperSphere creates a random position uniformly distributed
+// within an N-dimensional hypersphere (N-ball) of radius `maxRadius`, centered at the origin.
+// This implementation uses a method suitable for high dimensions:
+// 1. Generate N standard normal deviates (Gaussian distribution).
+// 2. Normalize the resulting N-dimensional vector to get a point on the surface of the unit N-sphere.
+// 3. Scale this point by a radius R' = R * u^(1/N), where R is maxRadius and u is a uniform random
+//    number in [0,1). This scaling ensures uniform distribution by volume within the N-ball.
+// This approach is significantly more efficient for high dimensions (like the 16D space
+// used in CrowNet, as defined by `pointDimension`) than methods like rejection sampling.
 //
 // Parameters:
-//   - maxRadius: The radius of the hypersphere. If negative, it's treated as 0.
-//   - randomSource: A function that returns a float64 in [0.0, 1.0), used as the source of randomness.
-//                  This allows for deterministic testing by providing a seeded RNG.
+//   - maxRadius: The radius of the hypersphere. If negative or zero, the origin (a zero point) is returned.
+//   - rng: A source of randomness (*rand.Rand) for generating normal and uniform random numbers.
 //
 // Returns:
-//   - common.Point: A randomly generated point within the specified N-dimensional hypersphere.
-//
-// Note on Efficiency:
-// Rejection sampling becomes inefficient in high dimensions (like 16D used in CrowNet)
-// due to the "curse of dimensionality," where the volume of the hypersphere becomes
-// a very small fraction of the volume of its enclosing hypercube. This means many
-// generated points are rejected, leading to potentially many iterations.
-// Alternatives like Marsaglia's method (for 2D/3D) or Muller's method (normalizing points
-// generated from a Gaussian distribution) are more efficient for higher dimensions but are more complex to implement.
-// For the current scope, rejection sampling is used for its simplicity.
-//
-// The function below is the NEW, OPTIMIZED version.
-// GenerateRandomPositionInHyperSphere cria uma posição aleatória uniformemente distribuída
-// dentro de uma hiperesfera N-dimensional (N-ball) de raio `maxRadius` centrada na origem.
-// Utiliza o método de gerar N variáveis aleatórias de uma distribuição normal padrão,
-// normalizando o vetor resultante para obter um ponto na superfície da N-esfera unitária,
-// e então escalando este ponto por um raio R * u^(1/N) para garantir distribuição uniforme por volume.
-// Esta abordagem é significativamente mais eficiente para altas dimensões do que a amostragem por rejeição.
-//
-// Parameters:
-//   - maxRadius: O raio da hiperesfera. Se negativo ou zero, a origem é retornada.
-//   - rng: Uma fonte de aleatoriedade (`*rand.Rand`) para gerar os números normais e uniformes.
-//
-// Returns:
-//   - common.Point: Um ponto gerado aleatoriamente dentro da hiperesfera N-dimensional especificada.
+//   A common.Point representing a randomly generated point within the specified N-dimensional hypersphere.
 func GenerateRandomPositionInHyperSphere(maxRadius float64, rng *rand.Rand) common.Point {
-	var p common.Point // common.Point is [16]float64
+	var p common.Point // common.Point is [16]float64, initialized to all zeros.
 
 	if maxRadius <= 0 { // Handles negative or zero radius by returning the origin.
 		return p // p is {0,0,...,0} by default
 	}
 
-	// 1. Gerar N (pointDimension) variáveis aleatórias de uma distribuição normal padrão.
+	// Step 1: Generate N (pointDimension) random variables from a standard normal distribution.
 	normDeviates := make([]float64, pointDimension)
 	sumSq := 0.0
 	for i := 0; i < pointDimension; i++ {
-		val := rng.NormFloat64() // Gera um desvio normal padrão (média 0, stddev 1)
+		val := rng.NormFloat64() // Generates a standard normal deviate (mean 0, stddev 1)
 		normDeviates[i] = val
 		sumSq += val * val
 	}
 
-	// Se sumSq for zero (extremamente improvável para N > 1), significa que todos os normDeviates foram zero.
-	// Neste caso, o ponto é a origem, que já está dentro da esfera.
-	// Também protege contra divisão por zero se sqrt(sumSq) for zero.
-	if sumSq == 0 { // ou sumSq < epsilon para robustez de ponto flutuante
-		return p // Retorna a origem
+	// If sumSq is zero (extremely unlikely for N > 1), it means all normDeviates were zero.
+	// In this case, the point is the origin, which is already within the sphere.
+	// This also protects against division by zero if math.Sqrt(sumSq) is zero.
+	if sumSq == 0 { // or sumSq < epsilon for floating-point robustness
+		return p // Return the origin
 	}
 
-	// 2. Normalizar o vetor para obter um ponto na superfície da N-esfera unitária.
+	// Step 2: Normalize the vector to obtain a point on the surface of the unit N-sphere.
 	invMagnitude := 1.0 / math.Sqrt(sumSq)
 	pointOnUnitSphere := common.Point{}
 	for i := 0; i < pointDimension; i++ {
 		pointOnUnitSphere[i] = common.Coordinate(normDeviates[i] * invMagnitude)
 	}
 
-	// 3. Gerar um raio escalar para o ponto dentro da N-ball.
-	// u^(1/N) é usado para garantir distribuição uniforme por volume.
-	u := rng.Float64() // Uniforme em [0.0, 1.0)
-	// math.Pow(0.0, 1.0/N) é 0.0. math.Pow(u, 1.0/N) para u próximo de 1.0 é próximo de 1.0.
+	// Step 3: Generate a scalar radius for the point within the N-ball.
+	// u^(1/N) is used to ensure uniform distribution by volume.
+	u := rng.Float64() // Uniformly random number in [0.0, 1.0)
+	// math.Pow(0.0, 1.0/N) is 0.0. math.Pow(u, 1.0/N) for u close to 1.0 is close to 1.0.
 	scaledRadius := maxRadius * math.Pow(u, 1.0/float64(pointDimension))
 
-	// 4. Escalar o ponto na esfera unitária pelo raio calculado.
+	// Step 4: Scale the point on the unit sphere by the calculated radius.
 	for i := 0; i < pointDimension; i++ {
 		p[i] = common.Coordinate(float64(pointOnUnitSphere[i]) * scaledRadius)
 	}

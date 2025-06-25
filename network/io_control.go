@@ -8,16 +8,27 @@ import (
 	"math"
 )
 
-// SetDynamicState allows toggling of major dynamic processes in the network.
+// SetDynamicState enables or disables major dynamic processes within the CrowNet simulation.
+// This allows for runtime control over learning, synaptogenesis (structural plasticity),
+// and neurochemical modulation.
+//
+// Parameters:
+//   learning: If true, Hebbian learning and other synaptic plasticity rules are active.
+//   synaptogenesis: If true, structural plasticity mechanisms (neuron movement, connection pruning/formation) are active.
+//   chemicalModulation: If true, neurochemical systems (e.g., cortisol, dopamine) influence network behavior.
 func (cn *CrowNet) SetDynamicState(learning, synaptogenesis, chemicalModulation bool) {
 	cn.isLearningEnabled = learning
 	cn.isSynaptogenesisEnabled = synaptogenesis
 	cn.isChemicalModulationEnabled = chemicalModulation
 }
 
-// ResetNetworkStateForNewPattern resets transient states of the network,
-// preparing it for the presentation of a new input pattern.
-// It clears accumulated potentials in all neurons and removes all active pulses.
+// ResetNetworkStateForNewPattern prepares the network for a new input pattern
+// presentation by resetting transient neuronal states and clearing active signals.
+// Specifically, it:
+// - Clears accumulated potentials in all neurons.
+// - Removes all active pulses from the PulseList.
+// Note: This method does not reset neuron firing states (e.g., a neuron in a refractory
+// period will remain so). It primarily focuses on clearing immediate electrical activity.
 func (cn *CrowNet) ResetNetworkStateForNewPattern() {
 	for _, n := range cn.Neurons {
 		n.AccumulatedPotential = 0.0
@@ -28,9 +39,20 @@ func (cn *CrowNet) ResetNetworkStateForNewPattern() {
 	cn.ActivePulses.Clear()
 }
 
-// PresentPattern activates specific input neurons based on the provided patternData.
-// Active points in the pattern (value > 0.5) cause corresponding input neurons to fire.
-// It returns an error if patternData size doesn't match configuration or if input neurons are insufficient/not found.
+// PresentPattern presents an input pattern to the network by activating a subset
+// of its input neurons.
+// Each element in patternData corresponds to an input neuron (ordered by InputNeuronIDs).
+// If a patternData element's value is greater than 0.5, the corresponding input neuron
+// is set to a Firing state, and a new pulse is emitted from it.
+//
+// Parameters:
+//   patternData: A slice of float64 values representing the input pattern. The length
+//                must match SimParams.PatternSize.
+//
+// Returns:
+//   An error if SimParams are not initialized, if the patternData size is incorrect,
+//   if there are insufficient configured input neurons, or if an expected input
+//   neuron is not found or is not of Type Input. Returns nil on success.
 func (cn *CrowNet) PresentPattern(patternData []float64) error {
 	if cn.SimParams == nil {
 		return fmt.Errorf("PresentPattern: SimParams not initialized in CrowNet")
@@ -74,9 +96,16 @@ func (cn *CrowNet) PresentPattern(patternData []float64) error {
 	return nil
 }
 
-// GetOutputActivation retrieves the current accumulated potentials of the output neurons.
-// The order of activations corresponds to the sorted order of OutputNeuronIDs.
-// Returns an error if the number of output neurons is less than configured MinOutputNeurons or if an output neuron is not found.
+// GetOutputActivation retrieves the current accumulated potentials of the
+// network's output neurons.
+// The number of output activations returned is determined by SimParams.MinOutputNeurons.
+// The activations are ordered corresponding to the sorted OutputNeuronIDs.
+//
+// Returns:
+//   A slice of float64 representing the accumulated potentials of the output neurons,
+//   or nil and an error if SimParams are not initialized, if the actual number of
+//   output neurons is less than configured MinOutputNeurons, or if an expected
+//   output neuron is not found or is not of Type Output.
 func (cn *CrowNet) GetOutputActivation() ([]float64, error) {
 	if cn.SimParams == nil {
 		return nil, fmt.Errorf("GetOutputActivation: SimParams not initialized in CrowNet")
@@ -107,9 +136,20 @@ func (cn *CrowNet) GetOutputActivation() ([]float64, error) {
 	return outputActivations, nil
 }
 
-// ConfigureFrequencyInput sets up a continuous stimulus for a specific input neuron at a given frequency.
-// If hz is <= 0, any existing stimulus for that neuron is removed.
-// Returns an error if the neuronID is not a valid input neuron.
+// ConfigureFrequencyInput sets up or removes a continuous stimulus for a specific
+// input neuron, causing it to fire periodically at approximately the given frequency.
+// The time to the next firing event is initialized with some randomness to avoid
+// synchronized starts if multiple inputs are configured simultaneously.
+//
+// Parameters:
+//   neuronID: The ID of the input neuron to configure.
+//   hz: The target firing frequency in Hertz. If hz is <= 0, any existing
+//       continuous stimulus for this neuronID is removed.
+//
+// Returns:
+//   An error if the specified neuronID is not a valid input neuron, if SimParams
+//   or RNG are not initialized, or if SimParams.CyclesPerSecond is not positive
+//   (which is required for frequency calculation). Returns nil on success.
 func (cn *CrowNet) ConfigureFrequencyInput(neuronID common.NeuronID, hz float64) error {
 	if _, isInput := cn.InputNeuronIDSet[neuronID]; !isInput {
 		return fmt.Errorf("neuron ID %d is not a valid input neuron", neuronID)
@@ -166,9 +206,19 @@ func (cn *CrowNet) recordOutputFiring(neuronID common.NeuronID) {
 	cn.outputFiringHistory[neuronID] = history[startIndex:]
 }
 
-// GetOutputFrequency calculates the firing frequency (in Hz) of a specific output neuron
-// based on its recorded firing history within the OutputFrequencyWindowCycles.
-// Returns an error if neuronID is not a valid output neuron or if configured cycle durations are zero/invalid.
+// GetOutputFrequency calculates the firing frequency in Hertz (Hz) of a specific
+// output neuron. The calculation is based on its recorded firing events within
+// the time window defined by SimParams.OutputFrequencyWindowCycles.
+//
+// Parameters:
+//   neuronID: The ID of the output neuron whose firing frequency is to be calculated.
+//
+// Returns:
+//   The calculated firing frequency in Hz, or 0.0 if there are no firings in the
+//   history or if essential SimParams (like CyclesPerSecond or OutputFrequencyWindowCycles)
+//   are invalid (e.g., zero or negative).
+//   An error if the specified neuronID is not a valid output neuron or if critical
+//   SimParams required for frequency calculation are not valid.
 func (cn *CrowNet) GetOutputFrequency(neuronID common.NeuronID) (float64, error) {
 	if _, isOutput := cn.OutputNeuronIDSet[neuronID]; !isOutput {
 		return 0, fmt.Errorf("neuron ID %d is not a valid output neuron", neuronID)

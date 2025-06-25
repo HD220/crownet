@@ -18,11 +18,17 @@ type SpatialGrid struct {
 	numDims          int
 }
 
-// NewSpatialGrid creates a new spatial grid.
-// cellSize: The size of one side of a hypercubic grid cell.
-// numDims: The dimensionality of the space.
-// spaceMinBound: The minimum coordinate corner of the simulation space (e.g., [-maxDim, -maxDim,...]).
-//                This point will correspond to the origin of the grid's cell indexing system.
+// NewSpatialGrid creates and returns a new SpatialGrid instance.
+//
+// Parameters:
+//   cellSize: The size of one side of a hypercubic grid cell. Must be positive.
+//   numDims: The dimensionality of the space. Must be positive and match common.PointDimension.
+//   spaceMinBound: The world coordinate that defines the minimum corner of the simulation space
+//                  (e.g., [-maxDim, -maxDim,...]). This point maps to the grid's cell index origin (0,0,...,0).
+//
+// Returns:
+//   A pointer to the initialized SpatialGrid and nil error on success.
+//   Returns nil and an error if cellSize or numDims are invalid, or if numDims does not match common.PointDimension.
 func NewSpatialGrid(cellSize float64, numDims int, spaceMinBound common.Point) (*SpatialGrid, error) {
 	if cellSize <= 1e-9 { // Epsilon for zero check
 		return nil, fmt.Errorf("NewSpatialGrid: cellSize must be positive, got %f", cellSize)
@@ -126,9 +132,3 @@ func (sg *SpatialGrid) queryCellsRecursive(
 		sg.queryCellsRecursive(minCellIndices, maxCellIndices, currentCellIndices, dim+1, candidateNeurons)
 	}
 }
-
-// Ensure common.PointDimension is defined, e.g. in common/types.go
-// const PointDimension = 16
-// type Point [PointDimension]float64
-// type NeuronID int
-// ... other common types

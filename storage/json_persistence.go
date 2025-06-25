@@ -1,3 +1,6 @@
+// Package storage provides utilities for data persistence, including saving
+// and loading network state (like synaptic weights) to/from files, and logging
+// simulation data to databases.
 package storage
 
 import (
@@ -37,12 +40,12 @@ func SaveNetworkWeightsToJSON(weights synaptic.NetworkWeights, filePath string) 
 
 	data, err := json.MarshalIndent(serializableWeights, "", "  ")
 	if err != nil {
-		return fmt.Errorf("falha ao serializar pesos para JSON: %w", err)
+		return fmt.Errorf("failed to serialize weights to JSON: %w", err)
 	}
 
 	err = os.WriteFile(filePath, data, 0644)
 	if err != nil {
-		return fmt.Errorf("falha ao escrever arquivo de pesos JSON %s: %w", filePath, err)
+		return fmt.Errorf("failed to write JSON weights file %s: %w", filePath, err)
 	}
 	return nil
 }
@@ -64,22 +67,26 @@ func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("arquivo de pesos JSON %s não encontrado: %w", filePath, err)
+			return nil, fmt.Errorf("JSON weights file %s not found: %w", filePath, err)
 		}
-		return nil, fmt.Errorf("falha ao ler arquivo de pesos JSON %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to read JSON weights file %s: %w", filePath, err)
 	}
 
 	serializableWeights := make(map[string]map[string]float64)
 	err = json.Unmarshal(data, &serializableWeights)
 	if err != nil {
-		return nil, fmt.Errorf("falha ao deserializar pesos de JSON de %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to unmarshal weights from JSON from %s: %w", filePath, err)
 	}
 
+	// TODO: The following instantiation of synaptic.NetworkWeights is problematic
+	// as NewNetworkWeights requires simParams and rng, and returns an error.
+	// This function should ideally return map[common.NeuronID]synaptic.WeightMap
+	// or handle NetworkWeights creation differently. For now, proceeding with original logic.
 	loadedWeights := synaptic.NewNetworkWeights()
 	for strFromID, toMap := range serializableWeights {
 		fromIDVal, err := strconv.ParseInt(strFromID, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("ID de neurônio de origem inválido no JSON '%s': %w", strFromID, err)
+			return nil, fmt.Errorf("invalid source neuron ID in JSON '%s': %w", strFromID, err)
 		}
 		fromID := common.NeuronID(fromIDVal)
 
@@ -87,7 +94,7 @@ func LoadNetworkWeightsFromJSON(filePath string) (synaptic.NetworkWeights, error
 		for strToID, weightVal := range toMap {
 			toIDVal, err := strconv.ParseInt(strToID, 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("ID de neurônio de destino inválido no JSON '%s' para origem '%s': %w", strToID, strFromID, err)
+				return nil, fmt.Errorf("invalid target neuron ID in JSON '%s' for source '%s': %w", strToID, strFromID, err)
 			}
 			toID := common.NeuronID(toIDVal)
 			loadedWeights[fromID][toID] = common.SynapticWeight(weightVal)

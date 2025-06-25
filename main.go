@@ -1,3 +1,6 @@
+// Package main is the entry point for the CrowNet application.
+// It initializes the configuration, sets up the command-line interface (CLI)
+// orchestrator, and runs the simulation based on the provided arguments.
 package main
 
 import (

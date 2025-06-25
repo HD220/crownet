@@ -1,3 +1,6 @@
+// Package network provides the core simulation engine for the CrowNet neural network.
+// It defines the CrowNet struct, which orchestrates neuron interactions, pulse propagation,
+// learning, synaptogenesis, and neurochemical modulation.
 package network
 
 import (
@@ -15,11 +18,15 @@ import (
 	"sort"
 )
 
+// minEffectiveLearningRateThreshold defines the minimum threshold below which the
+// effective learning rate is considered negligible, potentially skipping
+// computationally intensive learning processes.
 const minEffectiveLearningRateThreshold = 1e-9
 
-// _isNeuronRecentlyActive checks if a neuron has fired within the given coincidence window relative to the current cycle.
+// isNeuronRecentlyActive checks if a neuron has fired within the given coincidence window
+// relative to the current cycle.
 // It accesses CrowNet's CycleCount via the receiver.
-func (cn *CrowNet) _isNeuronRecentlyActive(n *neuron.Neuron, coincidenceWindow common.CycleCount) bool {
+func (cn *CrowNet) isNeuronRecentlyActive(n *neuron.Neuron, coincidenceWindow common.CycleCount) bool {
 	if n == nil || n.LastFiredCycle == -1 {
 		return false
 	}
@@ -30,51 +37,71 @@ func (cn *CrowNet) _isNeuronRecentlyActive(n *neuron.Neuron, coincidenceWindow c
 	return (cn.CycleCount - n.LastFiredCycle) <= coincidenceWindow
 }
 
+// CrowNet represents the entire neural network simulation environment.
+// It encapsulates all neurons, their connections (synaptic weights),
+// active pulses, the neurochemical environment, spatial indexing,
+// simulation parameters, and the overall simulation state.
 type CrowNet struct {
-	// --- Core Simulation Parameters & Random Number Generation ---
-	SimParams        *config.SimulationParameters // Pointer to shared simulation parameters
-	baseLearningRate common.Rate                  // Base learning rate, modulated by chemical environment
-	rng              *rand.Rand
+	// SimParams holds the shared simulation parameters for the network.
+	SimParams *config.SimulationParameters
+	// baseLearningRate is the initial learning rate, which can be modulated by the chemical environment.
+	baseLearningRate common.Rate
+	// rng is a local random number generator for this network instance, ensuring deterministic behavior if seeded.
+	rng *rand.Rand
 
-	Neurons            []*neuron.Neuron
-	// --- Core Simulation Parameters & Random Number Generation ---
-	SimParams        *config.SimulationParameters // Pointer to shared simulation parameters
-	baseLearningRate common.Rate                  // Base learning rate, modulated by chemical environment
-	rng              *rand.Rand                   // Local random number generator for this network instance
+	// Neurons is a slice containing all neuron instances in the network.
+	Neurons []*neuron.Neuron
+	// InputNeuronIDs caches the IDs of input neurons, sorted for consistent access.
+	InputNeuronIDs []common.NeuronID
+	// OutputNeuronIDs caches the IDs of output neurons, sorted for consistent access.
+	OutputNeuronIDs []common.NeuronID
+	// OutputNeuronIDSet provides efficient O(1) lookup for output neuron IDs.
+	OutputNeuronIDSet map[common.NeuronID]struct{}
+	// InputNeuronIDSet provides efficient O(1) lookup for input neuron IDs.
+	InputNeuronIDSet map[common.NeuronID]struct{}
+	// neuronMap allows for O(1) retrieval of a neuron instance by its ID.
+	neuronMap map[common.NeuronID]*neuron.Neuron
+	// neuronIDCounter is used to generate unique IDs for new neurons.
+	neuronIDCounter common.NeuronID
 
-	// --- Neuron Collections and Management ---
-	Neurons           []*neuron.Neuron            // Slice of all neuron instances in the network
-	InputNeuronIDs    []common.NeuronID           // Cache of IDs for input neurons, sorted
-	OutputNeuronIDs   []common.NeuronID           // Cache of IDs for output neurons, sorted
-	OutputNeuronIDSet map[common.NeuronID]struct{} // Set of output neuron IDs for efficient lookup
-	InputNeuronIDSet  map[common.NeuronID]struct{} // Set of input neuron IDs for efficient lookup
-	neuronMap         map[common.NeuronID]*neuron.Neuron // Map for O(1) neuron lookup by ID
-	neuronIDCounter   common.NeuronID             // Counter for generating unique neuron IDs
+	// ActivePulses manages all pulses currently propagating through the network.
+	ActivePulses *pulse.PulseList
+	// SynapticWeights manages the matrix of synaptic weights between neurons.
+	SynapticWeights *synaptic.NetworkWeights
+	// ChemicalEnv manages the neurochemical environment (e.g., cortisol, dopamine) and their effects.
+	ChemicalEnv *neurochemical.Environment
+	// SpatialGrid provides a spatial index for neurons, optimizing proximity queries.
+	SpatialGrid *space.SpatialGrid
 
-	// --- Dynamic Sub-systems of the Network ---
-	ActivePulses    *pulse.PulseList         // Manages active pulses propagating through the network
-	SynapticWeights *synaptic.NetworkWeights // Manages the matrix of synaptic weights between neurons (Pointer after refactor)
-	ChemicalEnv     *neurochemical.Environment // Manages the neurochemical environment (e.g., cortisol, dopamine levels and effects)
-	SpatialGrid     *space.SpatialGrid       // Spatial index for neurons
+	// CycleCount tracks the current simulation cycle number.
+	CycleCount common.CycleCount
 
-	// --- Simulation State ---
-	CycleCount common.CycleCount // Current simulation cycle
-
-	// Feature-specific state
-	// For 'sim' mode continuous frequency input
+	// inputTargetFrequencies stores target firing frequencies for input neurons under continuous stimulus.
 	inputTargetFrequencies map[common.NeuronID]float64
-	timeToNextInputFire    map[common.NeuronID]common.CycleCount
-	// For calculating output neuron firing frequency
-	outputFiringHistory    map[common.NeuronID][]common.CycleCount
+	// timeToNextInputFire tracks remaining cycles until the next scheduled firing for frequency-stimulated inputs.
+	timeToNextInputFire map[common.NeuronID]common.CycleCount
+	// outputFiringHistory records recent firing times for output neurons, used for frequency calculation.
+	outputFiringHistory map[common.NeuronID][]common.CycleCount
 
-	// Dynamic process toggles
-	isLearningEnabled           bool // If true, Hebbian learning rule is applied
-	isSynaptogenesisEnabled     bool // If true, neuron movement (synaptogenesis) occurs
-	isChemicalModulationEnabled bool // If true, neurochemicals modulate learning, synaptogenesis, and firing thresholds
+	// isLearningEnabled, if true, allows Hebbian learning rules to be applied.
+	isLearningEnabled bool
+	// isSynaptogenesisEnabled, if true, allows neuron movement and structural plasticity.
+	isSynaptogenesisEnabled bool
+	// isChemicalModulationEnabled, if true, allows neurochemicals to modulate network behavior.
+	isChemicalModulationEnabled bool
 }
 
-// NewCrowNet creates and initializes a new CrowNet instance.
-// It now takes an AppConfig to centralize configuration sourcing and returns an error if initialization fails.
+// NewCrowNet creates and initializes a new CrowNet simulation environment.
+// It sets up the network structure, including neurons, synaptic weights,
+// the chemical environment, and spatial indexing, based on the provided AppConfig.
+//
+// Parameters:
+//   appCfg: An *config.AppConfig containing all necessary configuration parameters
+//           (simulation settings and CLI options).
+//
+// Returns:
+//   A pointer to the newly created CrowNet instance, or an error if initialization
+//   of any core component (e.g., spatial grid, synaptic weights, neurons) fails.
 func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	if appCfg == nil {
 		return nil, fmt.Errorf("NewCrowNet: appConfig cannot be nil")
@@ -221,10 +248,6 @@ func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP f
 // initializeNeurons populates the network with neurons of different types based on configuration.
 // It ensures the minimum number of input and output neurons are created and distributes
 // the remaining neurons among internal types (excitatory, inhibitory, dopaminergic).
-// It returns an error if the final neuron count does not match the expected count.
-// initializeNeurons populates the network with neurons of different types based on configuration.
-// It ensures the minimum number of input and output neurons are created and distributes
-// the remaining neurons among internal types (excitatory, inhibitory, dopaminergic).
 // Assumes totalNeuronsInput has been validated by config.Validate() to be >= MinInputNeurons and MinOutputNeurons.
 // It returns an error if the final neuron count does not match the expected count, indicating an internal logic issue.
 func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
@@ -258,6 +281,10 @@ func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
 	return nil
 }
 
+// finalizeInitialization completes the setup of the CrowNet instance after neurons
+// have been created. It sorts InputNeuronIDs and OutputNeuronIDs for consistent ordering,
+// populates lookup maps (neuronMap, InputNeuronIDSet, OutputNeuronIDSet), and
+// initializes data structures like outputFiringHistory.
 func (cn *CrowNet) finalizeInitialization() {
 	sort.Slice(cn.InputNeuronIDs, func(i, j int) bool { return cn.InputNeuronIDs[i] < cn.InputNeuronIDs[j] })
 	sort.Slice(cn.OutputNeuronIDs, func(i, j int) bool { return cn.OutputNeuronIDs[i] < cn.OutputNeuronIDs[j] })
@@ -280,12 +307,6 @@ func (cn *CrowNet) finalizeInitialization() {
 	for _, n := range cn.Neurons {
 		cn.neuronMap[n.ID] = n
 	}
-}
-
-func (cn *CrowNet) SetDynamicState(learning, synaptogenesis, chemicalModulation bool) {
-	cn.isLearningEnabled = learning
-	cn.isSynaptogenesisEnabled = synaptogenesis
-	cn.isChemicalModulationEnabled = chemicalModulation
 }
 
 // _updateAllNeuronStates handles the decay of accumulated potential and state advancement for all neurons.
@@ -422,67 +443,4 @@ func (cn *CrowNet) applyHebbianLearning() {
 			}
 		}
 	}
-}
-
-func (cn *CrowNet) processFrequencyInputs() {
-	for neuronID, timeLeft := range cn.timeToNextInputFire {
-		newTimeLeft := timeLeft - 1
-		cn.timeToNextInputFire[neuronID] = newTimeLeft
-		if newTimeLeft <= 0 {
-			var inputNeuron *neuron.Neuron
-			for _, n := range cn.Neurons {
-				if n.ID == neuronID && n.Type == neuron.Input {
-					inputNeuron = n
-					break
-				}
-			}
-			if inputNeuron != nil {
-				inputNeuron.CurrentState = neuron.Firing
-				emittedSignal := inputNeuron.EmittedPulseSign()
-				if emittedSignal != 0 {
-					newP := pulse.New(
-						inputNeuron.ID,
-						inputNeuron.Position,
-						emittedSignal,
-						cn.CycleCount,
-						cn.SimParams.SpaceMaxDimension*2.0,
-					)
-					cn.ActivePulses.Add(newP)
-				}
-			}
-			targetHz := cn.inputTargetFrequencies[neuronID]
-			if targetHz > 0 {
-				cyclesPerFiring := cn.SimParams.CyclesPerSecond / targetHz
-				cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1))
-			} else {
-				delete(cn.timeToNextInputFire, neuronID)
-			}
-		}
-	}
-}
-
-func (cn *CrowNet) recordOutputFiring(neuronID common.NeuronID) {
-	isOutput := false
-	for _, id := range cn.OutputNeuronIDs {
-		if id == neuronID {
-			isOutput = true
-			break
-		}
-	}
-	if !isOutput {
-		return
-	}
-	history, exists := cn.outputFiringHistory[neuronID]
-	if !exists {
-		history = make([]common.CycleCount, 0)
-	}
-	history = append(history, cn.CycleCount)
-	cutoffCycle := cn.CycleCount - common.CycleCount(cn.SimParams.OutputFrequencyWindowCycles)
-	prunedHistory := make([]common.CycleCount, 0, len(history))
-	for _, fireCycle := range history {
-		if fireCycle >= cutoffCycle {
-			prunedHistory = append(prunedHistory, fireCycle)
-		}
-	}
-	cn.outputFiringHistory[neuronID] = prunedHistory
 }

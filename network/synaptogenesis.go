@@ -8,7 +8,13 @@ import (
 	"math"
 )
 
+// minSynaptogenesisModulationFactorThreshold is a small value below which the
+// neurochemical modulation factor for synaptogenesis is considered negligible,
+// potentially skipping the computationally intensive synaptogenesis process.
 const minSynaptogenesisModulationFactorThreshold = 1e-6
+
+// epsilonVelocityMagnitude is a small value used to avoid division by zero or
+// issues with normalizing a near-zero velocity vector when clamping velocity.
 const epsilonVelocityMagnitude = 1e-9
 
 // calculateNetForceOnNeuron computes the net force exerted on neuron n1 by all other neurons n2 in the network.

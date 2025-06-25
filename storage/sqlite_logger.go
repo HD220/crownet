@@ -29,18 +29,18 @@ func NewSQLiteLogger(dataSourceName string) (*SQLiteLogger, error) {
 	// os.Remove has been removed to allow persistence of logs across runs.
 	dbConn, err := sql.Open("sqlite3", dataSourceName)
 	if err != nil {
-		return nil, fmt.Errorf("falha ao abrir banco de dados SQLite em %s: %w", dataSourceName, err)
+		return nil, fmt.Errorf("failed to open SQLite database at %s: %w", dataSourceName, err)
 	}
 
 	if err = dbConn.Ping(); err != nil {
 		dbConn.Close()
-		return nil, fmt.Errorf("falha ao pingar banco de dados SQLite em %s: %w", dataSourceName, err)
+		return nil, fmt.Errorf("failed to ping SQLite database at %s: %w", dataSourceName, err)
 	}
 
 	logger := &SQLiteLogger{db: dbConn}
 	if err = logger.createTables(); err != nil {
 		dbConn.Close()
-		return nil, fmt.Errorf("falha ao criar tabelas no SQLite: %w", err)
+		return nil, fmt.Errorf("failed to create tables in SQLite: %w", err)
 	}
 
 	return logger, nil
@@ -61,7 +61,7 @@ func (sl *SQLiteLogger) createTables() error {
         SynaptogenesisModFactor REAL
     );`
 	if _, err := sl.db.Exec(networkSnapshotsTableSQL); err != nil {
-		return fmt.Errorf("falha ao criar tabela NetworkSnapshots: %w", err)
+		return fmt.Errorf("failed to create NetworkSnapshots table: %w", err)
 	}
 
 	// Simplified schema for NeuronStates: Position and Velocity are stored as JSON strings.
@@ -83,7 +83,7 @@ func (sl *SQLiteLogger) createTables() error {
     );`
 
 	if _, err := sl.db.Exec(neuronStatesTableSQL); err != nil {
-		return fmt.Errorf("falha ao criar tabela NeuronStates: %w", err)
+		return fmt.Errorf("failed to create NeuronStates table: %w", err)
 	}
 	return nil
 }
@@ -128,7 +128,7 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 
 	tx, err := sl.db.Begin()
 	if err != nil {
-		return fmt.Errorf("falha ao iniciar transação SQLite: %w", err)
+		return fmt.Errorf("failed to begin SQLite transaction: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -143,11 +143,11 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 		net.ChemicalEnv.SynaptogenesisModulationFactor,
 	)
 	if err != nil {
-		return fmt.Errorf("falha ao inserir em NetworkSnapshots: %w", err)
+		return fmt.Errorf("failed to insert into NetworkSnapshots: %w", err)
 	}
 	snapshotID, err := snapshotRes.LastInsertId()
 	if err != nil {
-		return fmt.Errorf("falha ao obter LastInsertId para snapshot: %w", err)
+		return fmt.Errorf("failed to get LastInsertId for snapshot: %w", err)
 	}
 
 	// SQL query for inserting neuron states. Position and Velocity are now single TEXT columns.
@@ -159,7 +159,7 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 
 	stmt, err := tx.Prepare(neuronStateSQL)
 	if err != nil {
-		return fmt.Errorf("falha ao preparar statement para NeuronStates: %w", err)
+		return fmt.Errorf("failed to prepare statement for NeuronStates: %w", err)
 	}
 	defer stmt.Close()
 
@@ -167,11 +167,11 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 		// Serialize Position and Velocity to JSON strings.
 		posJSON, err := json.Marshal(n.Position)
 		if err != nil {
-			return fmt.Errorf("falha ao serializar Position para JSON para neurônio %d: %w", n.ID, err)
+			return fmt.Errorf("failed to serialize Position to JSON for neuron %d: %w", n.ID, err)
 		}
 		velJSON, err := json.Marshal(n.Velocity)
 		if err != nil {
-			return fmt.Errorf("falha ao serializar Velocity para JSON para neurônio %d: %w", n.ID, err)
+			return fmt.Errorf("failed to serialize Velocity to JSON for neuron %d: %w", n.ID, err)
 		}
 
 		_, err = stmt.Exec(
@@ -188,12 +188,12 @@ func (sl *SQLiteLogger) LogNetworkState(net *network.CrowNet) error {
 			int(n.CyclesInCurrentState),
 		)
 		if err != nil {
-			return fmt.Errorf("falha ao inserir estado para neurônio %d: %w", n.ID, err)
+			return fmt.Errorf("failed to insert state for neuron %d: %w", n.ID, err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("falha ao commitar transação SQLite: %w", err)
+		return fmt.Errorf("failed to commit SQLite transaction: %w", err)
 	}
 	return nil
 }
