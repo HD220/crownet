@@ -64,13 +64,9 @@ func New(id common.NeuronID, neuronType Type, initialPosition common.Point, simP
 		// Or panicking: panic("NewNeuron: simParams cannot be nil")
 		// Depending on desired error handling strategy.
 		// The current code will panic if simParams is nil due to direct dereference for BaseFiringThreshold.
-	}
-	n := &Neuron{
-		ID:                     id,
-		Type:                   neuronType,
-		// as BaseFiringThreshold cannot be determined.
-		// For now, assume simParams is always provided correctly by the caller (NewCrowNet).
-		// Consider adding error return if this assumption might be violated.
+		//
+		// NOTE: The duplicate 'n := &Neuron{...}' block below was removed as it caused a compile error.
+		// It appeared to be a copy-paste artifact. The first initialization block is the correct one.
 	}
 	n := &Neuron{
 		ID:                     id,
@@ -103,7 +99,9 @@ func (n *Neuron) IntegrateIncomingPotential(potential common.PulseValue, current
 	n.AccumulatedPotential += potential
 
 	// Check if the neuron fires
-	if n.AccumulatedPotential < n.CurrentFiringThreshold { // Direct comparison as both are float64 underlying types
+	// Cast CurrentFiringThreshold to common.PulseValue for comparison, as they are distinct types
+	// despite both being float64 underlying.
+	if n.AccumulatedPotential < common.PulseValue(n.CurrentFiringThreshold) {
 		return false
 	}
 	n.CurrentState = Firing

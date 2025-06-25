@@ -3,9 +3,10 @@ package synaptic
 import (
 	"crownet/common"
 	"crownet/config"
+	"math" // Added to fix "undefined: math" errors
 	"math/rand"
 	"testing"
-	"fmt"
+	// "fmt" // Removed as it was imported but not used
 )
 
 func defaultTestSimParams() *config.SimulationParameters {
@@ -185,7 +186,7 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		nw.ApplyHebbianUpdate(fromID, toID, 1.0, 1.0, effectiveLR)
 		currentWeight := nw.GetWeight(fromID, toID)
 
-		expectedDelta := common.SynapticWeight(float64(effectiveLR) * simParams.HebbPositiveReinforceFactor)
+		expectedDelta := common.SynapticWeight(float64(effectiveLR) * float64(simParams.HebbPositiveReinforceFactor))
 		expectedWeightAfterLTP := initialWeight + expectedDelta
 		expectedWeightAfterDecay := expectedWeightAfterLTP * (1.0 - common.SynapticWeight(simParams.SynapticWeightDecayRate))
 
@@ -256,7 +257,7 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		// Let's check it against HebbianWeightMax, as MaxSynapticWeight is an outer bound.
 		// The internal logic of ApplyHebbianUpdate clamps to HebbianMin/Max first.
 		// Then SetWeight is called. MaxSynapticWeight is usually >= HebbianWeightMax.
-		expected := common.SynapticWeight(simParams.HebbianWeightMax)
+		// expected := common.SynapticWeight(simParams.HebbianWeightMax) // Removed unused variable
 		// If decay makes it less than HebbianWeightMax, that's the value.
 		// tempExpected = (highInitialWeight + deltaFromStrongLR) -> likely > HebbianWeightMax
 		// tempExpectedClampedToHebbianMax = HebbianWeightMax
