@@ -62,6 +62,49 @@ Para uma compreensão completa das funcionalidades, arquitetura técnica, requis
     *   `casos-de-uso/uc-sim.md`
 *   **Outros documentos relevantes em `/docs`**: `TESTING_SCENARIOS.md`, `use_cases.md` (pode ser redundante com os UCs em funcionalidades), `refactoring_log.md`, `testing_approach.md`.
 
+## Utilitário de Log (`logutil`) (FEATURE-004)
+
+A aplicação CrowNet inclui um utilitário para interagir com os arquivos de log SQLite gerados pelo modo `sim`.
+
+### Exportar Dados do Log
+
+Para exportar dados de tabelas específicas do arquivo de log para o formato CSV, use o modo `logutil` com o subcomando `export`.
+
+**Uso:**
+
+```bash
+./crownet -mode logutil -logutil.subcommand export -logutil.dbPath <caminho_para_seu_log.db> -logutil.table <nome_da_tabela> [-logutil.output <arquivo_de_saida.csv>] [-logutil.format csv]
+```
+
+**Argumentos:**
+
+*   `-mode logutil`: Ativa o modo de utilitário de log.
+*   `-logutil.subcommand export`: Especifica a ação de exportação. (Atualmente, único subcomando suportado).
+*   `-logutil.dbPath <caminho_para_seu_log.db>`: **Obrigatório.** Caminho para o arquivo de banco de dados SQLite gerado pela simulação.
+*   `-logutil.table <nome_da_tabela>`: **Obrigatório.** Nome da tabela a ser exportada. Tabelas suportadas:
+    *   `NetworkSnapshots`: Contém informações gerais sobre o estado da rede em cada ciclo de salvamento (níveis de neuroquímicos, fatores de modulação, etc.).
+    *   `NeuronStates`: Contém o estado detalhado de cada neurônio em cada snapshot salvo (posição, potencial, estado de disparo, etc.).
+*   `-logutil.output <arquivo_de_saida.csv>`: (Opcional) Caminho para o arquivo CSV de saída. Se omitido, a saída CSV será impressa no `stdout` (saída padrão), permitindo redirecionamento (ex: `> meu_arquivo.csv`).
+*   `-logutil.format csv`: (Opcional) Formato de saída. Atualmente, apenas `csv` é suportado e é o valor padrão.
+
+**Exemplos:**
+
+1.  Exportar a tabela `NetworkSnapshots` de `simulation.db` para `snapshots.csv`:
+    ```bash
+    ./crownet -mode logutil -logutil.subcommand export -logutil.dbPath simulation.db -logutil.table NetworkSnapshots -logutil.output snapshots.csv
+    ```
+
+2.  Exportar a tabela `NeuronStates` de `run1.db` para `stdout` e redirecionar para `neuron_data.csv`:
+    ```bash
+    ./crownet -mode logutil -logutil.subcommand export -logutil.dbPath run1.db -logutil.table NeuronStates > neuron_data.csv
+    ```
+
+**Notas sobre a Saída CSV:**
+
+*   **`NeuronStates`**:
+    *   Os campos `Type` e `CurrentState` (que são armazenados como inteiros no banco de dados) são convertidos para suas representações de string (ex: "Excitatory", "Firing") para melhor legibilidade.
+    *   Os campos `Position` e `Velocity` são exportados como strings JSON, conforme armazenados no banco de dados.
+
 ## Como Construir e Executar (Exemplo)
 
 1.  **Construir:**

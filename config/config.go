@@ -21,11 +21,13 @@ const (
 	ModeExpose = "expose"
 	// ModeObserve instructs the application to observe network response to a specific input.
 	ModeObserve = "observe"
+	// ModeLogUtil instructs the application to run the SQLite log utility.
+	ModeLogUtil = "logutil" // FEATURE-004
 )
 
 // SupportedModes lists all valid operation modes for the application.
 // It is used for validating the mode provided via CLI or configuration file.
-var SupportedModes = []string{ModeSim, ModeExpose, ModeObserve}
+var SupportedModes = []string{ModeSim, ModeExpose, ModeObserve, ModeLogUtil} // FEATURE-004: Added ModeLogUtil
 
 // SimulationParameters defines the detailed parameters that govern the behavior
 // of the neural network simulation. These parameters control aspects from spatial
@@ -130,6 +132,13 @@ type CLIConfig struct {
 	// Mode 'observe' Specific Configuration
 	Digit          int `json:"digit"`            // Digit (0-9) to present for 'observe' mode.
 	CyclesToSettle int `json:"cycles_to_settle"` // Number of cycles for network settling in 'observe' mode.
+
+	// Mode 'logutil' Specific Configuration (FEATURE-004)
+	LogUtilSubcommand string `json:"logutil_subcommand"` // e.g., "export"
+	LogUtilDbPath     string `json:"logutil_dbpath"`     // Path to the SQLite DB file
+	LogUtilTable      string `json:"logutil_table"`      // Table to export (e.g., "NetworkSnapshots", "NeuronStates")
+	LogUtilFormat     string `json:"logutil_format"`     // Output format (e.g., "csv")
+	LogUtilOutput     string `json:"logutil_output"`     // Output file path (stdout if empty)
 }
 
 // AppConfig is the top-level configuration structure, aggregating both
@@ -231,6 +240,16 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	// Mode 'observe' Specific Flags
 	fSet.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
 	fSet.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.")
+
+	// Mode 'logutil' Specific Flags (FEATURE-004)
+	// Note: These flags will only be relevant if -mode=logutil is set.
+	// Consider using subcommands for better CLI ergonomics if more logutil features are added.
+	// For now, simple flags are fine.
+	fSet.StringVar(&cfg.LogUtilSubcommand, "logutil.subcommand", "export", "Log utility subcommand (e.g., 'export').")
+	fSet.StringVar(&cfg.LogUtilDbPath, "logutil.dbPath", "", "Path to SQLite DB for logutil mode.")
+	fSet.StringVar(&cfg.LogUtilTable, "logutil.table", "", "Table to process in logutil mode (e.g., 'NetworkSnapshots', 'NeuronStates').")
+	fSet.StringVar(&cfg.LogUtilFormat, "logutil.format", "csv", "Output format for logutil export (e.g., 'csv').")
+	fSet.StringVar(&cfg.LogUtilOutput, "logutil.output", "", "Output file for logutil export (stdout if empty).")
 
 	// Filter out Ginkgo-specific flags before parsing if they exist
 	// to prevent "flag provided but not defined" errors when running tests
@@ -361,9 +380,29 @@ func (ac *AppConfig) Validate() error {
 		if ac.Cli.CyclesToSettle <= 0 {
 			return fmt.Errorf("cyclesToSettle must be positive for mode '%s', got %d", ac.Cli.Mode, ac.Cli.CyclesToSettle)
 		}
+	case ModeLogUtil: // FEATURE-004
+		if ac.Cli.LogUtilSubcommand != "export" { // Initially only "export" is supported
+			return fmt.Errorf("invalid logutil.subcommand '%s', currently only 'export' is supported", ac.Cli.LogUtilSubcommand)
+		}
+		if strings.TrimSpace(ac.Cli.LogUtilDbPath) == "" {
+			return fmt.Errorf("logutil.dbPath must be specified for mode '%s'", ac.Cli.Mode)
+		}
+		if strings.TrimSpace(ac.Cli.LogUtilTable) == "" {
+			return fmt.Errorf("logutil.table must be specified for mode '%s'", ac.Cli.Mode)
+		}
+		if ac.Cli.LogUtilTable != "NetworkSnapshots" && ac.Cli.LogUtilTable != "NeuronStates" {
+			return fmt.Errorf("invalid logutil.table '%s', must be 'NetworkSnapshots' or 'NeuronStates'", ac.Cli.LogUtilTable)
+		}
+		if ac.Cli.LogUtilFormat != "csv" { // Initially only "csv" is supported
+			return fmt.Errorf("invalid logutil.format '%s', currently only 'csv' is supported", ac.Cli.LogUtilFormat)
+		}
+		// LogUtilOutput can be empty (stdout). Path validation for it will be done by the logutil itself if provided.
+		// No SimulationParameters validation needed for LogUtil mode.
+		return nil // Early exit for LogUtil mode after its specific checks
 	}
 
 	// SimulationParameters validation (Order can be important for dependent checks)
+	// This section is skipped if Mode is LogUtil due to the early exit above.
 	if ac.SimParams.MinInputNeurons <= 0 {
 		return fmt.Errorf("MinInputNeurons must be positive, got %d", ac.SimParams.MinInputNeurons)
 	}
@@ -468,7 +507,6 @@ func (ac *AppConfig) Validate() error {
 	if ac.SimParams.DopamineMaxLevel < ac.SimParams.DopamineProductionPerEvent {
 		// Similar logical check for dopamine
 	}
-
 
 	return nil
 }

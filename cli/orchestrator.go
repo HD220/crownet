@@ -72,6 +72,8 @@ func (o *Orchestrator) Run() error {
 		errRun = o.runExposeMode()
 	case config.ModeObserve:
 		errRun = o.runObserveMode()
+	case config.ModeLogUtil: // FEATURE-004
+		errRun = o.runLogUtilMode()
 	default:
 		// This case should ideally be caught by AppConfig.Validate()
 		return fmt.Errorf("unknown or unsupported mode in Orchestrator.Run: %s", o.AppCfg.Cli.Mode)
@@ -583,4 +585,50 @@ func (o *Orchestrator) CloseLoggerForTest() error {
 // LoadWeightsForTest wraps loadWeights for testing.
 func (o *Orchestrator) LoadWeightsForTest(filepath string) error {
 	return o.loadWeights(filepath)
+}
+
+// runLogUtilMode handles the 'logutil' execution mode (FEATURE-004).
+func (o *Orchestrator) runLogUtilMode() error {
+	fmt.Println("\nCrowNet Log Utility...")
+	cliCfg := &o.AppCfg.Cli
+
+	// Path validation for LogUtilDbPath (read-only for export)
+	// Using the existing validatePath method.
+	// Note: validatePath might try to check parent dir for writing if forRead=false.
+	// Forcing forRead=true as logutil only reads.
+	// If dbPath is invalid, validatePath will return an error.
+	// The config.Validate() already ensures LogUtilDbPath is not empty.
+	_, err := o.validatePath(cliCfg.LogUtilDbPath, true)
+	if err != nil {
+		return fmt.Errorf("invalid --logutil.dbPath '%s': %w", cliCfg.LogUtilDbPath, err)
+	}
+	// We use cliCfg.LogUtilDbPath directly in the call to exporter,
+	// as validatePath was just for the check here. The exporter will use the raw path.
+
+	fmt.Printf("  Subcommand: %s\n", cliCfg.LogUtilSubcommand)
+	fmt.Printf("  Database: %s\n", cliCfg.LogUtilDbPath)
+	fmt.Printf("  Table: %s\n", cliCfg.LogUtilTable)
+	fmt.Printf("  Format: %s\n", cliCfg.LogUtilFormat)
+	if cliCfg.LogUtilOutput != "" {
+		fmt.Printf("  Output: %s\n", cliCfg.LogUtilOutput)
+	} else {
+		fmt.Println("  Output: stdout")
+	}
+
+	if cliCfg.LogUtilSubcommand == "export" {
+		// Call the main export function (to be created in storage package)
+		err := storage.ExportLogData(
+			cliCfg.LogUtilDbPath,
+			cliCfg.LogUtilTable,
+			cliCfg.LogUtilFormat,
+			cliCfg.LogUtilOutput,
+		)
+		if err != nil {
+			return fmt.Errorf("log export failed: %w", err)
+		}
+		fmt.Println("Log export completed successfully.")
+		return nil
+	}
+	// Should be caught by validation, but as a safeguard:
+	return fmt.Errorf("unknown logutil subcommand: %s", cliCfg.LogUtilSubcommand)
 }
