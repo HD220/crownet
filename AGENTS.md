@@ -78,6 +78,28 @@ Arquivos com sufixo `_test.go` contêm testes unitários para os respectivos pac
 *   **Dúvidas e Bloqueios:** Se encontrar ambiguidades nos requisitos, ou se estiver bloqueado por um problema técnico, não hesite em pedir ajuda usando `request_user_input`. Forneça contexto claro sobre o problema.
 *   **Sugestões:** Se tiver sugestões para melhorar o projeto ou o processo de desenvolvimento, sinta-se à vontade para comunicá-las.
 
+## Gerenciamento Detalhado de Tarefas
+
+A gestão de tarefas no projeto CrowNet é realizada através de dois componentes principais:
+
+1.  **Arquivo de Índice de Tarefas (`/.jules/TASKS.md`):**
+    *   Este arquivo Markdown contém uma tabela que serve como o backlog principal e o índice de todas as tarefas do projeto.
+    *   Ele fornece uma visão geral do status, prioridade, dependências e um link para os detalhes de cada tarefa.
+    *   **Ao iniciar um novo ciclo de trabalho, sua primeira ação é sempre sincronizar e analisar este arquivo para entender o estado atual do projeto e selecionar a próxima tarefa conforme o protocolo definido em seu workflow (`/.jules/AGENT_WORKFLOW.md`).**
+
+2.  **Arquivos de Detalhe de Tarefa (`/.jules/tasks/TSK-*.md`):**
+    *   Para cada entrada no índice `TASKS.md`, deve existir um arquivo Markdown correspondente no diretório `/.jules/tasks/`.
+    *   O nome do arquivo deve seguir o padrão `TSK-ID_DA_TAREFA.md` (ex: `TSK-FEATURE-005.md`, `TSK-BUG-CORE-002.md`).
+    *   **Leitura Obrigatória no Início da Execução:** Ao selecionar uma tarefa do índice `TASKS.md` (conforme Fase 2 do seu workflow) e **antes de iniciar qualquer planejamento ou codificação para essa tarefa** (início da Fase 3), você DEVE LER o arquivo de detalhe correspondente em `/.jules/tasks/TSK-*.md`. Este arquivo contém a descrição completa, critérios de aceitação, notas de design, e outras informações cruciais. Certifique-se de que seu plano de execução esteja alinhado com esses detalhes.
+    *   **Atualização Contínua:** Conforme a tarefa avança, você PODE e DEVE adicionar comentários, notas de progresso, decisões de design tomadas, ou quaisquer observações relevantes diretamente no arquivo de detalhe da tarefa (`/.jules/tasks/TSK-*.md`) na seção "Notas/Decisões" ou similar. Isso mantém o arquivo de detalhe como um registro vivo do trabalho na tarefa.
+    *   **Criação Obrigatória:**
+        *   Ao identificar a necessidade de uma **nova tarefa** (seja por desmembramento de uma tarefa complexa ou por descoberta durante a execução de outra), você deve:
+            1.  Adicionar a nova tarefa ao índice `/.jules/TASKS.md`.
+            2.  SIMULTANEAMENTE, criar o arquivo de detalhe correspondente em `/.jules/tasks/` com, no mínimo: ID da Tarefa, Título Breve, Descrição Completa, Status (geralmente 'Pendente'), Dependências (se houver), Complexidade Estimada (1-5), Prioridade Estimada (P0-P4), Responsável (AgenteJules), Data de Criação, Critérios de Aceitação iniciais, e quaisquer Notas/Decisões relevantes. O link no `TASKS.md` deve apontar para este novo arquivo.
+        *   Ao **desmembrar uma tarefa complexa** em sub-tarefas, cada nova sub-tarefa também deve ter seu próprio arquivo de detalhe criado em `/.jules/tasks/`.
+
+Manter este sistema de dois níveis (índice e detalhes) atualizado e sincronizado é fundamental para a organização do projeto e para garantir que você tenha todo o contexto necessário para suas atividades.
+
 ## Considerações Específicas
 
 *   **Estilo de Código Go:** Siga as convenções padrão do Go (veja `go fmt`, `go vet`, [Effective Go](https://go.dev/doc/effective_go)). O arquivo `/docs/03_guias/guia_estilo_codigo.md` pode conter diretrizes adicionais.
