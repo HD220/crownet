@@ -9,30 +9,33 @@ import (
 	// "crownet/config"
 )
 
+// Flags globais/persistentes que podem ser acessadas por subcomandos.
 var (
-	// Usado para flags globais que podem ser vinculadas a uma struct de configuração
-	// cfg *config.AppConfig // Exemplo, se quiséssemos carregar AppConfig aqui
-
-	// Flags Globais/Persistentes
-	configFile string
-	seed       int64
+	configFile string // Caminho para o arquivo de configuração TOML.
+	seed       int64  // Semente para o gerador de números aleatórios.
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd representa o comando base da aplicação CrowNet quando chamado sem subcomandos.
+// Ele configura as flags globais e adiciona todos os subcomandos da aplicação.
 var rootCmd = &cobra.Command{
 	Use:   "crownet",
 	Short: "CrowNet: Simulador de Rede Neural Bio-inspirada",
 	Long: `CrowNet é uma aplicação de linha de comando escrita em Go que simula
 um modelo computacional de rede neural bio-inspirada.
+Inclui funcionalidades para simulação, treinamento (exposição a padrões),
+observação de respostas da rede e utilitários de log.
+
 Para mais detalhes sobre um comando específico, use: crownet [comando] --help`,
-	// Run: func(cmd *cobra.Command, args []string) { }, // Descomente se o comando raiz precisar fazer algo
+	// Run: func(cmd *cobra.Command, args []string) { }, // O comando raiz não executa nenhuma ação direta.
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
+// Execute é o principal ponto de entrada para a CLI baseada em Cobra.
+// Ele executa o comando raiz, que por sua vez lida com o parsing de argumentos
+// e a execução do subcomando apropriado. Chamado por main.main().
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// Cobra já imprime o erro no Stderr por padrão.
+		// fmt.Fprintln(os.Stderr, err) // Redundante
 		os.Exit(1)
 	}
 }

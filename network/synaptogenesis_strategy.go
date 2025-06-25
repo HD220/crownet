@@ -10,20 +10,33 @@ import (
 	"math"          // Added for Sqrt for DefaultMovementUpdater
 )
 
-// ForceCalculator defines the interface for calculating the net force
-// acting on a neuron due to interactions with other neurons.
+// ForceCalculator defines the interface for components responsible for calculating
+// the net force acting on a target neuron due to its interactions with other neurons
+// in the network, considering simulation parameters and chemical modulation.
 type ForceCalculator interface {
+	// CalculateForce computes the net force on targetNeuron.
+	// - targetNeuron: The neuron for which to calculate the force.
+	// - allNeurons: A slice of all neurons in the network for context.
+	// - simParams: Global simulation parameters.
+	// - modulationFactor: The current chemical modulation factor affecting synaptogenesis.
+	// Returns the calculated net force as a common.Vector.
 	CalculateForce(
 		targetNeuron *neuron.Neuron,
 		allNeurons []*neuron.Neuron,
 		simParams *config.SimulationParameters,
-		modulationFactor float64, // Chemical modulation factor for synaptogenesis
+		modulationFactor float64,
 	) common.Vector
 }
 
-// MovementUpdater defines the interface for updating a neuron's position and
-// velocity based on the net force acting upon it and simulation parameters.
+// MovementUpdater defines the interface for components responsible for updating
+// a neuron's position and velocity based on a calculated net force and
+// simulation parameters.
 type MovementUpdater interface {
+	// UpdateMovement calculates the new position and velocity for targetNeuron.
+	// - targetNeuron: The neuron whose movement is to be updated.
+	// - netForce: The net force acting on the targetNeuron.
+	// - simParams: Global simulation parameters.
+	// Returns the new position (common.Point) and new velocity (common.Vector).
 	UpdateMovement(
 		targetNeuron *neuron.Neuron,
 		netForce common.Vector,
@@ -31,11 +44,13 @@ type MovementUpdater interface {
 	) (newPosition common.Point, newVelocity common.Vector)
 }
 
-// DefaultForceCalculator implements the ForceCalculator interface using the
-// original logic from calculateNetForceOnNeuron.
+// DefaultForceCalculator provides the standard implementation of the ForceCalculator interface.
+// It uses the original logic based on attraction/repulsion forces modulated by neuron state
+// and chemical environment, within a specified influence radius.
 type DefaultForceCalculator struct{}
 
-// CalculateForce computes the net force exerted on targetNeuron by all other neurons.
+// CalculateForce computes the net force exerted on targetNeuron by all other neurons,
+// using the default attraction/repulsion model.
 // Forces are modulated by the chemical environment (modulationFactor).
 // Active (firing or refractory) neurons exert an attractive force.
 // Resting neurons exert a repulsive force.
@@ -82,11 +97,13 @@ func (dfc *DefaultForceCalculator) CalculateForce(
 	return netForce
 }
 
-// DefaultMovementUpdater implements the MovementUpdater interface using the
-// original logic from updateNeuronMovement.
+// DefaultMovementUpdater provides the standard implementation of the MovementUpdater interface.
+// It applies damping, force effects, clamps velocity to MaxMovementPerCycle,
+// and ensures the new position is within simulation space boundaries.
 type DefaultMovementUpdater struct{}
 
-// UpdateMovement calculates the new position and velocity of a neuron based on the net force acting on it.
+// UpdateMovement calculates the new position and velocity of a neuron based on the net force acting on it,
+// using the default physics model.
 // It applies damping to the current velocity, adds the effect of the net force,
 // clamps the new velocity to MaxMovementPerCycle, and then updates the position.
 // The new position is also clamped to stay within the simulation space boundaries.

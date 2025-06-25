@@ -65,9 +65,11 @@ func SaveNetworkWeightsToJSON(networkWeights *synaptic.NetworkWeights, filePath 
 //   - filePath: The path to the JSON file containing the weights.
 //
 // Returns:
-//   - map[common.NeuronID]synaptic.WeightMap: The loaded synaptic weights as a raw map.
+//   - map[common.NeuronID]synaptic.WeightMap: A map representing the loaded synaptic weights.
+//     The outer map key is the presynaptic neuron ID, and the inner map (synaptic.WeightMap)
+//     maps postsynaptic neuron IDs to their synaptic weights.
 //   - error: An error if file reading, JSON unmarshalling, or NeuronID parsing fails.
-//            Specific error for os.IsNotExist if the file is not found.
+//     Returns a specific error wrapping os.ErrNotExist if the file is not found.
 func LoadNetworkWeightsFromJSON(filePath string) (map[common.NeuronID]synaptic.WeightMap, error) {
 	// Read the JSON file content.
 	data, err := os.ReadFile(filePath)

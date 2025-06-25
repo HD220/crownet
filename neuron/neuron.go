@@ -55,7 +55,8 @@ type Neuron struct {
 // The initial state is Resting, accumulated potential is 0, and LastFiredCycle is -1.
 // CurrentFiringThreshold is initialized with the BaseFiringThreshold from simParams.
 // The initial velocity is a zero vector.
-// It is assumed simParams is not nil; callers should ensure this.
+// Callers (e.g., NewCrowNet) must ensure simParams is not nil, as this function
+// will panic if simParams is nil due to its critical role in neuron initialization.
 func New(id common.NeuronID, neuronType Type, initialPosition common.Point, simParams *config.SimulationParameters) *Neuron {
 	if simParams == nil {
 		// This case should ideally be handled by the caller or result in a panic

@@ -16,7 +16,8 @@ import (
 	"crownet/neuron" // For neuron.Type and neuron.State enums
 )
 
-// neuronTypeToString maps neuron.Type enum to its string representation.
+// neuronTypeToString maps neuron.Type enum to its string representation
+// for CSV export.
 var neuronTypeToString = map[neuron.Type]string{
 	neuron.Excitatory:   "Excitatory",
 	neuron.Inhibitory:   "Inhibitory",
@@ -35,7 +36,11 @@ var neuronStateToString = map[neuron.State]string{
 	neuron.UnknownState:       "UnknownState",
 }
 
-// ExportLogData handles the export of data from the SQLite log.
+// ExportLogData connects to an SQLite database specified by dbPath,
+// reads data from the given tableName, and exports it in the specified format
+// to outputPath. If outputPath is empty, data is written to os.Stdout.
+// Currently, only "csv" format is supported, and valid tableNames are
+// "NetworkSnapshots" and "NeuronStates".
 func ExportLogData(dbPath, tableName, format, outputPath string) error {
 	if format != "csv" {
 		return fmt.Errorf("unsupported format '%s', only 'csv' is currently supported", format)
