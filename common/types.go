@@ -44,3 +44,7 @@ type Point [16]Coordinate
 // like velocity or force. It uses Coordinate for consistency with Point and is
 // fixed to 16 dimensions for CrowNet.
 type Vector [16]Coordinate
+
+// PointDimension defines the dimensionality of points and vectors.
+// For CrowNet, this is fixed at 16.
+const PointDimension = 16

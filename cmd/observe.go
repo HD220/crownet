@@ -12,10 +12,18 @@ import (
 
 var (
 	// Flags para o comando observe
-// ... (variáveis de flag existentes) ...
+	observeDigit            int
+	observeCyclesToSettle   int
+	observeTotalNeurons     int    // Duplicates global 'totalNeurons'
+	observeWeightsFile      string // Duplicates global 'weightsFile'
+	observeDebugChem        bool   // Duplicates global 'debugChem'
+)
 
-// observeCmd represents the observe command
-// ... (definição de comando existente) ...
+var observeCmd = &cobra.Command{
+	Use:   "observe",
+	Short: "Executa o modo de observação da rede.",
+	Long: `O modo observe é usado para apresentar um padrão específico (e.g. um dígito)
+à rede (com pesos previamente treinados) e observar o padrão de ativação dos neurônios de saída.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Executando modo observe via Cobra...")
 

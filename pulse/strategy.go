@@ -72,7 +72,7 @@ func (dpp *DefaultPulsePropagator) Propagate(p *Pulse, simParams *config.Simulat
 	if p == nil {
 		return false // Cannot propagate nil pulse
 	}
-	p.CurrentDistance += simParams.General.PulsePropagationSpeed // Assumes SimParams is grouped
+	p.CurrentDistance += float64(simParams.General.PulsePropagationSpeed) // Assumes SimParams is grouped
 	return p.CurrentDistance < p.MaxTravelRadius
 }
 
@@ -91,7 +91,7 @@ func (dpzp *DefaultPulseEffectZoneProvider) GetEffectShell(p *Pulse, simParams *
 		return 0, 0 // Or some other appropriate default for nil pulse
 	}
 	shellEndRadius = p.CurrentDistance
-	shellStartRadius = p.CurrentDistance - simParams.General.PulsePropagationSpeed // Assumes SimParams is grouped
+	shellStartRadius = p.CurrentDistance - float64(simParams.General.PulsePropagationSpeed) // Assumes SimParams is grouped
 	if shellStartRadius < 0 {
 		shellStartRadius = 0
 	}

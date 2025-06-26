@@ -13,10 +13,22 @@ import (
 
 var (
 	// Flags para o comando expose
-// ... (variáveis de flag existentes) ...
+	exposeEpochs           int
+	exposeCyclesPerPattern int
+	exposeTotalNeurons     int    // Duplicates global 'totalNeurons' but specific to expose if needed, or use global
+	exposeWeightsFile      string // Duplicates global 'weightsFile'
+	exposeBaseLearningRate float64
+	exposeDbPath           string // Duplicates global 'dbPath'
+	exposeSaveInterval     int    // Duplicates global 'saveInterval'
+	exposeDebugChem        bool   // Duplicates global 'debugChem'
+)
 
-// exposeCmd represents the expose command
-// ... (definição de comando existente) ...
+var exposeCmd = &cobra.Command{
+	Use:   "expose",
+	Short: "Executa o modo de exposição/treinamento da rede.",
+	Long: `O modo expose é usado para treinar a rede neural apresentando
+sequências de padrões de entrada (e.g. dígitos) e ajustando os pesos sinápticos
+através de aprendizado Hebbiano modulado por neuroquímicos.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Executando modo expose via Cobra...")
 

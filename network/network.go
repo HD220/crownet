@@ -117,20 +117,22 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	// Spatial Grid Initialization
 	// Define the grid origin (min corner of the simulation space)
 	var gridMinBound common.Point
-	for i := 0; i < common.PointDimension; i++ {
+	for i := 0; i < common.PointDimension; i++ { // Use common.PointDimension
 		gridMinBound[i] = common.Coordinate(-simParams.General.SpaceMaxDimension)
 	}
 	// Determine cell size, e.g., based on pulse propagation speed or a fraction of space size.
 	// Using a factor of pulse speed for now. Ensure it's not zero.
 	const defaultGridCellSizeMultiplier = 2.0
-	cellSize := simParams.General.PulsePropagationSpeed * defaultGridCellSizeMultiplier
+	// Ensure cellSize is float64
+	cellSize := float64(simParams.General.PulsePropagationSpeed) * defaultGridCellSizeMultiplier
 	if cellSize < 1e-6 { // Avoid zero or too small cell size
+		// SpaceMaxDimension is float64, so this assignment is fine for cellSize as float64
 		cellSize = simParams.General.SpaceMaxDimension / 10.0 // Fallback to a fraction of space dimension
 		if cellSize < 1e-6 {
 			cellSize = 1.0 // Absolute fallback
 		}
 	}
-	spatialGridInstance, err := space.NewSpatialGrid(cellSize, common.PointDimension, gridMinBound)
+	spatialGridInstance, err := space.NewSpatialGrid(cellSize, common.PointDimension, gridMinBound) // Use common.PointDimension
 	if err != nil {
 		return nil, fmt.Errorf("failed to create spatial grid: %w", err)
 	}
@@ -152,7 +154,7 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 
 		// Dynamic sub-systems
 		ActivePulses:    pulse.NewPulseList(),
-		SynapticWeights: synaptic.NewNetworkWeights(), // Assuming constructor doesn't fail or is handled if it can
+		// SynapticWeights will be initialized properly below
 		ChemicalEnv:     neurochemical.NewEnvironment(),
 		SpatialGrid:     spatialGridInstance,
 
@@ -269,19 +271,19 @@ func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
 	// has been moved to config.Validate() to handle configuration errors upfront.
 	// initializeNeurons now assumes totalNeuronsInput is sufficient.
 
-	cn.addNeuronsOfType(numInput, neuron.Input, simParams.Distribution.ExcitatoryRadiusFactor)
-	cn.addNeuronsOfType(numOutput, neuron.Output, simParams.Distribution.ExcitatoryRadiusFactor)
+	cn.addNeuronsOfType(numInput, neuron.Input, float64(simParams.Distribution.ExcitatoryRadiusFactor))
+	cn.addNeuronsOfType(numOutput, neuron.Output, float64(simParams.Distribution.ExcitatoryRadiusFactor))
 
 	remainingForInternalDistribution := actualTotalNeurons - numInput - numOutput
 	numDopaminergic, numInhibitory, numExcitatory := calculateInternalNeuronCounts(
 		remainingForInternalDistribution,
-		simParams.Distribution.DopaminergicPercent,
-		simParams.Distribution.InhibitoryPercent,
+		float64(simParams.Distribution.DopaminergicPercent),
+		float64(simParams.Distribution.InhibitoryPercent),
 	)
 
-	cn.addNeuronsOfType(numDopaminergic, neuron.Dopaminergic, simParams.Distribution.DopaminergicRadiusFactor)
-	cn.addNeuronsOfType(numInhibitory, neuron.Inhibitory, simParams.Distribution.InhibitoryRadiusFactor)
-	cn.addNeuronsOfType(numExcitatory, neuron.Excitatory, simParams.Distribution.ExcitatoryRadiusFactor)
+	cn.addNeuronsOfType(numDopaminergic, neuron.Dopaminergic, float64(simParams.Distribution.DopaminergicRadiusFactor))
+	cn.addNeuronsOfType(numInhibitory, neuron.Inhibitory, float64(simParams.Distribution.InhibitoryRadiusFactor))
+	cn.addNeuronsOfType(numExcitatory, neuron.Excitatory, float64(simParams.Distribution.ExcitatoryRadiusFactor))
 
 	if len(cn.Neurons) != actualTotalNeurons {
 		// This is a critical failure in setup.
@@ -387,6 +389,7 @@ func (cn *CrowNet) processActivePulses() {
 		cn.SynapticWeights, // cn.SynapticWeights is already *synaptic.NetworkWeights
 		cn.CycleCount,
 		cn.SimParams,
+		cn.Neurons, // Added missing argument
 	)
 
 	// Step 2: Handle any pulses that were newly generated in this cycle.
@@ -421,7 +424,7 @@ func (cn *CrowNet) applyHebbianLearning() {
 	// Iterate over all possible presynaptic neurons.
 	for _, preSynapticNeuron := range cn.Neurons {
 		// Determine if the presynaptic neuron was recently active.
-		isPreActive := cn._isNeuronRecentlyActive(preSynapticNeuron, coincidenceWindow)
+		isPreActive := cn.isNeuronRecentlyActive(preSynapticNeuron, coincidenceWindow) // Corrected call
 
 		if !isPreActive {
 			continue // If presynaptic neuron wasn't active, no update based on it.
@@ -435,7 +438,7 @@ func (cn *CrowNet) applyHebbianLearning() {
 			}
 
 			// Determine if the postsynaptic neuron was recently active.
-			isPostActive := cn._isNeuronRecentlyActive(postSynapticNeuron, coincidenceWindow)
+			isPostActive := cn.isNeuronRecentlyActive(postSynapticNeuron, coincidenceWindow) // Corrected call
 
 			if isPostActive { // If postsynaptic neuron was also active (co-activation).
 				postActivityValue := 1.0 // Using a binary activity signal.
@@ -447,7 +450,7 @@ func (cn *CrowNet) applyHebbianLearning() {
 					preActivityValue,  // Pass 1.0 for active
 					postActivityValue, // Pass 1.0 for active
 					effectiveLR,
-					cn.SimParams,
+					// cn.SimParams, // Removed extra argument
 				)
 			}
 		}

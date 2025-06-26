@@ -56,7 +56,7 @@ func (p *Pulse) Propagate(simParams *config.SimulationParameters) (isActive bool
 		// For now, assume pulse cannot propagate without SimParams.
 		return false
 	}
-	p.CurrentDistance += simParams.PulsePropagationSpeed
+	p.CurrentDistance += float64(simParams.General.PulsePropagationSpeed)
 	return p.CurrentDistance < p.MaxTravelRadius
 }
 
@@ -71,7 +71,7 @@ func (p *Pulse) GetEffectShellForCycle(simParams *config.SimulationParameters) (
 		return p.CurrentDistance, p.CurrentDistance
 	}
 	shellEndRadius = p.CurrentDistance
-	shellStartRadius = p.CurrentDistance - simParams.PulsePropagationSpeed
+	shellStartRadius = p.CurrentDistance - float64(simParams.General.PulsePropagationSpeed)
 	if shellStartRadius < 0 {
 		shellStartRadius = 0
 	}

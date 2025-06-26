@@ -8,6 +8,7 @@ package space
 import (
 	"crownet/common"
 	"math"
+	"math/rand"
 )
 
 // pointDimension defines the dimensionality of points and vectors processed by this package.
@@ -135,7 +136,9 @@ func GenerateRandomPositionInHyperSphere(maxRadius float64, rng *rand.Rand) comm
 	normDeviates := make([]float64, pointDimension)
 	sumSq := 0.0
 	for i := 0; i < pointDimension; i++ {
-		val := rng.NormFloat64() // Generates a standard normal deviate (mean 0, stddev 1)
+		// Changed from rng.NormFloat64() to package-level rand.NormFloat64()
+		// This uses the global math/rand source, not the passed rng instance for these deviates.
+		val := rand.NormFloat64()
 		normDeviates[i] = val
 		sumSq += val * val
 	}

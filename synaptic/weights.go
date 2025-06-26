@@ -44,8 +44,8 @@ func NewNetworkWeights(simParams *config.SimulationParameters, rng *rand.Rand) (
 // Weights are randomly assigned within the bounds defined in simParams (InitialSynapticWeightMin/Max).
 // Self-connections (from a neuron to itself) are initialized with a weight of zero.
 func (nw *NetworkWeights) InitializeAllToAllWeights(neuronIDs []common.NeuronID) {
-	minW := nw.simParams.InitialSynapticWeightMin
-	maxW := nw.simParams.InitialSynapticWeightMax
+	minW := nw.simParams.Learning.InitialSynapticWeightMin
+	maxW := nw.simParams.Learning.InitialSynapticWeightMax
 
 	// Basic validation of initial weight limits (ideally, this is also done in config.Validate)
 	if minW >= maxW {
@@ -108,14 +108,14 @@ func (nw *NetworkWeights) SetWeight(fromID, toID common.NeuronID, weight common.
 	// Determine the minimum applicable weight.
 	// Default to 0.0 for general use, but allow negative if Hebbian rules permit (e.g. for LTD).
 	minApplicableWeight := common.SynapticWeight(0.0)
-	if nw.simParams.HebbianWeightMin < 0 { // Check if Hebbian rules might allow negative weights
-		minApplicableWeight = nw.simParams.HebbianWeightMin // Use Hebbian min if it's more permissive (negative)
+	if nw.simParams.Learning.HebbianWeightMin < 0 { // Check if Hebbian rules might allow negative weights
+		minApplicableWeight = nw.simParams.Learning.HebbianWeightMin // Use Hebbian min if it's more permissive (negative)
 	}
 	// However, ensure that the weight doesn't go below 0 if not explicitly allowed by a negative HebbianWeightMin.
 	// This interpretation might need refinement based on desired interaction between general SetWeight and Hebbian logic.
 	// For now: if HebbianWeightMin is positive, minApplicable is 0. If HebbianWeightMin is negative, minApplicable is HebbianWeightMin.
 
-	maxApplicableWeight := nw.simParams.MaxSynapticWeight // Global maximum.
+	maxApplicableWeight := nw.simParams.Learning.MaxSynapticWeight // Global maximum.
 
 	if fromID != toID { // Clamping does not apply to self-connections (always 0).
 		if limitedWeight < minApplicableWeight {
@@ -157,31 +157,31 @@ func (nw *NetworkWeights) ApplyHebbianUpdate(
 	// LTP - Long-Term Potentiation
 	if preSynapticActivity > 0 && postSynapticActivity > 0 {
 		// Aumenta o peso se ambos os neurônios estiverem ativos
-		reinforceFactor := float64(nw.simParams.HebbPositiveReinforceFactor)
+		reinforceFactor := float64(nw.simParams.Learning.HebbPositiveReinforceFactor)
 		deltaWeight = common.SynapticWeight(float64(effectiveLearningRate) * reinforceFactor)
 	} else {
 		// LTD - Long-Term Depression (opcional, baseado em parâmetros)
 		// Exemplo: se HebbNegativeReinforceFactor > 0 e um dos neurônios (mas não ambos) está ativo.
 		// Esta parte da lógica pode ser expandida conforme os requisitos.
-		// if nw.simParams.HebbNegativeReinforceFactor > 0 && (preSynapticActivity > 0 || postSynapticActivity > 0) {
-		//    deltaWeight = -common.SynapticWeight(float64(effectiveLearningRate) * nw.simParams.HebbNegativeReinforceFactor)
+		// if nw.simParams.Learning.HebbNegativeReinforceFactor > 0 && (preSynapticActivity > 0 || postSynapticActivity > 0) {
+		//    deltaWeight = -common.SynapticWeight(float64(effectiveLearningRate) * nw.simParams.Learning.HebbNegativeReinforceFactor)
 		// }
 	}
 
 	newWeight := currentWeight + deltaWeight
 
 	// Aplica decaimento passivo do peso
-	if nw.simParams.SynapticWeightDecayRate > 0 {
-		newWeight *= (1.0 - common.SynapticWeight(nw.simParams.SynapticWeightDecayRate))
+	if nw.simParams.Learning.SynapticWeightDecayRate > 0 {
+		newWeight *= (1.0 - common.SynapticWeight(nw.simParams.Learning.SynapticWeightDecayRate))
 	}
 
 	// Clampeia o novo peso usando os limites específicos para aprendizado Hebbiano
 	clampedHebbianWeight := newWeight
-	if clampedHebbianWeight < common.SynapticWeight(nw.simParams.HebbianWeightMin) {
-		clampedHebbianWeight = common.SynapticWeight(nw.simParams.HebbianWeightMin)
+	if clampedHebbianWeight < common.SynapticWeight(nw.simParams.Learning.HebbianWeightMin) {
+		clampedHebbianWeight = common.SynapticWeight(nw.simParams.Learning.HebbianWeightMin)
 	}
-	if clampedHebbianWeight > common.SynapticWeight(nw.simParams.HebbianWeightMax) {
-		clampedHebbianWeight = common.SynapticWeight(nw.simParams.HebbianWeightMax)
+	if clampedHebbianWeight > common.SynapticWeight(nw.simParams.Learning.HebbianWeightMax) {
+		clampedHebbianWeight = common.SynapticWeight(nw.simParams.Learning.HebbianWeightMax)
 	}
 
 	// Usa o SetWeight geral que aplica o clamp global MaxSynapticWeight.

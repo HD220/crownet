@@ -2,10 +2,10 @@ package network
 
 import (
 	"crownet/common"
-	"crownet/config"
-	"crownet/neuron"
-	"crownet/space"
-	"math"
+	// "crownet/config" // Unused
+	// "crownet/neuron" // Unused
+	// "crownet/space"  // Unused
+	// "math"           // Unused
 )
 
 // minSynaptogenesisModulationFactorThreshold is a small value below which the

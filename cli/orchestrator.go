@@ -189,7 +189,7 @@ func (o *Orchestrator) validatePath(rawPath string, forRead bool) (string, error
 // to network.NewCrowNet to construct and set up the network.
 // Note: This function assumes network.NewCrowNet handles detailed setup based on AppConfig.
 func (o *Orchestrator) createNetwork() {
-	cliCfg := &o.AppCfg.Cli
+	// cliCfg := &o.AppCfg.Cli // Unused variable
 	// TODO: The call to network.NewCrowNet here needs to be updated -> This TODO is now being addressed by BUG-CORE-001
 	// to match the signature network.NewCrowNet(appCfg *config.AppConfig).
 	// For now, documenting intent.
@@ -624,13 +624,13 @@ func (o *Orchestrator) RunExposeModeForTest() error {
 
 // SetLoadWeightsFn allows tests to inject a mock loadWeightsFn.
 // This is a good practice for testability (Dependency Injection) and should be maintained.
-func (o *Orchestrator) SetLoadWeightsFn(fn func(filepath string) (synaptic.NetworkWeights, error)) {
+func (o *Orchestrator) SetLoadWeightsFn(fn func(filepath string) (map[common.NeuronID]synaptic.WeightMap, error)) {
 	o.loadWeightsFn = fn
 }
 
 // SetSaveWeightsFn allows tests to inject a mock saveWeightsFn.
 // This is a good practice for testability (Dependency Injection) and should be maintained.
-func (o *Orchestrator) SetSaveWeightsFn(fn func(weights synaptic.NetworkWeights, filepath string) error) {
+func (o *Orchestrator) SetSaveWeightsFn(fn func(weights *synaptic.NetworkWeights, filepath string) error) {
 	o.saveWeightsFn = fn
 }
 

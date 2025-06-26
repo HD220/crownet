@@ -74,7 +74,7 @@ func (dfc *DefaultForceCalculator) CalculateForce(
 
 		distance := space.EuclideanDistance(targetNeuron.Position, otherNeuron.Position)
 
-		if distance == 0 || (simParams.SynaptogenesisInfluenceRadius > 0 && distance > simParams.SynaptogenesisInfluenceRadius) {
+		if distance == 0 || (simParams.Synaptogenesis.SynaptogenesisInfluenceRadius > 0 && distance > float64(simParams.Synaptogenesis.SynaptogenesisInfluenceRadius)) {
 			continue
 		}
 
@@ -85,9 +85,9 @@ func (dfc *DefaultForceCalculator) CalculateForce(
 
 		forceMagnitude := 0.0
 		if otherNeuron.CurrentState == neuron.Firing || otherNeuron.CurrentState == neuron.AbsoluteRefractory || otherNeuron.CurrentState == neuron.RelativeRefractory {
-			forceMagnitude = simParams.AttractionForceFactor * modulationFactor
+			forceMagnitude = float64(simParams.Synaptogenesis.AttractionForceFactor) * modulationFactor
 		} else if otherNeuron.CurrentState == neuron.Resting {
-			forceMagnitude = -simParams.RepulsionForceFactor * modulationFactor
+			forceMagnitude = -float64(simParams.Synaptogenesis.RepulsionForceFactor) * modulationFactor
 		}
 
 		for i := range netForce {
@@ -122,7 +122,7 @@ func (dmu *DefaultMovementUpdater) UpdateMovement(
 	var velocityMagnitudeSq float64
 
 	for i := range currentVelocity {
-		vComponent := float64(currentVelocity[i])*simParams.DampeningFactor + float64(netForce[i])
+		vComponent := float64(currentVelocity[i])*float64(simParams.Synaptogenesis.DampeningFactor) + float64(netForce[i])
 		updatedVelocity[i] = common.Coordinate(vComponent)
 		velocityMagnitudeSq += vComponent * vComponent
 	}
@@ -131,8 +131,8 @@ func (dmu *DefaultMovementUpdater) UpdateMovement(
 
 	// Epsilon defined in synaptogenesis.go, can be a local const or imported if made public
 	const epsilonVelocityMagnitude = 1e-9 // Copied from original file for now
-	if velocityMagnitude > simParams.MaxMovementPerCycle && velocityMagnitude > epsilonVelocityMagnitude {
-		scaleFactor := simParams.MaxMovementPerCycle / velocityMagnitude
+	if velocityMagnitude > float64(simParams.Synaptogenesis.MaxMovementPerCycle) && velocityMagnitude > epsilonVelocityMagnitude {
+		scaleFactor := float64(simParams.Synaptogenesis.MaxMovementPerCycle) / velocityMagnitude
 		for i := range updatedVelocity {
 			updatedVelocity[i] = common.Coordinate(float64(updatedVelocity[i]) * scaleFactor)
 		}
@@ -144,8 +144,8 @@ func (dmu *DefaultMovementUpdater) UpdateMovement(
 	for i := range currentPosition {
 		calculatedPosition[i] += newVelocity[i]
 	}
-
-	clampedPosition, _ := space.ClampToHyperSphere(calculatedPosition, simParams.SpaceMaxDimension)
+	// SpaceMaxDimension is in General sub-struct
+	clampedPosition, _ := space.ClampToHyperSphere(calculatedPosition, simParams.General.SpaceMaxDimension)
 	newPosition = clampedPosition
 	return // Named return values
 }

@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"strings"
+	// "strings" // Unused import
 	// Import sqlite3 driver
 	_ "github.com/mattn/go-sqlite3"
 
@@ -18,23 +18,23 @@ import (
 
 // neuronTypeToString maps neuron.Type enum to its string representation
 // for CSV export.
-var neuronTypeToString = map[neuron.Type]string{
-	neuron.Excitatory:   "Excitatory",
-	neuron.Inhibitory:   "Inhibitory",
-	neuron.Dopaminergic: "Dopaminergic",
-	neuron.Input:        "Input",
-	neuron.Output:       "Output",
-	neuron.UnknownType:  "UnknownType",
-}
+// var neuronTypeToString = map[neuron.Type]string{ // Replaced by using .String() method
+// 	neuron.Excitatory:   "Excitatory",
+// 	neuron.Inhibitory:   "Inhibitory",
+// 	neuron.Dopaminergic: "Dopaminergic",
+// 	neuron.Input:        "Input",
+// 	neuron.Output:       "Output",
+// 	// neuron.UnknownType:  "UnknownType", // This constant does not exist
+// }
 
 // neuronStateToString maps neuron.State enum to its string representation.
-var neuronStateToString = map[neuron.State]string{
-	neuron.Resting:            "Resting",
-	neuron.Firing:             "Firing",
-	neuron.AbsoluteRefractory: "AbsoluteRefractory",
-	neuron.RelativeRefractory: "RelativeRefractory",
-	neuron.UnknownState:       "UnknownState",
-}
+// var neuronStateToString = map[neuron.State]string{ // Replaced by using .String() method
+// 	neuron.Resting:            "Resting",
+// 	neuron.Firing:             "Firing",
+// 	neuron.AbsoluteRefractory: "AbsoluteRefractory",
+// 	neuron.RelativeRefractory: "RelativeRefractory",
+// 	// neuron.UnknownState:       "UnknownState", // This constant does not exist
+// }
 
 // ExportLogData connects to an SQLite database specified by dbPath,
 // reads data from the given tableName, and exports it in the specified format
@@ -157,20 +157,12 @@ func exportNeuronStates(db *sql.DB, writer *csv.Writer) error {
 
 		typeStr := ""
 		if typeInt.Valid {
-			if str, ok := neuronTypeToString[neuron.Type(typeInt.Int64)]; ok {
-				typeStr = str
-			} else {
-				typeStr = strconv.FormatInt(typeInt.Int64, 10) // Fallback to int if mapping not found
-			}
+			typeStr = neuron.Type(typeInt.Int64).String()
 		}
 
 		currentStateStr := ""
 		if currentStateInt.Valid {
-			if str, ok := neuronStateToString[neuron.State(currentStateInt.Int64)]; ok {
-				currentStateStr = str
-			} else {
-				currentStateStr = strconv.FormatInt(currentStateInt.Int64, 10) // Fallback
-			}
+			currentStateStr = neuron.State(currentStateInt.Int64).String()
 		}
 
 		record := []string{

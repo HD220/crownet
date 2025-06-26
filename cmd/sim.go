@@ -33,14 +33,8 @@ var simCmd = &cobra.Command{
 	Long: `Executa uma simulação geral com todas as dinâmicas da rede (aprendizado,
 sinaptogênese, neuromodulação) ativas. Útil para observação de comportamento
 ou logging detalhado para análise posterior.`,
-	"github.com/BurntSushi/toml" // FEATURE-CONFIG-001: Adicionar import TOML
-)
+	// "github.com/BurntSushi/toml" // This was a misplaced import comment
 
-var (
-// ... (variáveis de flag existentes) ...
-
-// simCmd represents the sim command
-// ... (definição de comando existente) ...
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Executando modo sim via Cobra...")
 
@@ -67,8 +61,8 @@ var (
 		if configFile != "" {
 			fmt.Printf("Carregando configuração do arquivo TOML: %s\n", configFile)
 			// Salvar uma cópia da CLIConfig antes de DecodeFile, para aplicar flags CLI depois
-			cliCfgBeforeToml := appCfg.Cli
-			if _, err := toml.DecodeFile(configFile, appCfg); err != nil {
+			cliCfgBeforeToml := appCfg.Cli // Make sure toml is imported for DecodeFile
+			if _, err := toml.DecodeFile(configFile, appCfg); err != nil { // toml will be undefined if not imported
 				log.Printf("Aviso: erro ao decodificar arquivo TOML '%s': %v. Continuando com padrões/flags CLI.", configFile, err)
 				// Restaurar CLIConfig se TOML falhou, para que flags CLI ainda possam funcionar sobre defaults
 				appCfg.Cli = cliCfgBeforeToml

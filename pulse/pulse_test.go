@@ -4,24 +4,34 @@ import (
 	"crownet/common"
 	"crownet/config"
 	"crownet/neuron"
-	"crownet/space" // For processSinglePulseOnTargetNeuron (EuclideanDistance)
+	"crownet/space"
 	"crownet/synaptic"
+	"math" // For math.Abs
 	"math/rand"
-	"reflect"
 	"sort"
 	"testing"
-	"math" // For math.Abs
+	// "reflect" // Unused import
 )
+
+// Helper to create a neuron for testing (copied from space/spatial_grid_test.go and adapted).
+func newTestNeuron(id common.NeuronID, pos common.Point) *neuron.Neuron {
+	dummySimParams := config.DefaultSimulationParameters()
+	// Ensure critical fields for neuron.New are set.
+	dummySimParams.NeuronBehavior.BaseFiringThreshold = 1.0
+	// Other NeuronBehavior fields like AbsoluteRefractoryCycles, etc., will use defaults
+	// from DefaultSimulationParameters(), which should be fine for basic neuron creation.
+	return neuron.New(id, neuron.Excitatory, pos, &dummySimParams)
+}
 
 func defaultTestSimParamsForPulse() *config.SimulationParameters {
 	p := config.DefaultSimulationParameters()
-	p.PulsePropagationSpeed = 1.0
-	p.SpaceMaxDimension = 10.0 // Used for default new pulse MaxTravelRadius
-	p.BaseFiringThreshold = 1.0
-	// For processSinglePulseOnTargetNeuron
-	p.AbsoluteRefractoryCycles = 2
-	p.RelativeRefractoryCycles = 3
-	p.AccumulatedPulseDecayRate = 0.1
+	p.General.PulsePropagationSpeed = 1.0
+	p.General.SpaceMaxDimension = 10.0 // Used for default new pulse MaxTravelRadius
+	p.NeuronBehavior.BaseFiringThreshold = 1.0
+	// For PulseImpactCalculator tests (if they use these neuron props)
+	p.NeuronBehavior.AbsoluteRefractoryCycles = 2
+	p.NeuronBehavior.RelativeRefractoryCycles = 3
+	p.NeuronBehavior.AccumulatedPulseDecayRate = 0.1
 	return &p
 }
 
@@ -52,7 +62,7 @@ func TestNewPulse(t *testing.T) {
 func TestPulse_Propagate(t *testing.T) {
 	simParams := defaultTestSimParamsForPulse()
 	p := New(0, common.Point{}, 1.0, 0, 5.0) // MaxTravelRadius = 5.0
-	simParams.PulsePropagationSpeed = 1.0
+	// simParams.General.PulsePropagationSpeed is already 1.0 from defaultTestSimParamsForPulse
 
 	tests := []struct {
 		name              string
@@ -91,7 +101,7 @@ func TestPulse_Propagate(t *testing.T) {
 func TestPulse_GetEffectShellForCycle(t *testing.T) {
 	simParams := defaultTestSimParamsForPulse()
 	p := New(0, common.Point{}, 1.0, 0, 20.0)
-	simParams.PulsePropagationSpeed = 2.0
+	simParams.General.PulsePropagationSpeed = 2.0 // Override default for this test
 
 	p.CurrentDistance = 0.0 // Before first propagation
 	s, e := p.GetEffectShellForCycle(simParams)
@@ -145,90 +155,10 @@ func TestPulseList_AddClearCount(t *testing.T) {
 	if pl.Count() != 0 { t.Errorf("After Clear(), count = %d, want 0", pl.Count())}
 }
 
-
-func TestProcessSinglePulseOnTargetNeuron(t *testing.T) {
-	simParams := defaultTestSimParamsForPulse()
-	rng := rand.New(rand.NewSource(42))
-	weights := newTestSynapticWeights(simParams, rng)
-
-	pulseEmitter := newTestNeuron(0, common.Point{0,0}) // Emitter
-	target := newTestNeuron(1, common.Point{3,0})    // Target at distance 3
-
-	p := New(pulseEmitter.ID, pulseEmitter.Position, 1.0, 0, 10.0)
-
-	// Set a weight
-	weights.SetWeight(pulseEmitter.ID, target.ID, 0.8)
-
-	currentCycle := common.CycleCount(1)
-
-	t.Run("Target outside shell", func(t *testing.T) {
-		// Shell [0,1) from pulse origin (0,0). Target at (3,0) is outside.
-		newP := processSinglePulseOnTargetNeuron(p, target, weights, currentCycle, simParams, 0.0, 1.0)
-		if newP != nil {
-			t.Errorf("processSinglePulse: target outside shell, got new pulse, want nil")
-		}
-	})
-
-	t.Run("Target inside shell, no fire", func(t *testing.T) {
-		target.AccumulatedPulse = 0.0
-		target.CurrentFiringThreshold = 1.0 // Needs > 0.8 to fire
-		// Shell [2,4) from pulse origin (0,0). Target at (3,0) is inside.
-		newP := processSinglePulseOnTargetNeuron(p, target, weights, currentCycle, simParams, 2.0, 4.0)
-		if newP != nil {
-			t.Errorf("processSinglePulse: target inside shell, no fire, got new pulse, want nil")
-		}
-		expectedPotential := 1.0 * 0.8 // pulse.BaseSignalValue * weight
-		if math.Abs(float64(target.AccumulatedPulse)-expectedPotential) > 1e-9 {
-			t.Errorf("processSinglePulse: target potential got %f, want %f", target.AccumulatedPulse, expectedPotential)
-		}
-	})
-
-	t.Run("Target inside shell, fires", func(t *testing.T) {
-		target.AccumulatedPulse = 0.0
-		target.CurrentFiringThreshold = 0.5 // Will fire with potential 0.8
-		target.State = neuron.Resting        // Ensure it can fire
-
-		newP := processSinglePulseOnTargetNeuron(p, target, weights, currentCycle, simParams, 2.0, 4.0)
-		if newP == nil {
-			t.Fatal("processSinglePulse: target should fire, got nil new pulse, want non-nil")
-		}
-		if newP.EmittingNeuronID != target.ID {
-			t.Errorf("New pulse emitter ID got %d, want %d", newP.EmittingNeuronID, target.ID)
-		}
-		if newP.CreationCycle != currentCycle {
-			t.Errorf("New pulse creation cycle got %d, want %d", newP.CreationCycle, currentCycle)
-		}
-	})
-
-	t.Run("Zero weight", func(t *testing.T) {
-		target.AccumulatedPulse = 0.0
-		weights.SetWeight(pulseEmitter.ID, target.ID, 0.0) // Zero weight
-		newP := processSinglePulseOnTargetNeuron(p, target, weights, currentCycle, simParams, 2.0, 4.0)
-		if newP != nil {
-			t.Errorf("processSinglePulse: zero weight, got new pulse, want nil")
-		}
-		if target.AccumulatedPulse != 0.0 { // No potential change
-			t.Errorf("processSinglePulse: zero weight, target potential got %f, want 0.0", target.AccumulatedPulse)
-		}
-		weights.SetWeight(pulseEmitter.ID, target.ID, 0.8) // Reset weight for other tests
-	})
-
-	t.Run("Self-affect (should be ignored)", func(t *testing.T) {
-		// Pulse p is from neuron 0. Target is neuron 0.
-		newP := processSinglePulseOnTargetNeuron(p, pulseEmitter, weights, currentCycle, simParams, 0.0, 1.0)
-		if newP != nil {
-			t.Errorf("processSinglePulse: self-affect, got new pulse, want nil")
-		}
-	})
-
-	t.Run("Nil parameters", func(t *testing.T) {
-		if processSinglePulseOnTargetNeuron(nil, target, weights, currentCycle, simParams, 0,1) != nil { t.Error("nil pulse not handled")}
-		if processSinglePulseOnTargetNeuron(p, nil, weights, currentCycle, simParams, 0,1) != nil { t.Error("nil targetNeuron not handled")}
-		if processSinglePulseOnTargetNeuron(p, target, nil, currentCycle, simParams, 0,1) != nil { t.Error("nil weights not handled")}
-		if processSinglePulseOnTargetNeuron(p, target, weights, currentCycle, nil, 0,1) != nil { t.Error("nil simParams not handled")}
-	})
-}
-
+// TestProcessSinglePulseOnTargetNeuron has been removed as the function
+// processSinglePulseOnTargetNeuron was refactored out into strategies
+// (REFACTOR-005). The logic is now tested indirectly via TestPulseList_ProcessCycle
+// which uses DefaultPulseImpactCalculator.
 
 // TestPulseList_ProcessCycle is more of an integration test.
 // For true unit tests, dependencies like 'weights' and 'neurons' (now 'spatialGrid')
@@ -239,15 +169,19 @@ func TestPulseList_ProcessCycle(t *testing.T) {
 	weights := newTestSynapticWeights(simParams, rng) // Real weights instance
 
 	// Neurons for the grid
-	n0 := newTestNeuron(0, common.Point{0,0}) // Emitter
-	n1 := newTestNeuron(1, common.Point{1.5,0}) // Target, dist 1.5
-	n2 := newTestNeuron(2, common.Point{5,0})   // Target, dist 5 (too far for initial pulse)
+	n0 := newTestNeuron(0, common.Point{0, 0})      // Emitter
+	n1 := newTestNeuron(1, common.Point{1.5, 0})    // Target, dist 1.5
+	n2 := newTestNeuron(2, common.Point{5, 0})      // Target, dist 5 (too far for initial pulse)
 	allNeurons := []*neuron.Neuron{n0, n1, n2}
 
 	// Setup SpatialGrid
 	var gridMinBound common.Point
-	for i := range gridMinBound { gridMinBound[i] = -simParams.SpaceMaxDimension }
-	grid, _ := space.NewSpatialGrid(simParams.PulsePropagationSpeed*2.0, common.PointDimension, gridMinBound)
+	for i := range gridMinBound { gridMinBound[i] = common.Coordinate(-simParams.General.SpaceMaxDimension) } // Use General substruct and cast
+	// Ensure space.pointDimension is accessible or use a literal if not.
+	// Assuming space.pointDimension is available from space/geometry.go
+	gridCellSize := float64(simParams.General.PulsePropagationSpeed) * 2.0
+	// Ensure space.pointDimension is used correctly. It's a const in space package.
+	grid, _ := space.NewSpatialGrid(gridCellSize, common.PointDimension, gridMinBound) // Use common.PointDimension
 	grid.Build(allNeurons)
 
 	// Setup PulseList
@@ -262,7 +196,7 @@ func TestPulseList_ProcessCycle(t *testing.T) {
 
 	// Cycle 1
 	// Pulse initialPulse: CurrentDistance becomes 1.0. Shell [0,1). n1 (dist 1.5) not hit.
-	newPulses1 := pl.ProcessCycle(grid, weights, 1, simParams)
+	newPulses1 := pl.ProcessCycle(grid, weights, 1, simParams, allNeurons)
 	if len(newPulses1) != 0 {
 		t.Errorf("Cycle 1: Expected 0 new pulses, got %d", len(newPulses1))
 	}
@@ -275,7 +209,7 @@ func TestPulseList_ProcessCycle(t *testing.T) {
 
 	// Cycle 2
 	// Pulse initialPulse: CurrentDistance becomes 2.0. Shell [1,2). n1 (dist 1.5) IS hit. n1 fires.
-	newPulses2 := pl.ProcessCycle(grid, weights, 2, simParams)
+	newPulses2 := pl.ProcessCycle(grid, weights, 2, simParams, allNeurons)
 	if len(newPulses2) != 1 {
 		t.Fatalf("Cycle 2: Expected 1 new pulse, got %d", len(newPulses2))
 	}
@@ -296,7 +230,7 @@ func TestPulseList_ProcessCycle(t *testing.T) {
 	// Cycle 3
 	// Pulse initialPulse: CurrentDistance becomes 3.0. Shell [2,3). n1 (dist 1.5) not in shell. Becomes inactive.
 	// Pulse from n1: CurrentDistance becomes 1.0. Shell [0,1). No one hit.
-	newPulses3 := pl.ProcessCycle(grid, weights, 3, simParams)
+	newPulses3 := pl.ProcessCycle(grid, weights, 3, simParams, allNeurons)
 	if len(newPulses3) != 0 {
 		t.Errorf("Cycle 3: Expected 0 new pulses, got %d", len(newPulses3))
 	}

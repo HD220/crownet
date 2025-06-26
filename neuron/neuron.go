@@ -79,8 +79,8 @@ func New(id common.NeuronID, neuronType Type, initialPosition common.Point, simP
 		Position:               initialPosition,
 		CurrentState:           Resting,
 		AccumulatedPotential:   0.0,
-		BaseFiringThreshold:    common.Threshold(simParams.BaseFiringThreshold),
-		CurrentFiringThreshold: common.Threshold(simParams.BaseFiringThreshold),
+		BaseFiringThreshold:    common.Threshold(simParams.NeuronBehavior.BaseFiringThreshold),
+		CurrentFiringThreshold: common.Threshold(simParams.NeuronBehavior.BaseFiringThreshold),
 		LastFiredCycle:         -1,
 		CyclesInCurrentState:   0,
 		Velocity:               common.Vector{},
@@ -135,13 +135,13 @@ func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.
 		n.AccumulatedPotential = 0.0    // Reset potential after firing.
 	case AbsoluteRefractory:
 		// If absolute refractory period has ended, transition to relative refractory.
-		if simParams != nil && n.CyclesInCurrentState >= simParams.AbsoluteRefractoryCycles {
+		if simParams != nil && n.CyclesInCurrentState >= simParams.NeuronBehavior.AbsoluteRefractoryCycles {
 			n.CurrentState = RelativeRefractory
 			n.CyclesInCurrentState = 0
 		}
 	case RelativeRefractory:
 		// If relative refractory period has ended, transition back to resting.
-		if simParams != nil && n.CyclesInCurrentState >= simParams.RelativeRefractoryCycles {
+		if simParams != nil && n.CyclesInCurrentState >= simParams.NeuronBehavior.RelativeRefractoryCycles {
 			n.CurrentState = Resting
 			n.CyclesInCurrentState = 0
 		}
@@ -159,7 +159,7 @@ func (n *Neuron) DecayPotential(simParams *config.SimulationParameters) {
 	if simParams == nil { // Defensive check
 		return
 	}
-	decayRate := simParams.AccumulatedPulseDecayRate
+	decayRate := simParams.NeuronBehavior.AccumulatedPulseDecayRate
 	if decayRate <= 0 { // No decay if rate is zero or negative.
 		return
 	}

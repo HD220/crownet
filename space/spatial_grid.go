@@ -8,7 +8,7 @@ import (
 )
 
 // CellID represents the integer coordinates of a cell in the N-dimensional grid.
-type CellID [common.PointDimension]int // common.PointDimension is 16, so this is [16]int
+type CellID [pointDimension]int
 
 // SpatialGrid provides a uniform grid spatial index for neurons.
 type SpatialGrid struct {
@@ -28,7 +28,7 @@ type SpatialGrid struct {
 //
 // Returns:
 //   A pointer to the initialized SpatialGrid and nil error on success.
-//   Returns nil and an error if cellSize or numDims are invalid, or if numDims does not match common.PointDimension.
+//   Returns nil and an error if cellSize or numDims are invalid, or if numDims does not match pointDimension.
 func NewSpatialGrid(cellSize float64, numDims int, spaceMinBound common.Point) (*SpatialGrid, error) {
 	if cellSize <= 1e-9 { // Epsilon for zero check
 		return nil, fmt.Errorf("NewSpatialGrid: cellSize must be positive, got %f", cellSize)
@@ -36,8 +36,8 @@ func NewSpatialGrid(cellSize float64, numDims int, spaceMinBound common.Point) (
 	if numDims <= 0 {
 		return nil, fmt.Errorf("NewSpatialGrid: numDims must be positive, got %d", numDims)
 	}
-	if numDims != common.PointDimension {
-		return nil, fmt.Errorf("NewSpatialGrid: numDims (%d) must match common.PointDimension (%d)", numDims, common.PointDimension)
+	if numDims != pointDimension {
+		return nil, fmt.Errorf("NewSpatialGrid: numDims (%d) must match pointDimension (%d)", numDims, pointDimension)
 	}
 
 	sg := &SpatialGrid{
@@ -94,8 +94,8 @@ func (sg *SpatialGrid) QuerySphereForCandidates(center common.Point, radius floa
 		return candidateNeurons
 	}
 
-	minCellIndices := [common.PointDimension]int{}
-	maxCellIndices := [common.PointDimension]int{}
+	minCellIndices := [pointDimension]int{}
+	maxCellIndices := [pointDimension]int{}
 
 	for i := 0; i < sg.numDims; i++ {
 		sphereMinDimCoord := float64(center[i]) - radius
@@ -104,7 +104,7 @@ func (sg *SpatialGrid) QuerySphereForCandidates(center common.Point, radius floa
 		maxCellIndices[i] = int(math.Floor((sphereMaxDimCoord - float64(sg.gridOriginOffset[i])) / sg.cellSize))
 	}
 
-	var currentCellVisit [common.PointDimension]int
+	var currentCellVisit [pointDimension]int // Corrected from common.PointDimension
 	sg.queryCellsRecursive(minCellIndices, maxCellIndices, &currentCellVisit, 0, &candidateNeurons)
 
 	return candidateNeurons
@@ -112,8 +112,8 @@ func (sg *SpatialGrid) QuerySphereForCandidates(center common.Point, radius floa
 
 // queryCellsRecursive is a helper to iterate N-dimensionally through a range of cells.
 func (sg *SpatialGrid) queryCellsRecursive(
-	minCellIndices, maxCellIndices [common.PointDimension]int,
-	currentCellIndices *[common.PointDimension]int,
+	minCellIndices, maxCellIndices [pointDimension]int,
+	currentCellIndices *[pointDimension]int,
 	dim int,
 	candidateNeurons *[]*neuron.Neuron,
 ) {

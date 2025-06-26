@@ -4,7 +4,7 @@ import (
 	"crownet/common"
 	"crownet/config"
 	"crownet/neuron"
-	"math/rand"
+	"math" // Re-adding import as math.Floor is used
 	"reflect"
 	"sort"
 	"testing"
@@ -20,7 +20,7 @@ func newTestNeuron(id common.NeuronID, pos common.Point) *neuron.Neuron {
 func TestNewSpatialGrid(t *testing.T) {
 	minBound := common.Point{}
 	t.Run("Valid params", func(t *testing.T) {
-		sg, err := NewSpatialGrid(10.0, common.PointDimension, minBound)
+		sg, err := NewSpatialGrid(10.0, pointDimension, minBound)
 		if err != nil {
 			t.Fatalf("NewSpatialGrid() error = %v, wantErr false", err)
 		}
@@ -30,15 +30,15 @@ func TestNewSpatialGrid(t *testing.T) {
 		if sg.cellSize != 10.0 {
 			t.Errorf("sg.cellSize = %f, want 10.0", sg.cellSize)
 		}
-		if sg.numDims != common.PointDimension {
-			t.Errorf("sg.numDims = %d, want %d", sg.numDims, common.PointDimension)
+		if sg.numDims != pointDimension {
+			t.Errorf("sg.numDims = %d, want %d", sg.numDims, pointDimension)
 		}
 		if sg.gridOriginOffset != minBound {
 			t.Errorf("sg.gridOriginOffset = %v, want %v", sg.gridOriginOffset, minBound)
 		}
 	})
 
-	_, err := NewSpatialGrid(0.0, common.PointDimension, minBound)
+	_, err := NewSpatialGrid(0.0, pointDimension, minBound)
 	if err == nil {
 		t.Error("NewSpatialGrid() with cellSize=0 expected error, got nil")
 	}
@@ -46,9 +46,9 @@ func TestNewSpatialGrid(t *testing.T) {
 	if err == nil {
 		t.Error("NewSpatialGrid() with numDims=0 expected error, got nil")
 	}
-	_, err = NewSpatialGrid(10.0, common.PointDimension-1, minBound)
+	_, err = NewSpatialGrid(10.0, pointDimension-1, minBound)
 	if err == nil {
-		t.Error("NewSpatialGrid() with numDims != common.PointDimension expected error, got nil")
+		t.Error("NewSpatialGrid() with numDims != pointDimension expected error, got nil")
 	}
 }
 
@@ -56,7 +56,7 @@ func TestGetCellID(t *testing.T) {
 	minBound := common.Point{} // Grid origin at (0,0,...)
 	for i := range minBound { minBound[i] = -100.0 } // Grid covers space from -100 in each dim
 
-	sg, _ := NewSpatialGrid(10.0, common.PointDimension, minBound)
+	sg, _ := NewSpatialGrid(10.0, pointDimension, minBound)
 
 	tests := []struct {
 		name  string
@@ -74,22 +74,21 @@ func TestGetCellID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Pad want CellID to 16D if test case is simpler
 			var fullWant CellID
-			for i := 0; i < common.PointDimension; i++ {
+			for i := 0; i < pointDimension; i++ {
 				if i < len(tt.want) { // Check if tt.want has this dimension defined
 					fullWant[i] = tt.want[i]
 				} else {
-					// If point coord is 0 and grid origin is -100, cell index is 10.
-					// For unspecified higher dims, assume point coord is 0.
-					// (0 - (-100)) / 10 = 10. So cell index is 10.
-					pointCoordForDim := 0.0
-					if i < len(tt.point) { // if point has a value for this dim
-						pointCoordForDim = float64(tt.point[i])
-					}
-					fullWant[i] = int(math.Floor((pointCoordForDim - float64(sg.gridOriginOffset[i])) / sg.cellSize))
+					// Calculate expected for higher dims based on actual GetCellID logic
+					// Default for tt.point higher dims is 0.0. sg.gridOriginOffset is -100.0. cellSize is 10.0.
+					// So, (0.0 - (-100.0)) / 10.0 = 10.0. math.Floor(10.0) = 10.
+					// tt.point is common.Point, which is [16]common.Coordinate.
+					// Higher dimensions will default to 0 if not specified in the literal.
+					fullWant[i] = int(math.Floor((float64(tt.point[i]) - float64(sg.gridOriginOffset[i])) / sg.cellSize))
 				}
 			}
 
-			if got := sg.GetCellID(tt.point); got != fullWant {
+			// For comparing CellIDs, which are arrays, reflect.DeepEqual is more robust.
+			if got := sg.GetCellID(tt.point); !reflect.DeepEqual(got, fullWant) {
 				t.Errorf("GetCellID(%v) = %v, want %v", tt.point, got, fullWant)
 			}
 		})
@@ -98,7 +97,7 @@ func TestGetCellID(t *testing.T) {
 
 func TestSpatialGrid_BuildAndQuery(t *testing.T) {
 	minBound := common.Point{}
-	sg, _ := NewSpatialGrid(10.0, common.PointDimension, minBound) // Cell size 10, origin 0,0...
+	sg, _ := NewSpatialGrid(10.0, pointDimension, minBound) // Cell size 10, origin 0,0...
 
 	neurons := []*neuron.Neuron{
 		newTestNeuron(0, common.Point{5, 5}),    // Cell (0,0)
@@ -160,7 +159,7 @@ func TestSpatialGrid_BuildAndQuery(t *testing.T) {
 	})
 
 	t.Run("Query hitting cell with multiple neurons", func(t *testing.T) {
-		sgLocal, _ := NewSpatialGrid(20.0, common.PointDimension, minBound)
+		sgLocal, _ := NewSpatialGrid(20.0, pointDimension, minBound)
 		neuronsLocal := []*neuron.Neuron{
 			newTestNeuron(10, common.Point{5,5}),   // Cell (0,0)
 			newTestNeuron(11, common.Point{6,6}),   // Cell (0,0)
@@ -197,7 +196,7 @@ func TestGetCellID_WithOffset(t *testing.T) {
     var offset common.Point
     for i := range offset { offset[i] = -50.0 } // Grid effectively starts at (-50, -50, ...)
 
-    sg, _ := NewSpatialGrid(10.0, common.PointDimension, offset)
+    sg, _ := NewSpatialGrid(10.0, pointDimension, offset)
 
     tests := []struct {
         name  string
@@ -214,14 +213,14 @@ func TestGetCellID_WithOffset(t *testing.T) {
         t.Run(tt.name, func(t *testing.T) {
             var fullWant CellID
             // Populate fullWant based on tt.want for defined dims, and calculate for others
-            for i := 0; i < common.PointDimension; i++ {
-                var pCoord float64
-                if i < len(tt.point) { pCoord = float64(tt.point[i]) } // Use test point coord if defined for this dim
-
+            for i := 0; i < pointDimension; i++ {
                 if i < len(tt.want) { // Use test want coord if defined for this dim
                     fullWant[i] = tt.want[i]
-                } else { // Calculate expected for higher dims assuming point coord is 0 for those
-                    fullWant[i] = int(math.Floor((pCoord - float64(offset[i])) / 10.0))
+                } else {
+					// Calculate expected for higher dims based on actual GetCellID logic
+					// Default for tt.point higher dims is 0.0. sg.gridOriginOffset (offset) is -50.0. cellSize is 10.0.
+					// So, (0.0 - (-50.0)) / 10.0 = 5.0. math.Floor(5.0) = 5.
+                    fullWant[i] = int(math.Floor((float64(tt.point[i]) - float64(offset[i])) / sg.cellSize))
                 }
             }
 

@@ -65,7 +65,7 @@ func calculateCortisolStimulation(activePulses []*pulse.Pulse, cortisolGlandPosi
 		// Consider logging: log.Println("Warning: calculateCortisolStimulation called with nil simParams")
 		return 0.0
 	}
-	if simParams.CortisolProductionPerHit <= 0 {
+	if simParams.Neurochemical.CortisolProductionPerHit <= 0 {
 		return 0.0 // No production if the per-hit amount is zero or negative.
 	}
 
@@ -85,7 +85,7 @@ func calculateCortisolStimulation(activePulses []*pulse.Pulse, cortisolGlandPosi
 			}
 		}
 	}
-	return float64(pulsesHittingGland) * float64(simParams.CortisolProductionPerHit) // Total cortisol produced from pulse hits.
+	return float64(pulsesHittingGland) * float64(simParams.Neurochemical.CortisolProductionPerHit) // Total cortisol produced from pulse hits.
 }
 
 // calculateDopamineProduction determines the amount of dopamine to be produced in the current cycle.
@@ -97,7 +97,7 @@ func calculateDopamineProduction(neurons []*neuron.Neuron, simParams *config.Sim
 		// Consider logging: log.Println("Warning: calculateDopamineProduction called with nil simParams")
 		return 0.0
 	}
-	if simParams.DopamineProductionPerEvent <= 0 {
+	if simParams.Neurochemical.DopamineProductionPerEvent <= 0 {
 		return 0.0 // No production if the per-event amount is zero or negative.
 	}
 
@@ -105,7 +105,7 @@ func calculateDopamineProduction(neurons []*neuron.Neuron, simParams *config.Sim
 	for _, n := range neurons {
 		// Accumulate dopamine if a neuron is of Dopaminergic type and is in the Firing state.
 		if n.Type == neuron.Dopaminergic && n.CurrentState == neuron.Firing {
-			dopamineProducedThisCycle += float64(simParams.DopamineProductionPerEvent)
+			dopamineProducedThisCycle += float64(simParams.Neurochemical.DopamineProductionPerEvent)
 		}
 	}
 	return dopamineProducedThisCycle
@@ -178,16 +178,16 @@ func (env *Environment) UpdateLevels(
 	// Update chemical levels considering production and decay.
 	env.CortisolLevel = updateChemicalLevel(
 		env.CortisolLevel,
-		common.Rate(simParams.CortisolDecayRate),
+		common.Rate(simParams.Neurochemical.CortisolDecayRate),
 		cortisolProduction,
-		common.Level(simParams.CortisolMaxLevel),
+		common.Level(simParams.Neurochemical.CortisolMaxLevel),
 	)
 
 	env.DopamineLevel = updateChemicalLevel(
 		env.DopamineLevel,
-		common.Rate(simParams.DopamineDecayRate),
+		common.Rate(simParams.Neurochemical.DopamineDecayRate),
 		dopamineProduction,
-		common.Level(simParams.DopamineMaxLevel),
+		common.Level(simParams.Neurochemical.DopamineMaxLevel),
 	)
 
 	// After levels are updated, recalculate their effects on modulation factors
@@ -208,23 +208,24 @@ func (env *Environment) recalculateModulationFactors(simParams *config.Simulatio
 		return
 	}
 	lrFactor := 1.0 // Start with a base factor of 1.0 (no modulation)
-	normalizedDopamine := getNormalizedLevel(env.DopamineLevel, simParams.DopamineMaxLevel)
-	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, simParams.CortisolMaxLevel)
+	normalizedDopamine := getNormalizedLevel(env.DopamineLevel, float64(simParams.Neurochemical.DopamineMaxLevel))
+	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, float64(simParams.Neurochemical.CortisolMaxLevel))
 
 	// Apply Dopamine effect on Learning Rate
-	lrFactor = applyChemicalInfluence(lrFactor, simParams.DopamineInfluenceOnLR, normalizedDopamine)
+	lrFactor = applyChemicalInfluence(lrFactor, simParams.Neurochemical.DopamineInfluenceOnLR, normalizedDopamine)
 	// Apply Cortisol effect on Learning Rate
-	lrFactor = applyChemicalInfluence(lrFactor, simParams.CortisolInfluenceOnLR, normalizedCortisol)
+	lrFactor = applyChemicalInfluence(lrFactor, simParams.Neurochemical.CortisolInfluenceOnLR, normalizedCortisol)
 
 	// Ensure learning rate factor does not fall below the minimum defined in SimParams.
-	lrFactor = math.Max(float64(simParams.MinLearningRateFactor), lrFactor)
+	// MinLearningRateFactor is in the Learning sub-struct of SimParams.
+	lrFactor = math.Max(float64(simParams.Learning.MinLearningRateFactor), lrFactor)
 	env.LearningRateModulationFactor = common.Factor(lrFactor)
 
 	synFactor := 1.0
 	// Apply Dopamine effect on Synaptogenesis Factor
-	synFactor = applyChemicalInfluence(synFactor, simParams.DopamineInfluenceOnSynapto, normalizedDopamine)
+	synFactor = applyChemicalInfluence(synFactor, simParams.Neurochemical.DopamineInfluenceOnSynapto, normalizedDopamine)
 	// Apply Cortisol effect on Synaptogenesis Factor
-	synFactor = applyChemicalInfluence(synFactor, simParams.CortisolInfluenceOnSynapto, normalizedCortisol)
+	synFactor = applyChemicalInfluence(synFactor, simParams.Neurochemical.CortisolInfluenceOnSynapto, normalizedCortisol)
 
 	// Ensure synaptogenesis factor is not negative.
 	env.SynaptogenesisModulationFactor = common.Factor(math.Max(0.0, synFactor)) // Ensure factor is not negative.
@@ -248,18 +249,18 @@ func (env *Environment) ApplyEffectsToNeurons(neurons []*neuron.Neuron, simParam
 		}
 		return
 	}
-	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, simParams.CortisolMaxLevel)
-	normalizedDopamine := getNormalizedLevel(env.DopamineLevel, simParams.DopamineMaxLevel)
+	normalizedCortisol := getNormalizedLevel(env.CortisolLevel, float64(simParams.Neurochemical.CortisolMaxLevel))
+	normalizedDopamine := getNormalizedLevel(env.DopamineLevel, float64(simParams.Neurochemical.DopamineMaxLevel))
 
 	for _, n := range neurons {
 		baseThreshold := float64(n.BaseFiringThreshold)
 		modifiedThreshold := baseThreshold
 
 		// Apply Cortisol effect on Firing Threshold first.
-		modifiedThreshold = applyChemicalInfluence(modifiedThreshold, simParams.FiringThresholdIncreaseOnCort, normalizedCortisol)
+		modifiedThreshold = applyChemicalInfluence(modifiedThreshold, simParams.Neurochemical.FiringThresholdIncreaseOnCort, normalizedCortisol)
 
 		// Then apply Dopamine effect on the (potentially cortisol-modified) threshold.
-		modifiedThreshold = applyChemicalInfluence(modifiedThreshold, simParams.FiringThresholdIncreaseOnDopa, normalizedDopamine)
+		modifiedThreshold = applyChemicalInfluence(modifiedThreshold, simParams.Neurochemical.FiringThresholdIncreaseOnDopa, normalizedDopamine)
 
 		// Ensure the final threshold does not fall below a defined minimum positive value.
 		n.CurrentFiringThreshold = common.Threshold(math.Max(minFiringThresholdValue, modifiedThreshold))

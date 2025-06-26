@@ -11,13 +11,13 @@ import (
 
 func defaultTestSimParams() *config.SimulationParameters {
 	p := config.DefaultSimulationParameters() // Get a copy of defaults
-	p.InitialSynapticWeightMin = 0.1
-	p.InitialSynapticWeightMax = 0.5
-	p.MaxSynapticWeight = 1.0
-	p.HebbianWeightMin = 0.05 // Allow slightly lower than initial for decay tests
-	p.HebbianWeightMax = 0.9
-	p.HebbPositiveReinforceFactor = 0.1
-	p.SynapticWeightDecayRate = 0.01
+	p.Learning.InitialSynapticWeightMin = 0.1
+	p.Learning.InitialSynapticWeightMax = 0.5
+	p.Learning.MaxSynapticWeight = 1.0
+	p.Learning.HebbianWeightMin = 0.05 // Allow slightly lower than initial for decay tests
+	p.Learning.HebbianWeightMax = 0.9
+	p.Learning.HebbPositiveReinforceFactor = 0.1
+	p.Learning.SynapticWeightDecayRate = 0.01
 	return &p
 }
 
@@ -76,12 +76,12 @@ func TestInitializeAllToAllWeights(t *testing.T) {
 					t.Errorf("InitializeAllToAllWeights() self-connection weight for %d->%d = %f, want 0.0", fromID, toID, weight)
 				}
 			} else {
-				if !(weight >= common.SynapticWeight(simParams.InitialSynapticWeightMin) && weight <= common.SynapticWeight(simParams.InitialSynapticWeightMax)) {
+				if !(weight >= common.SynapticWeight(simParams.Learning.InitialSynapticWeightMin) && weight <= common.SynapticWeight(simParams.Learning.InitialSynapticWeightMax)) {
 					// Allow for slight floating point inaccuracies if min == max by checking only one bound
-					if simParams.InitialSynapticWeightMin == simParams.InitialSynapticWeightMax && weight != common.SynapticWeight(simParams.InitialSynapticWeightMin) {
-						t.Errorf("InitializeAllToAllWeights() weight %d->%d = %f, want %f (min==max case)", fromID, toID, weight, simParams.InitialSynapticWeightMin)
-					} else if simParams.InitialSynapticWeightMin != simParams.InitialSynapticWeightMax {
-						t.Errorf("InitializeAllToAllWeights() weight %d->%d = %f, not in range [%f, %f]", fromID, toID, weight, simParams.InitialSynapticWeightMin, simParams.InitialSynapticWeightMax)
+					if simParams.Learning.InitialSynapticWeightMin == simParams.Learning.InitialSynapticWeightMax && weight != common.SynapticWeight(simParams.Learning.InitialSynapticWeightMin) {
+						t.Errorf("InitializeAllToAllWeights() weight %d->%d = %f, want %f (min==max case)", fromID, toID, weight, simParams.Learning.InitialSynapticWeightMin)
+					} else if simParams.Learning.InitialSynapticWeightMin != simParams.Learning.InitialSynapticWeightMax {
+						t.Errorf("InitializeAllToAllWeights() weight %d->%d = %f, not in range [%f, %f]", fromID, toID, weight, simParams.Learning.InitialSynapticWeightMin, simParams.Learning.InitialSynapticWeightMax)
 					}
 				}
 			}
@@ -91,8 +91,8 @@ func TestInitializeAllToAllWeights(t *testing.T) {
 	// Test fallback for inconsistent InitialSynapticWeightMin/Max
 	t.Run("Inconsistent initial weight params", func(t *testing.T) {
 		inconsistentParams := *simParams // copy
-		inconsistentParams.InitialSynapticWeightMin = 0.6
-		inconsistentParams.InitialSynapticWeightMax = 0.5
+		inconsistentParams.Learning.InitialSynapticWeightMin = 0.6
+		inconsistentParams.Learning.InitialSynapticWeightMax = 0.5
 		nwFallback, _ := NewNetworkWeights(&inconsistentParams, rng)
 		nwFallback.InitializeAllToAllWeights(neuronIDs)
 		// Check if fallback 0.01 to 0.05 is used
@@ -131,7 +131,7 @@ func TestGetSetWeight(t *testing.T) {
 
 	// Case 1: HebbianWeightMin is positive (defaultTestSimParams has 0.05)
 	// SetWeight should clamp to [0, MaxSynapticWeight] effectively
-	simParams.HebbianWeightMin = 0.05 // Ensure this for the test
+	simParams.Learning.HebbianWeightMin = 0.05 // Ensure this for the test
 	nwClampTest1, _ := NewNetworkWeights(simParams, rng)
 
 	t.Run("SetWeight clamping (HebbianMin positive)", func(t *testing.T) {
@@ -139,25 +139,25 @@ func TestGetSetWeight(t *testing.T) {
 		if got := nwClampTest1.GetWeight(fromID, toID); got != 0.0 {
 			t.Errorf("SetWeight clamping below 0 (HebbianMin positive), got %f, want 0.0", got)
 		}
-		nwClampTest1.SetWeight(fromID, toID, common.SynapticWeight(simParams.MaxSynapticWeight+0.1)) // Above max
-		if got := nwClampTest1.GetWeight(fromID, toID); got != common.SynapticWeight(simParams.MaxSynapticWeight) {
-			t.Errorf("SetWeight clamping above MaxSynapticWeight, got %f, want %f", got, simParams.MaxSynapticWeight)
+		nwClampTest1.SetWeight(fromID, toID, common.SynapticWeight(simParams.Learning.MaxSynapticWeight+0.1)) // Above max
+		if got := nwClampTest1.GetWeight(fromID, toID); got != common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
+			t.Errorf("SetWeight clamping above MaxSynapticWeight, got %f, want %f", got, simParams.Learning.MaxSynapticWeight)
 		}
 	})
 
 	// Case 2: HebbianWeightMin is negative
 	simParamsNegativeMin := *simParams // copy
-	simParamsNegativeMin.HebbianWeightMin = -0.2
+	simParamsNegativeMin.Learning.HebbianWeightMin = -0.2
 	nwClampTest2, _ := NewNetworkWeights(&simParamsNegativeMin, rng)
 
 	t.Run("SetWeight clamping (HebbianMin negative)", func(t *testing.T) {
 		nwClampTest2.SetWeight(fromID, toID, -0.5) // Below HebbianMin
-		if got := nwClampTest2.GetWeight(fromID, toID); got != common.SynapticWeight(simParamsNegativeMin.HebbianWeightMin) {
-			t.Errorf("SetWeight clamping below HebbianMin (negative), got %f, want %f", got, simParamsNegativeMin.HebbianWeightMin)
+		if got := nwClampTest2.GetWeight(fromID, toID); got != common.SynapticWeight(simParamsNegativeMin.Learning.HebbianWeightMin) {
+			t.Errorf("SetWeight clamping below HebbianMin (negative), got %f, want %f", got, simParamsNegativeMin.Learning.HebbianWeightMin)
 		}
-		nwClampTest2.SetWeight(fromID, toID, common.SynapticWeight(simParamsNegativeMin.MaxSynapticWeight+0.1)) // Above max
-		if got := nwClampTest2.GetWeight(fromID, toID); got != common.SynapticWeight(simParamsNegativeMin.MaxSynapticWeight) {
-			t.Errorf("SetWeight clamping above MaxSynapticWeight (HebbianMin negative), got %f, want %f", got, simParamsNegativeMin.MaxSynapticWeight)
+		nwClampTest2.SetWeight(fromID, toID, common.SynapticWeight(simParamsNegativeMin.Learning.MaxSynapticWeight+0.1)) // Above max
+		if got := nwClampTest2.GetWeight(fromID, toID); got != common.SynapticWeight(simParamsNegativeMin.Learning.MaxSynapticWeight) {
+			t.Errorf("SetWeight clamping above MaxSynapticWeight (HebbianMin negative), got %f, want %f", got, simParamsNegativeMin.Learning.MaxSynapticWeight)
 		}
 	})
 
@@ -186,21 +186,21 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		nw.ApplyHebbianUpdate(fromID, toID, 1.0, 1.0, effectiveLR)
 		currentWeight := nw.GetWeight(fromID, toID)
 
-		expectedDelta := common.SynapticWeight(float64(effectiveLR) * float64(simParams.HebbPositiveReinforceFactor))
+		expectedDelta := common.SynapticWeight(float64(effectiveLR) * float64(simParams.Learning.HebbPositiveReinforceFactor))
 		expectedWeightAfterLTP := initialWeight + expectedDelta
-		expectedWeightAfterDecay := expectedWeightAfterLTP * (1.0 - common.SynapticWeight(simParams.SynapticWeightDecayRate))
+		expectedWeightAfterDecay := expectedWeightAfterLTP * (1.0 - common.SynapticWeight(simParams.Learning.SynapticWeightDecayRate))
 
 		// Apply Hebbian clamping
 		finalExpected := expectedWeightAfterDecay
-		if finalExpected < common.SynapticWeight(simParams.HebbianWeightMin) {
-			finalExpected = common.SynapticWeight(simParams.HebbianWeightMin)
+		if finalExpected < common.SynapticWeight(simParams.Learning.HebbianWeightMin) {
+			finalExpected = common.SynapticWeight(simParams.Learning.HebbianWeightMin)
 		}
-		if finalExpected > common.SynapticWeight(simParams.HebbianWeightMax) {
-			finalExpected = common.SynapticWeight(simParams.HebbianWeightMax)
+		if finalExpected > common.SynapticWeight(simParams.Learning.HebbianWeightMax) {
+			finalExpected = common.SynapticWeight(simParams.Learning.HebbianWeightMax)
 		}
 		// Final SetWeight applies MaxSynapticWeight cap, but HebbianMax should be <= MaxSynapticWeight
-		if finalExpected > common.SynapticWeight(simParams.MaxSynapticWeight) {
-			finalExpected = common.SynapticWeight(simParams.MaxSynapticWeight)
+		if finalExpected > common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
+			finalExpected = common.SynapticWeight(simParams.Learning.MaxSynapticWeight)
 		}
 
 
@@ -215,17 +215,17 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		nw.ApplyHebbianUpdate(fromID, toID, 1.0, 0.0, effectiveLR)
 		currentWeight := nw.GetWeight(fromID, toID)
 		// Only decay should apply if LTD is not active
-		expectedWeightAfterDecay := initialWeight * (1.0 - common.SynapticWeight(simParams.SynapticWeightDecayRate))
+		expectedWeightAfterDecay := initialWeight * (1.0 - common.SynapticWeight(simParams.Learning.SynapticWeightDecayRate))
 		// Apply Hebbian clamping
 		finalExpected := expectedWeightAfterDecay
-		if finalExpected < common.SynapticWeight(simParams.HebbianWeightMin) {
-			finalExpected = common.SynapticWeight(simParams.HebbianWeightMin)
+		if finalExpected < common.SynapticWeight(simParams.Learning.HebbianWeightMin) {
+			finalExpected = common.SynapticWeight(simParams.Learning.HebbianWeightMin)
 		}
-		if finalExpected > common.SynapticWeight(simParams.HebbianWeightMax) {
-			finalExpected = common.SynapticWeight(simParams.HebbianWeightMax)
+		if finalExpected > common.SynapticWeight(simParams.Learning.HebbianWeightMax) {
+			finalExpected = common.SynapticWeight(simParams.Learning.HebbianWeightMax)
 		}
-		if finalExpected > common.SynapticWeight(simParams.MaxSynapticWeight) {
-			finalExpected = common.SynapticWeight(simParams.MaxSynapticWeight)
+		if finalExpected > common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
+			finalExpected = common.SynapticWeight(simParams.Learning.MaxSynapticWeight)
 		}
 
 		if math.Abs(float64(currentWeight-finalExpected)) > 1e-9 {
@@ -244,7 +244,7 @@ func TestApplyHebbianUpdate(t *testing.T) {
 	// Test clamping during Hebbian update
 	t.Run("Hebbian update clamping to HebbianWeightMax", func(t *testing.T) {
 		// Make initial weight high, so LTP pushes it over HebbianWeightMax
-		highInitialWeight := common.SynapticWeight(simParams.HebbianWeightMax - 0.01)
+		highInitialWeight := common.SynapticWeight(simParams.Learning.HebbianWeightMax - 0.01)
 		nw.SetWeight(fromID, toID, highInitialWeight)
 		nw.ApplyHebbianUpdate(fromID, toID, 1.0, 1.0, common.Rate(0.5)) // Strong LR
 
@@ -257,28 +257,28 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		// Let's check it against HebbianWeightMax, as MaxSynapticWeight is an outer bound.
 		// The internal logic of ApplyHebbianUpdate clamps to HebbianMin/Max first.
 		// Then SetWeight is called. MaxSynapticWeight is usually >= HebbianWeightMax.
-		// expected := common.SynapticWeight(simParams.HebbianWeightMax) // Removed unused variable
+		// expected := common.SynapticWeight(simParams.Learning.HebbianWeightMax) // Removed unused variable
 		// If decay makes it less than HebbianWeightMax, that's the value.
 		// tempExpected = (highInitialWeight + deltaFromStrongLR) -> likely > HebbianWeightMax
 		// tempExpectedClampedToHebbianMax = HebbianWeightMax
 		// tempExpectedAfterDecay = HebbianWeightMax * (1-decay)
 		// This expected value should be compared.
 
-		// Simpler: the value should not exceed simParams.HebbianWeightMax if HebbianWeightMax <= MaxSynapticWeight
+		// Simpler: the value should not exceed simParams.Learning.HebbianWeightMax if HebbianWeightMax <= MaxSynapticWeight
 		// And it should not exceed MaxSynapticWeight in any case.
-		effectiveMax := common.SynapticWeight(math.Min(float64(simParams.HebbianWeightMax), float64(simParams.MaxSynapticWeight)))
+		effectiveMax := common.SynapticWeight(math.Min(float64(simParams.Learning.HebbianWeightMax), float64(simParams.Learning.MaxSynapticWeight)))
 
 		if currentWeight > effectiveMax {
 			t.Errorf("ApplyHebbianUpdate clamping high: got %f, should not exceed %f (HebbianMax %f, MaxOverall %f)",
-				currentWeight, effectiveMax, simParams.HebbianWeightMax, simParams.MaxSynapticWeight)
+				currentWeight, effectiveMax, simParams.Learning.HebbianWeightMax, simParams.Learning.MaxSynapticWeight)
 		}
 		// It's hard to predict exact value due to decay after clamping. Check it's <= effectiveMax.
 		// A more precise test would mock SetWeight or check intermediate value.
 		// For now, checking it doesn't exceed the *effective* cap is a good start.
-		if currentWeight > common.SynapticWeight(simParams.MaxSynapticWeight) {
-             t.Errorf("ApplyHebbianUpdate resulted in weight %f, exceeding MaxSynapticWeight %f", currentWeight, simParams.MaxSynapticWeight)
+		if currentWeight > common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
+             t.Errorf("ApplyHebbianUpdate resulted in weight %f, exceeding MaxSynapticWeight %f", currentWeight, simParams.Learning.MaxSynapticWeight)
         }
-        if currentWeight > common.SynapticWeight(simParams.HebbianWeightMax) && simParams.HebbianWeightMax <= simParams.MaxSynapticWeight {
+        if currentWeight > common.SynapticWeight(simParams.Learning.HebbianWeightMax) && simParams.Learning.HebbianWeightMax <= simParams.Learning.MaxSynapticWeight {
              // This case might happen if decay brings it down just below MaxSynapticWeight but still above a lower HebbianWeightMax
              // The logic is: newW = HWM; nw.SetWeight(newW) -> if newW > MSW, newW=MSW.
              // So currentWeight should be min(HWM_after_decay, MSW)
@@ -326,10 +326,10 @@ func TestGetAllLoadWeights(t *testing.T) {
 
 	// Test LoadWeights with clamping (e.g. loading a weight > MaxSynapticWeight)
 	weightsToLoadOverMax := map[common.NeuronID]WeightMap{
-		0: {1: common.SynapticWeight(simParams.MaxSynapticWeight + 0.5)},
+		0: {1: common.SynapticWeight(simParams.Learning.MaxSynapticWeight + 0.5)},
 	}
 	nw2.LoadWeights(weightsToLoadOverMax)
-	if nw2.GetWeight(0,1) != common.SynapticWeight(simParams.MaxSynapticWeight) {
-		t.Errorf("LoadWeights should clamp overweight values, got %f want %f", nw2.GetWeight(0,1), simParams.MaxSynapticWeight)
+	if nw2.GetWeight(0,1) != common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
+		t.Errorf("LoadWeights should clamp overweight values, got %f want %f", nw2.GetWeight(0,1), simParams.Learning.MaxSynapticWeight)
 	}
 }

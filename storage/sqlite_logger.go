@@ -3,14 +3,14 @@ package storage
 import (
 	"crownet/network"
 	"database/sql"
+	"encoding/json" // Added for LogNetworkState
 	"fmt"
-	"os"
-	"strings"
+	// "os"      // Unused
+	// "strings" // Unused
 	"time"
 
-	"github.com/mattn/go-sqlite3" // Ensure direct import for clarity, though blank is for side effects
-	"encoding/json"                // Added for LogNetworkState
-	"crownet/common"               // Added for LogNetworkState (n.Type, n.CurrentState etc are common types)
+	// "github.com/mattn/go-sqlite3" // Unused as sqlite3 is imported via blank import in log_exporter.go or by driver registration
+	// "crownet/common" // Unused, neuron types are handled via int casting
 )
 
 // SQLiteLogger provides functionality to log network snapshots and neuron states
