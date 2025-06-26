@@ -43,16 +43,16 @@ Para análises mais detalhadas da dinâmica da rede e para depuração, o sistem
 
 ### 3.1. Propósito e Ativação
 *   **Objetivo:** Capturar a evolução temporal do estado de cada neurônio e dos níveis de neuroquímicos.
-*   **Ativação:** O logging para SQLite é habilitado quando um caminho de arquivo de banco de dados é fornecido através do flag `-dbPath`. Se o arquivo já existir, ele é geralmente recriado a cada nova execução que utiliza esta opção.
-*   **Frequência:** A frequência com que os snapshots são salvos é controlada pelo flag `-saveInterval` (número de ciclos entre cada salvamento).
+*   **Ativação:** O logging para SQLite é habilitado quando um caminho de arquivo de banco de dados é fornecido através do flag `--dbPath` (ou `-d` no subcomando `logutil export`). Se o arquivo não existir, será criado. Se já existir, será aberto.
+*   **Frequência:** A frequência com que os snapshots são salvos (no modo `sim` ou `expose`) é controlada pelo flag `--saveInterval` (número de ciclos entre cada salvamento).
 
 ### 3.2. Conteúdo do Snapshot no Banco de Dados
-Um snapshot da rede no banco de dados SQLite normalmente inclui as seguintes informações, distribuídas em tabelas relacionais:
+Um snapshot da rede no banco de dados SQLite inclui as seguintes informações, distribuídas em tabelas relacionais:
 
-*   **Tabela `NetworkSnapshots` (ou similar):** Registra informações globais da rede por snapshot.
-    *   Campos: `SnapshotID` (identificador único do snapshot), `CycleCount` (ciclo da simulação), `Timestamp`, `CortisolLevel`, `DopamineLevel`.
-*   **Tabela `NeuronStates` (ou similar):** Registra o estado detalhado de cada neurônio no momento do snapshot.
-    *   Campos: `StateID` (identificador único do estado), `SnapshotID` (referência ao snapshot), `NeuronID`, coordenadas de posição (ex: `Position0` a `Position15`), componentes de velocidade, tipo do neurônio, estado operacional (Repouso, Disparo, etc.), potencial acumulado, limiares de disparo (base e atual), ciclo do último disparo, ciclos no estado atual.
+*   **Tabela `NetworkSnapshots`:** Registra informações globais da rede por snapshot.
+    *   Campos: `SnapshotID` (INTEGER PK AI), `CycleCount` (INTEGER), `Timestamp` (DATETIME), `CortisolLevel` (REAL), `DopamineLevel` (REAL), `LearningRateModFactor` (REAL), `SynaptogenesisModFactor` (REAL).
+*   **Tabela `NeuronStates`:** Registra o estado detalhado de cada neurônio no momento do snapshot.
+    *   Campos: `StateID` (INTEGER PK AI), `SnapshotID` (INTEGER FK), `NeuronID` (INTEGER), `Position` (TEXT JSON), `Velocity` (TEXT JSON), `Type` (INTEGER), `CurrentState` (INTEGER), `AccumulatedPotential` (REAL), `BaseFiringThreshold` (REAL), `CurrentFiringThreshold` (REAL), `LastFiredCycle` (INTEGER), `CyclesInCurrentState` (INTEGER).
 
 *Nota: Os pesos sinápticos em si geralmente não são duplicados no banco de dados SQLite a cada snapshot, pois o arquivo JSON é o meio primário para sua persistência. O foco do logging em SQLite é o estado dinâmico da rede.*
 

@@ -39,8 +39,8 @@ Os Requisitos Funcionais são derivados da documentação em `docs/funcional/`.
 *   **RF-CHEM-002 (Cortisol):** Cortisol deve ser produzido quando pulsos excitatórios atingem a vizinhança de uma glândula central.
 *   **RF-CHEM-003 (Dopamina):** Dopamina deve ser produzida quando neurônios dopaminérgicos disparam.
 *   **RF-CHEM-004:** Ambos os neuroquímicos devem decair percentualmente a cada ciclo e ser limitados a um nível máximo.
-*   **RF-CHEM-005:** Cortisol deve modular os limiares de disparo dos neurônios (efeito em forma de U).
-*   **RF-CHEM-006:** Dopamina deve modular os limiares de disparo dos neurônios (aumento).
+*   **RF-CHEM-005:** Cortisol deve modular os limiares de disparo dos neurônios (efeito multiplicativo direto, conforme implementação atual).
+*   **RF-CHEM-006:** Dopamina deve modular os limiares de disparo dos neurônios (efeito multiplicativo direto, conforme implementação atual).
 *   **RF-CHEM-007:** Cortisol (altos níveis) deve reduzir a taxa de aprendizado Hebbiano e a taxa de sinaptogênese.
 *   **RF-CHEM-008:** Dopamina deve aumentar a taxa de aprendizado Hebbiano e a taxa de sinaptogênese.
 *   **RF-CHEM-009:** Os efeitos de Cortisol e Dopamina nos limiares e na sinaptogênese devem ser combinados (multiplicativamente para sinaptogênese, sequencialmente para limiares).
@@ -65,7 +65,7 @@ Os Requisitos Funcionais são derivados da documentação em `docs/funcional/`.
 *   **RF-PERSIST-002:** O sistema deve ser capaz de carregar pesos sinápticos de um arquivo JSON para inicializar a rede.
 *   **RF-PERSIST-003:** O sistema deve, opcionalmente (controlado por flag), salvar snapshots completos do estado da rede (neurônios, químicos) em um banco de dados SQLite.
 *   **RF-PERSIST-004:** O logging para SQLite deve ocorrer em intervalos de ciclos configuráveis.
-*   **RF-PERSIST-005:** O arquivo de banco de dados SQLite deve ser recriado a cada execução que utiliza esta opção.
+*   **RF-PERSIST-005:** O sistema abrirá um arquivo de BD SQLite existente ou criará um novo se não existir (não é recriado a cada execução).
 
 ### RF-MODE: Modos de Operação da CLI
 *   **RF-MODE-001 (expose):** Implementar um modo para expor a rede a sequências de padrões de dígitos por múltiplas épocas, permitindo o aprendizado Hebbiano. Todas as dinâmicas (aprendizado, químicos, sinaptogênese) devem estar ativas. Deve carregar pesos existentes se disponíveis e salvar pesos ao final.
@@ -95,10 +95,10 @@ Os Requisitos Funcionais são derivados da documentação em `docs/funcional/`.
 *   **RNF-REL-002:** O sistema deve lidar graciosamente com arquivos de pesos ou de banco de dados ausentes ou malformados (ex: ao tentar carregar).
 
 ### RNF-CONF: Configurabilidade
-*   **RNF-CONF-001:** Parâmetros chave da simulação (número de neurônios, taxas de aprendizado, parâmetros químicos, etc.) devem ser configuráveis (via flags no MVP; via arquivos de configuração na reescrita ideal).
+*   **RNF-CONF-001:** Parâmetros chave da simulação (número de neurônios, taxas de aprendizado, parâmetros químicos, etc.) devem ser configuráveis via flags CLI e, opcionalmente, via arquivo de configuração TOML.
 
 ### RNF-EXT: Extensibilidade (para a Reescrita)
-*   **RNF-EXT-001:** A arquitetura reescrita deve facilitar a adição de novos tipos de neurônios, neuroquímicos ou regras de aprendizado no futuro.
+*   **RNF-EXT-001:** A arquitetura reescrita deve facilitar a adição de novos tipos de neurônios, neuroquímicos ou regras de aprendizado no futuro. (Ex: Interfaces para estratégias de sinaptogênese já foram implementadas).
 
 ### RNF-TEST: Testabilidade (para a Reescrita)
 *   **RNF-TEST-001:** O código reescrito deve ser estruturado para permitir testes unitários de componentes críticos (ex: lógica neuronal, algoritmos de aprendizado, propagação de pulso).

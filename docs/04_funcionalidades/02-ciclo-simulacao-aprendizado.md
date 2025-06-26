@@ -59,10 +59,10 @@ O ambiente químico da rede, representado pelos níveis de Cortisol e Dopamina, 
     *   **Dopamina:** É liberada por neurônios do tipo Dopaminérgico quando estes disparam. O nível de dopamina também decai passivamente (geralmente mais rápido que o cortisol) e é limitado a um máximo.
 *   **Efeitos Principais:**
     *   **Nos Limiares de Disparo:**
-        *   Os níveis de neuroquímicos (cortisol e dopamina) modulam dinamicamente o `CurrentFiringThreshold` de cada neurônio, que é o valor que seu potencial acumulado precisa exceder para disparar. Este é derivado do `BaseFiringThreshold` do neurônio.
-        *   **Efeito do Cortisol:** O `CurrentFiringThreshold` é ajustado multiplicativamente com base no nível normalizado de cortisol. A magnitude e a direção desse ajuste (aumento ou diminuição do limiar) são determinadas pelo parâmetro de simulação `FiringThresholdIncreaseOnCort`. Um valor positivo para este parâmetro significa que níveis mais altos de cortisol aumentam o limiar, tornando o neurônio menos propenso a disparar.
-        *   **Efeito da Dopamina:** Similarmente, o nível normalizado de dopamina ajusta multiplicativamente o `CurrentFiringThreshold` (após a aplicação do efeito do cortisol). O parâmetro `FiringThresholdIncreaseOnDopa` controla este efeito.
-        *   Ambos os efeitos são aplicados sequencialmente, e o `CurrentFiringThreshold` resultante é então sujeito a um valor mínimo absoluto. A lógica anterior que descrevia um efeito em "U" para o cortisol não reflete a implementação atual.
+        *   Os níveis de neuroquímicos (cortisol e dopamina) modulam dinamicamente o `CurrentFiringThreshold` de cada neurônio. Este é derivado do `BaseFiringThreshold` do neurônio.
+        *   **Efeito do Cortisol:** O `CurrentFiringThreshold` é ajustado multiplicativamente com base no nível normalizado de cortisol. O parâmetro `FiringThresholdIncreaseOnCort` (em `SimulationParameters.Neurochemical`) define a força e direção: um valor positivo aumenta o limiar com cortisol elevado.
+        *   **Efeito da Dopamina:** Similarmente, o nível normalizado de dopamina ajusta multiplicativamente o `CurrentFiringThreshold` (após o efeito do cortisol), controlado por `FiringThresholdIncreaseOnDopa`.
+        *   Ambos os efeitos são aplicados sequencialmente. O "efeito em U" do cortisol mencionado em documentação mais antiga não está implementado; o efeito é direto.
     *   **Na Taxa de Aprendizado Hebbiano:** Detalhado na Seção 4 (Aprendizado Sináptico).
     *   **Na Taxa de Sinaptogênese:** Detalhado na Seção 5 (Sinaptogênese).
 

@@ -56,14 +56,15 @@ O diagrama a seguir ilustra as interações entre os principais pacotes do siste
 
 **Legenda do Diagrama:**
 
-*   **`main`**: Ponto de entrada da aplicação, processa argumentos da CLI.
-*   **`cli`**: Orquestra a aplicação com base no modo e argumentos fornecidos. Utiliza `config` para obter parâmetros e instrui `network` para executar simulações.
-*   **`config`**: Fornece dados de configuração (carregados de flags ou arquivos) para `cli` e `network`.
+*   **`main`**: Ponto de entrada da aplicação, agora invoca a estrutura de comandos `cmd`.
+*   **`cmd`**: (Novo pacote) Gerencia a estrutura de subcomandos da CLI usando a biblioteca Cobra, define flags e executa a lógica apropriada chamando o `cli.Orchestrator`.
+*   **`cli`**: Orquestra a lógica de execução para cada modo/comando principal (`sim`, `expose`, `observe`, `logutil`). É chamado pelo pacote `cmd`.
+*   **`config`**: Define as structs de configuração (`AppConfig`, `SimulationParameters`, etc.) e a lógica de validação. Usado por `cmd` e `cli`. Carrega de TOML se especificado.
 *   **`network`**: Componente central da aplicação. Recebe comandos e configurações, e utiliza pacotes especializados (`neuron`, `pulse`, `neurochemical`, `synaptic`, `space`, `datagen`, `common`) para realizar a simulação.
 *   **`storage`**: Gerencia o salvamento e carregamento de dados (ex: pesos da rede, logs da simulação). `network` é seu cliente principal.
 *   **Dependencies of `Network`**: Representa o conjunto de pacotes que fornecem as funcionalidades detalhadas para a simulação gerenciada por `network`. `datagen` fornece padrões de entrada, e `common` fornece tipos e utilitários compartilhados.
 
-Este diagrama simplifica algumas interações para clareza, mas visa fornecer uma visão geral dos principais blocos arquiteturais e fluxos de dados.
+Este diagrama simplifica algumas interações para clareza. **Nota:** Com a introdução da biblioteca Cobra, o pacote `cmd` agora é o principal manipulador da CLI, que por sua vez utiliza `cli` e `config`.
 
 ## 2. Estrutura de Pacotes
 
@@ -72,15 +73,23 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
 *   **`main`** (Ponto de Entrada)
     *   Localizado na raiz do projeto (`main.go`).
     *   Responsável por:
-        *   Processar os argumentos da linha de comando (flags) utilizando o pacote `flag`.
-        *   Invocar o pacote `cli` para orquestrar a execução com base nos argumentos fornecidos.
-    *   Depende de: `cli`, `os`, `fmt`, `flag`.
+        *   Invocar o sistema de comandos Cobra (`cmd.Execute()`) para processar argumentos da CLI e executar o comando apropriado.
+    *   Depende de: `cmd`.
 
-*   **`cli`** (Orquestrador da Linha de Comando)
+*   **`cmd`** (Interface de Linha de Comando - Cobra)
+    *   Localizado em `cmd/`.
+    *   Responsável por:
+        *   Definir a estrutura de subcomandos da CLI (`sim`, `expose`, `observe`, `logutil export`, etc.) usando `spf13/cobra`.
+        *   Definir e parsear flags globais e específicas de cada comando.
+        *   Construir `config.AppConfig` com base em padrões, arquivo TOML (se fornecido) e flags CLI.
+        *   Invocar o `cli.Orchestrator` com a configuração apropriada para executar a lógica do comando.
+    *   Depende de: `cli`, `config`, `storage` (para `logutil`), `spf13/cobra`, `fmt`, `log`.
+
+*   **`cli`** (Orquestrador dos Modos de Operação)
     *   Localizado em `cli/orchestrator.go`.
     *   Responsável por:
-        *   Interpretar os argumentos da CLI e os modos de operação (`expose`, `observe`, `sim`).
-        *   Coordenar a inicialização da configuração (`config`), da rede (`network`), e dos dados de entrada (`datagen`).
+        *   Conter a lógica de execução para cada modo principal da aplicação (`sim`, `expose`, `observe`, `logutil`).
+        *   Coordenar a inicialização da rede (`network`), e dos dados de entrada (`datagen`).
         *   Gerenciar o fluxo principal da simulação para o modo selecionado, incluindo carregar/salvar estados via `storage`.
         *   Apresentar feedback e resultados ao usuário no console.
     *   Depende de: `config`, `network`, `datagen`, `storage`, `fmt`, `log`, `time`.
@@ -88,11 +97,11 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
 *   **`config`** (Configuração da Aplicação e Simulação)
     *   Localizado em `config/config.go`.
     *   Responsável por:
-        *   Definir as estruturas `AppConfig`, `CLIConfig`, e `SimulationParameters` que armazenam todos os parâmetros configuráveis.
-        *   Carregar configurações a partir de flags da linha de comando.
-        *   Validar os parâmetros de simulação.
-        *   Disponibilizar estas configurações para outros pacotes.
-    *   Depende de: `flag`, `fmt`, `os`, `time`, `encoding/json` (para potencial carregamento/salvamento futuro, não apenas flags).
+        *   Definir as estruturas `AppConfig`, `CLIConfig`, e `SimulationParameters` (agora agrupada em sub-structs) que armazenam todos os parâmetros configuráveis.
+        *   Fornecer valores padrão para `SimulationParameters`.
+        *   Validar os parâmetros de configuração (`AppConfig.Validate()`).
+        *   (A lógica de parsing de flags CLI foi movida para o pacote `cmd`. O carregamento de TOML é iniciado pelo pacote `cmd`.)
+    *   Depende de: `fmt`, `strings`, `time`, `crownet/common`, `path/filepath`.
 
 *   **`common`** (Tipos e Utilitários Comuns)
     *   Localizado em `common/types.go`.
@@ -170,11 +179,11 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
 *   **`neuron.Neuron`**:
     *   `ID neuron.NeuronID` (tipo encapsulado)
     *   `Position common.Point`
-    *   `Type neuron.NeuronType` (Enum: Excitatory, Inhibitory, Dopaminergic, Input, Output)
-    *   `State neuron.NeuronState` (Enum: Resting, Firing, AbsoluteRefractory, RelativeRefractory)
-    *   `AccumulatedPulse float64`
-    *   `BaseFiringThreshold float64` (configurável)
-    *   `CurrentFiringThreshold float64` (modulado dinamicamente)
+    *   `Type neuron.Type` (Enum: Excitatory, Inhibitory, Dopaminergic, Input, Output)
+    *   `CurrentState neuron.State` (Enum: Resting, Firing, AbsoluteRefractory, RelativeRefractory)
+    *   `AccumulatedPotential common.PulseValue`
+    *   `BaseFiringThreshold common.Threshold` (configurável)
+    *   `CurrentFiringThreshold common.Threshold` (modulado dinamicamente)
     *   `LastFiredCycle int`
     *   `CyclesInCurrentState int`
     *   `Velocity common.Point` (usado pela sinaptogênese)
@@ -197,13 +206,14 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
     *   `NeuronMap map[neuron.NeuronID]*neuron.Neuron` (para acesso rápido aos neurônios por ID)
     *   `ActivePulses *pulse.PulseList` (gerenciador de pulsos ativos)
     *   `SynapticWeights *synaptic.SynapticWeights` (pesos sinápticos da rede)
-    *   `InputNeuronIDSet map[neuron.NeuronID]struct{}` (conjunto de IDs de neurônios de entrada)
-    *   `OutputNeuronIDSet map[neuron.NeuronID]struct{}` (conjunto de IDs de neurônios de saída)
-    *   `Cortisol *neurochemical.Neurochemical` (estado do Cortisol)
-    *   `Dopamine *neurochemical.Neurochemical` (estado da Dopamina)
-    *   `CycleCount int` (contador de ciclos de simulação)
-    *   `Stats *network.SimulationStats` (para coletar estatísticas da simulação)
-    *   Outros campos para gerenciamento interno (ex: `rng *rand.Rand` para reprodutibilidade).
+    *   `ChemicalEnv *neurochemical.Environment` (gerencia Cortisol, Dopamina e seus efeitos)
+    *   `SpatialGrid *space.SpatialGrid` (para otimizações espaciais)
+    *   `InputNeuronIDSet map[common.NeuronID]struct{}` (conjunto de IDs de neurônios de entrada)
+    *   `OutputNeuronIDSet map[common.NeuronID]struct{}` (conjunto de IDs de neurônios de saída)
+    *   `CycleCount common.CycleCount` (contador de ciclos de simulação)
+    *   `SynaptogenesisForceCalculator network.ForceCalculator` (para estratégia de cálculo de força)
+    *   `SynaptogenesisMovementUpdater network.MovementUpdater` (para estratégia de atualização de movimento)
+    *   Outros campos para gerenciamento interno (ex: `rng *rand.Rand` para reprodutibilidade, `baseLearningRate`).
 
 ## 4. Principais Algoritmos
 
@@ -245,8 +255,8 @@ A arquitetura do CrowNet é implementada através dos seguintes pacotes Go, cada
     9.  Incrementar `CycleCount` e coletar estatísticas.
 
 *   **Modulação Química Detalhada**:
-    *   **Limiares de Disparo**: Conforme descrito em `RunCycle` (item 6), os limiares são ajustados diretamente pelos níveis de Cortisol e Dopamina e seus respectivos fatores de influência (`FiringThresholdIncreaseOnCort`, `FiringThresholdIncreaseOnDopa`). Um valor positivo de `FiringThresholdIncreaseOnCort` significa que o Cortisol aumenta o limiar, tornando o disparo mais difícil. O mesmo se aplica à Dopamina. Os efeitos são combinados.
-    *   **Taxa de Aprendizado e Sinaptogênese**: Os níveis de Cortisol e Dopamina são usados para calcular um `ModulationFactor` (tipicamente entre 0.0 e >1.0). Este fator escala a `BaseLearningRate` e a taxa de movimento da sinaptogênese. Altos níveis de Cortisol tendem a reduzir este fator, enquanto a Dopamina tende a aumentá-lo, conforme definido pelos parâmetros em `SimulationParameters`.
+    *   **Limiares de Disparo**: Conforme descrito em `RunCycle` (item 6), os limiares são ajustados diretamente pelos níveis de Cortisol e Dopamina e seus respectivos fatores de influência (`FiringThresholdIncreaseOnCort`, `FiringThresholdIncreaseOnDopa` em `SimulationParameters.Neurochemical`). Um valor positivo de `FiringThresholdIncreaseOnCort` significa que o Cortisol aumenta o limiar. O efeito em "U" do cortisol não está implementado; o efeito é direto.
+    *   **Taxa de Aprendizado e Sinaptogênese**: Os níveis de Cortisol e Dopamina são usados para calcular um `ModulationFactor` (tipicamente entre 0.0 e >1.0). Este fator escala a `BaseLearningRate` e a taxa de movimento da sinaptogênese. Altos níveis de Cortisol tendem a reduzir este fator, enquanto a Dopamina tende a aumentá-lo, conforme definido pelos parâmetros em `SimulationParameters.Neurochemical` e `SimulationParameters.Learning`.
 
 ## 5. Padrões de Projeto Identificados/Sugeridos
 
@@ -264,9 +274,9 @@ A arquitetura atual é funcional para o MVP. A reescrita focará em refinar a mo
 Esta seção descreve áreas potenciais para evolução da arquitetura e propostas de reescrita que podem melhorar ainda mais a manutenibilidade, extensibilidade, testabilidade, configurabilidade e desempenho do CrowNet. Estas propostas baseiam-se nos Requisitos Não Funcionais (especialmente RNF-EXT, RNF-CONF, RNF-TEST, RNF-REL) e na experiência adquirida durante o desenvolvimento e refatoração do MVP.
 
 ### 6.1. Gestão Avançada de Configuração
-*   **Problema/Área:** Configuração atual primariamente via flags CLI.
-*   **Proposta:** Implementar carregamento de parâmetros de simulação a partir de arquivos de configuração (ex: TOML, YAML), conforme RNF-CONF-001. Flags CLI poderiam especificar o arquivo ou sobrescrever valores.
-*   **Benefícios:** Facilita o gerenciamento de configurações complexas, versionamento e compartilhamento. Reduz a necessidade de longas strings de comando.
+*   **Status Atual:** A configuração via arquivo TOML (usando a flag global `--configFile`) foi implementada (FEATURE-CONFIG-001). A ordem de precedência é: Padrões -> TOML -> Flags CLI. A struct `SimulationParameters` foi agrupada em sub-structs, o que deve ser refletido no arquivo TOML (ex: seções aninhadas como `[sim_params.general]`, `[sim_params.learning]`). Veja `config.example.toml`.
+*   **Proposta Futura:** Explorar bibliotecas de configuração mais avançadas (ex: Viper) para gerenciamento unificado de defaults, arquivos, variáveis de ambiente e flags, se necessário.
+*   **Benefícios:** Facilita o gerenciamento de configurações complexas, versionamento e compartilhamento.
 
 ### 6.2. Melhorias na Extensibilidade (RNF-EXT-001)
 *   **Problema/Área:** Facilitar a adição de novos tipos de neurônios, efeitos neuroquímicos e regras de aprendizado.

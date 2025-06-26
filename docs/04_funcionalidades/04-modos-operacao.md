@@ -1,66 +1,53 @@
 # Funcionalidade: Modos de Operação da CLI CrowNet
 
+**NOTA IMPORTANTE: A interface de linha de comando (CLI) foi refatorada para usar subcomandos (ex: `crownet sim`, `crownet expose`) em vez da flag `-mode`. Esta página precisa de uma atualização completa para refletir a nova estrutura de comandos e flags detalhada em `docs/03_guias/guia_interface_linha_comando.md`. As descrições de propósito e dinâmicas dos modos abaixo ainda são relevantes, mas os exemplos de flags estão desatualizados.**
+
 ## 1. Visão Geral
 
-A aplicação de linha de comando (CLI) CrowNet opera através de diferentes modos, cada um projetado para uma finalidade específica na simulação e análise da rede neural. Estes modos são controlados principalmente pelo flag `-mode` na CLI.
+A aplicação de linha de comando (CLI) CrowNet opera através de diferentes modos (agora subcomandos), cada um projetado para uma finalidade específica na simulação e análise da rede neural.
 
-Este documento fornece um sumário de cada modo, suas configurações chave e um link para o caso de uso detalhado correspondente.
+Este documento fornece um sumário de cada modo/comando, suas configurações chave e um link para o caso de uso detalhado correspondente. Consulte `docs/03_guias/guia_interface_linha_comando.md` para a sintaxe atualizada dos comandos e flags.
 
-## 2. Flags Globais Comuns
+## 2. Flags Globais Comuns (Agora Flags Persistentes do Comando Raiz)
 
-Alguns flags são comuns e podem ser aplicáveis a múltiplos modos de operação:
+Algumas flags são aplicáveis globalmente:
+*   `--configFile <string>`: Caminho para arquivo de configuração TOML.
+*   `--seed <int64>`: Semente para aleatoriedade.
 
-*   `-neurons <int>`: Especifica o número total de neurônios na rede.
-*   `-weightsFile <string>`: Define o caminho para o arquivo JSON usado para salvar ou carregar os pesos sinápticos da rede.
-*   `-dbPath <string>`: (Opcional) Caminho para um arquivo SQLite onde snapshots detalhados do estado da simulação podem ser registrados.
-*   `-saveInterval <int>`: (Relevante se `-dbPath` for usado) Intervalo de ciclos para salvar o estado da rede no arquivo SQLite.
-*   `-debugChem <bool>`: (Opcional) Habilita logs de depuração adicionais relacionados aos neuroquímicos.
-*   `-cycles <int>`: (Uso varia por modo) Número geral de ciclos para uma simulação. Note que modos específicos como `expose` e `observe` usam flags de ciclo mais granulares.
+Outras flags que eram "globais" (ex: `--neurons`, `--weightsFile`, `--dbPath`, `--lrBase`) agora são específicas para os subcomandos de simulação (`sim`, `expose`, `observe`).
 
-## 3. Modo `expose`
+## 3. Comando `expose` (Anteriormente Modo `expose`)
 
-*   **Propósito:** Expor a rede a sequências de padrões de dígitos (0-9) repetidamente. Este é o modo primário de "treinamento", permitindo que a rede auto-organize seus pesos sinápticos através da plasticidade Hebbiana neuromodulada.
-*   **Dinâmicas Ativas:**
-    *   Plasticidade Hebbiana (atualização de pesos).
-    *   Modulação Química (produção, decaimento e efeitos de cortisol/dopamina).
-    *   Sinaptogênese (movimento de neurônios).
-*   **Flags Específicas Principais:**
-    *   `-mode expose`
-    *   `-epochs <int>`: Número de vezes que o conjunto completo de padrões de dígitos será apresentado.
-    *   `-lrBase <float>`: Taxa de aprendizado base para a regra Hebbiana.
-    *   `-cyclesPerPattern <int>`: Número de ciclos de simulação para cada padrão de dígito apresentado.
-*   **Detalhes do Fluxo:** Para uma descrição completa do processo, interações e tratamento de erros, consulte o caso de uso:
-    *   [**UC-EXPOSE: Expor Rede a Padrões para Auto-Aprendizagem](./casos-de-uso/uc-expose.md)**
+*   **Propósito:** Expor a rede a sequências de padrões de dígitos (0-9) repetidamente. Este é o comando primário de "treinamento".
+*   **Dinâmicas Ativas:** Plasticidade Hebbiana, Modulação Química, Sinaptogênese.
+*   **Exemplo de Uso (Novo):** `./crownet expose --epochs 50 --lrBase 0.01 --weightsFile pesos.json`
+*   **Flags Chave (Consulte `crownet expose --help` para lista completa e atualizada):**
+    *   `--epochs`, `--lrBase`, `--cyclesPerPattern`, `--weightsFile`, `--neurons`, etc.
+*   **Detalhes do Fluxo:** [**UC-EXPOSE: Expor Rede a Padrões para Auto-Aprendizagem](./casos-de-uso/uc-expose.md)**
 
-## 4. Modo `observe`
+## 4. Comando `observe` (Anteriormente Modo `observe`)
 
-*   **Propósito:** Carregar um conjunto de pesos sinápticos previamente aprendidos e apresentar um dígito específico à rede. O objetivo é observar o padrão de ativação resultante nos neurônios de saída, permitindo avaliar o que a rede aprendeu.
-*   **Dinâmicas Ativas (Modificadas para Observação):**
-    *   Plasticidade Hebbiana: Desativada (taxa de aprendizado zero).
-    *   Sinaptogênese: Desativada.
-    *   Modulação Química: Desativada (limiares neuronais em valores base, sem produção/efeito de químicos).
-    *   *Esta configuração garante uma observação "limpa" da resposta da rede aos pesos fixos.*
-*   **Flags Específicas Principais:**
-    *   `-mode observe`
-    *   `-digit <0-9>`: O dígito específico a ser apresentado.
-    *   `-cyclesToSettle <int>`: Número de ciclos para permitir que a atividade da rede se estabilize antes de ler a saída.
-*   **Detalhes do Fluxo:** Para uma descrição completa do processo, interações e tratamento de erros, consulte o caso de uso:
-    *   [**UC-OBSERVE: Observar Resposta da Rede a um Padrão](./casos-de-uso/uc-observe.md)**
+*   **Propósito:** Carregar pesos sinápticos previamente aprendidos e apresentar um dígito específico à rede.
+*   **Dinâmicas Ativas (Modificadas para Observação):** Aprendizado, sinaptogênese e modulação química desativados.
+*   **Exemplo de Uso (Novo):** `./crownet observe --digit 7 --weightsFile pesos.json`
+*   **Flags Chave (Consulte `crownet observe --help`):**
+    *   `--digit`, `--cyclesToSettle`, `--weightsFile`, `--neurons`, etc.
+*   **Detalhes do Fluxo:** [**UC-OBSERVE: Observar Resposta da Rede a um Padrão](./casos-de-uso/uc-observe.md)**
 
-## 5. Modo `sim`
+## 5. Comando `sim` (Anteriormente Modo `sim`)
 
-*   **Propósito:** Executar uma simulação geral da rede CrowNet com todas as suas dinâmicas intrínsecas ativas. Este modo é útil para observar comportamentos emergentes, testar configurações específicas sob estímulo contínuo, ou para logging detalhado e análise da evolução da rede ao longo do tempo.
-*   **Dinâmicas Ativas:** Todas as dinâmicas estão normalmente ativas:
-    *   Plasticidade Hebbiana.
-    *   Modulação Química.
-    *   Sinaptogênese.
-*   **Flags Específicas Principais:**
-    *   `-mode sim`
-    *   `-cycles <int>`: (Usado aqui) Número total de ciclos para a simulação.
-    *   `-stimInputID <int>`: (Opcional) ID de um neurônio de entrada para receber estímulo contínuo.
-    *   `-stimInputFreqHz <float>`: (Relevante se `-stimInputID` usado) Frequência do estímulo.
-    *   `-monitorOutputID <int>`: (Opcional) ID de um neurônio de saída para monitorar sua frequência de disparo.
-*   **Detalhes do Fluxo:** Para uma descrição completa do processo, interações e tratamento de erros, consulte o caso de uso:
-    *   [**UC-SIM: Executar Simulação Geral da Rede](./casos-de-uso/uc-sim.md)**
+*   **Propósito:** Executar uma simulação geral da rede CrowNet com todas as suas dinâmicas intrínsecas ativas.
+*   **Dinâmicas Ativas:** Plasticidade Hebbiana, Modulação Química, Sinaptogênese.
+*   **Exemplo de Uso (Novo):** `./crownet sim --cycles 1000 --dbPath sim.db`
+*   **Flags Chave (Consulte `crownet sim --help`):**
+    *   `--cycles`, `--stimInputID`, `--stimInputFreqHz`, `--monitorOutputID`, `--dbPath`, `--neurons`, etc.
+*   **Detalhes do Fluxo:** [**UC-SIM: Executar Simulação Geral da Rede](./casos-de-uso/uc-sim.md)**
 
-A combinação destes modos permite um ciclo completo de treinamento, teste e análise da rede neural CrowNet.
+## 6. Comando `logutil` (Novo)
+*   **Propósito:** Fornecer utilitários para interagir com os logs SQLite.
+*   **Subcomando `export`:** Exporta tabelas do log para CSV.
+*   **Exemplo de Uso (Novo):** `./crownet logutil export --dbPath sim.db --table NetworkSnapshots`
+*   **Flags Chave (Consulte `crownet logutil export --help`):**
+    *   `--dbPath`, `--table`, `--format`, `--output`.
+
+A combinação destes comandos permite um ciclo completo de treinamento, teste, análise e exportação de dados da rede neural CrowNet.
