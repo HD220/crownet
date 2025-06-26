@@ -80,15 +80,47 @@ func (p *Pulse) GetEffectShellForCycle(simParams *config.SimulationParameters) (
 
 // PulseList manages a collection of active pulses within the neural network.
 // It provides methods to add, clear, and access these pulses.
-// Its main responsibility is to orchestrate the processing of all pulses during a simulation cycle.
+// Its main responsibility is to orchestrate the processing of all pulses during a simulation cycle,
+// using configurable strategies for propagation, target selection, and impact calculation.
 type PulseList struct {
-	pulses []*Pulse // Internal slice holding the active pulses.
+	pulses         []*Pulse // Internal slice holding the active pulses.
+	propagator     PulsePropagator
+	zoneProvider   PulseEffectZoneProvider
+	targetSelector PulseTargetSelector
+	impactCalc     PulseImpactCalculator
 }
 
 // NewPulseList creates and returns an empty PulseList, ready to store pulses.
+// It initializes with default strategy implementations.
 func NewPulseList() *PulseList {
 	return &PulseList{
-		pulses: make([]*Pulse, 0), // Initialize with an empty slice of capacity 0.
+		pulses:         make([]*Pulse, 0),
+		propagator:     &DefaultPulsePropagator{},
+		zoneProvider:   &DefaultPulseEffectZoneProvider{},
+		targetSelector: &DefaultPulseTargetSelector{},
+		impactCalc:     &DefaultPulseImpactCalculator{},
+	}
+}
+
+// SetStrategies allows for overriding the default pulse processing strategies.
+// This is useful for testing or for implementing alternative simulation mechanics.
+func (pl *PulseList) SetStrategies(
+	propagator PulsePropagator,
+	zoneProvider PulseEffectZoneProvider,
+	targetSelector PulseTargetSelector,
+	impactCalc PulseImpactCalculator,
+) {
+	if propagator != nil {
+		pl.propagator = propagator
+	}
+	if zoneProvider != nil {
+		pl.zoneProvider = zoneProvider
+	}
+	if targetSelector != nil {
+		pl.targetSelector = targetSelector
+	}
+	if impactCalc != nil {
+		pl.impactCalc = impactCalc
 	}
 }
 
@@ -142,66 +174,9 @@ func (pl *PulseList) Count() int {
 //   - shellEndRadius: The outer radius of the pulse's current effect shell.
 //
 // Returns:
-//   - *Pulse: A pointer to a newly generated pulse if the targetNeuron fires, otherwise nil.
-func processSinglePulseOnTargetNeuron(
-	p *Pulse,
-	targetNeuron *neuron.Neuron,
-	weights *synaptic.NetworkWeights, // Corrected to pointer type
-	currentCycle common.CycleCount,
-	simParams *config.SimulationParameters,
-	shellStartRadius, shellEndRadius float64,
-) (newlyGeneratedPulse *Pulse) {
-
-	// Defensive nil checks for critical parameters.
-	if p == nil || targetNeuron == nil || weights == nil || simParams == nil {
-		// Log this critical error if a logging mechanism is available.
-		// This state should ideally not be reached in normal operation.
-		return nil
-	}
-
-	// A neuron cannot be affected by its own pulse directly in this manner.
-	if targetNeuron.ID == p.EmittingNeuronID {
-		return nil
-	}
-
-	// Calculate the distance from the pulse's origin to the target neuron.
-	distanceToTarget := space.EuclideanDistance(p.OriginPosition, targetNeuron.Position)
-
-	// Check if the target neuron is within the pulse's current spherical shell of effect.
-	if distanceToTarget >= shellStartRadius && distanceToTarget < shellEndRadius {
-		// Retrieve synaptic weight between the emitting neuron of the pulse and the target neuron.
-		weight := weights.GetWeight(p.EmittingNeuronID, targetNeuron.ID)
-
-		// Calculate the effective potential received by the target neuron.
-		// BaseSignalValue and weight are common.PulseValue and common.SynapticWeight respectively (underlying float64).
-		effectivePotential := p.BaseSignalValue * common.PulseValue(weight)
-
-		// If the effective potential is zero (e.g., zero weight or zero base signal), it has no effect.
-		if effectivePotential == 0 {
-			return nil
-		}
-
-		// Integrate the potential into the target neuron. This returns true if the neuron fires.
-		if targetNeuron.IntegrateIncomingPotential(effectivePotential, currentCycle) {
-			// If the target neuron fired, determine the signal of the new pulse it emits.
-			emittedSignal := targetNeuron.EmittedPulseSign()
-			if emittedSignal != 0 { // Only create a new pulse if the emitted signal is non-neutral.
-				// Create and return the new pulse.
-				// Its MaxTravelRadius is based on SpaceMaxDimension multiplied by a factor.
-				newPulseMaxRadius := simParams.SpaceMaxDimension * defaultPulseMaxTravelRadiusFactor
-				return New(
-					targetNeuron.ID,
-					targetNeuron.Position,
-					emittedSignal,
-					currentCycle,
-					newPulseMaxRadius,
-				)
-			}
-		}
-	}
-	// No new pulse generated if neuron not in shell, potential is zero, or neuron doesn't fire/emits neutral signal.
-	return nil
-}
+// REFACTOR-005: processSinglePulseOnTargetNeuron logic is now handled by implementations
+// of the PulseImpactCalculator interface (e.g., DefaultPulseImpactCalculator).
+// The original function has been removed.
 
 // ProcessCycle advances the state of all pulses in the PulseList by one simulation cycle.
 // It involves several steps:
@@ -220,19 +195,27 @@ func processSinglePulseOnTargetNeuron(
 //     Note: This is expected to be `*synaptic.NetworkWeights` after its refactoring.
 //   - currentCycle: The current simulation cycle number.
 //   - simParams: Global simulation parameters.
+//   - allNeurons: A slice of all neurons in the network, potentially used by some target selectors.
 //
 // Returns:
 //   - []*Pulse: A slice of all pulses newly generated during this cycle.
 func (pl *PulseList) ProcessCycle(
-	spatialGrid *space.SpatialGrid,
-	weights *synaptic.NetworkWeights, // Corrected to pointer type
+	spatialGrid *space.SpatialGrid, // Can be nil if targetSelector doesn't use it
+	weights *synaptic.NetworkWeights,
 	currentCycle common.CycleCount,
 	simParams *config.SimulationParameters,
+	allNeurons []*neuron.Neuron, // For target selectors that might not use spatial grid
 ) (newlyGeneratedPulses []*Pulse) {
 
-	// Defensive nil checks for critical parameters.
-	if spatialGrid == nil || weights == nil || simParams == nil {
-		// Log this critical error if a logging mechanism is available.
+	// Defensive nil checks for strategies and critical parameters.
+	if pl.propagator == nil || pl.zoneProvider == nil || pl.targetSelector == nil || pl.impactCalc == nil {
+		// This indicates PulseList was not properly initialized or strategies were nilled.
+		// Log a critical error or panic. For now, return empty.
+		// log.Printf("Critical error: PulseList strategies not initialized in ProcessCycle")
+		return make([]*Pulse, 0)
+	}
+	if weights == nil || simParams == nil || allNeurons == nil {
+		// log.Printf("Critical error: ProcessCycle called with nil weights, simParams, or allNeurons")
 		return make([]*Pulse, 0)
 	}
 
@@ -240,23 +223,21 @@ func (pl *PulseList) ProcessCycle(
 	newlyGeneratedPulses = make([]*Pulse, 0)
 
 	for _, p := range pl.pulses {
-		if !p.Propagate(simParams) {
-			continue
+		// 1. Propagate pulse using the strategy
+		if !pl.propagator.Propagate(p, simParams) {
+			continue // Pulse is no longer active
 		}
 		remainingActivePulses = append(remainingActivePulses, p)
 
-		shellStartRadius, shellEndRadius := p.GetEffectShellForCycle(simParams)
+		// 2. Determine effect zone using the strategy
+		shellStartRadius, shellEndRadius := pl.zoneProvider.GetEffectShell(p, simParams)
 
-		// Phase 2: Use spatial grid to get candidate neurons near the pulse's outer shell.
-		// The query center for the pulse's effect is its origin.
-		candidateNeurons := spatialGrid.QuerySphereForCandidates(p.OriginPosition, shellEndRadius)
+		// 3. Select candidate targets using the strategy
+		candidateNeurons := pl.targetSelector.GetCandidateTargets(p, shellEndRadius, spatialGrid, allNeurons, simParams)
 
+		// 4. Calculate impact on each candidate target using the strategy
 		for _, targetNeuron := range candidateNeurons {
-			// processSinglePulseOnTargetNeuron already checks the exact distance for the shell
-			// if we modify it slightly, or we do the full check here.
-			// The current processSinglePulseOnTargetNeuron takes shellStart/EndRadius.
-			// Let's keep it that way, it will re-check distance but on a smaller set.
-			if newPulse := processSinglePulseOnTargetNeuron(p, targetNeuron, weights, currentCycle, simParams, shellStartRadius, shellEndRadius); newPulse != nil {
+			if newPulse := pl.impactCalc.CalculateImpact(p, targetNeuron, weights, currentCycle, simParams, shellStartRadius, shellEndRadius); newPulse != nil {
 				newlyGeneratedPulses = append(newlyGeneratedPulses, newPulse)
 			}
 		}
