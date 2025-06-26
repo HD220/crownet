@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	// "fmt" // Unused import
 
 	"github.com/spf13/cobra"
 )
