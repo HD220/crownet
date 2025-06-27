@@ -9,7 +9,25 @@ import (
 	"crownet/cli"
 	"crownet/common"
 	"crownet/config"
+	"encoding/json" // For JSON validation
 )
+
+// Helper function to create a minimal AppConfig for expose tests
+func newTestExposeAppConfig(tempDir string, weightsFileName string) *config.AppConfig {
+	tempWeightsFilePath := filepath.Join(tempDir, weightsFileName)
+	return &config.AppConfig{
+		SimParams: config.DefaultSimulationParameters(),
+		Cli: config.CLIConfig{
+			Mode:             config.ModeExpose,
+			TotalNeurons:     50, // Satisfies MinInput (35) + MinOutput (10)
+			Seed:             time.Now().UnixNano(),
+			WeightsFile:      tempWeightsFilePath,
+			BaseLearningRate: common.Rate(0.01),
+			Epochs:           1,
+			CyclesPerPattern: 1,
+		},
+	}
+}
 
 func TestExposeCommand_BasicRun(t *testing.T) {
 	// 1. Create a temporary directory for test artifacts
@@ -61,7 +79,112 @@ func TestExposeCommand_BasicRun(t *testing.T) {
 	if _, errStat := os.Stat(tempWeightsFilePath); os.IsNotExist(errStat) {
 		t.Errorf("Expected weights file to be created at %s, but it was not found.", tempWeightsFilePath)
 	}
+	// BasicRun already covers creation, more detailed checks in specific tests below.
+}
 
-	// t.Cleanup() will automatically handle removal of tempDir if t.TempDir() was used.
-	// If manual temp dir creation was used, os.RemoveAll(tempDir) would be needed in t.Cleanup().
+func TestExposeCommand_NewWeightsFileCreation(t *testing.T) {
+	tempDir := t.TempDir()
+	weightsFileName := "new_weights.json"
+	tempWeightsFilePath := filepath.Join(tempDir, weightsFileName)
+
+	appCfg := newTestExposeAppConfig(tempDir, weightsFileName)
+
+	orchestrator := cli.NewOrchestrator(appCfg)
+	err := orchestrator.Run()
+	if err != nil {
+		t.Fatalf("Orchestrator.Run() for new weights file creation failed: %v", err)
+	}
+
+	// 1. Check existence
+	fileInfo, errStat := os.Stat(tempWeightsFilePath)
+	if os.IsNotExist(errStat) {
+		t.Fatalf("Expected weights file '%s' to be created, but it was not found.", tempWeightsFilePath)
+	}
+	if errStat != nil {
+		t.Fatalf("Error stating weights file '%s': %v", tempWeightsFilePath, errStat)
+	}
+
+	// 2. Check not empty
+	if fileInfo.Size() == 0 {
+		t.Errorf("Expected weights file '%s' to be non-empty, but it was empty.", tempWeightsFilePath)
+	}
+
+	// 3. Check valid JSON
+	content, errRead := os.ReadFile(tempWeightsFilePath)
+	if errRead != nil {
+		t.Fatalf("Failed to read created weights file '%s': %v", tempWeightsFilePath, errRead)
+	}
+	var jsonData interface{} // Use interface{} for generic JSON validation
+	if errJson := json.Unmarshal(content, &jsonData); errJson != nil {
+		t.Errorf("Expected weights file '%s' to contain valid JSON, but unmarshal failed: %v", tempWeightsFilePath, errJson)
+	}
+}
+
+func TestExposeCommand_ModifyWeightsFile(t *testing.T) {
+	tempDir := t.TempDir()
+	weightsFileName := "existing_weights.json"
+	tempWeightsFilePath := filepath.Join(tempDir, weightsFileName)
+
+	// 1. Create a dummy initial weights file
+	initialContent := []byte(`{"0":{"1":0.5}}`) // Simple valid JSON
+	errWrite := os.WriteFile(tempWeightsFilePath, initialContent, 0644)
+	if errWrite != nil {
+		t.Fatalf("Failed to create initial dummy weights file '%s': %v", tempWeightsFilePath, errWrite)
+	}
+	initialFileInfo, _ := os.Stat(tempWeightsFilePath)
+	initialModTime := initialFileInfo.ModTime()
+
+	// Ensure there's a slight delay for ModTime to change reliably
+	time.Sleep(10 * time.Millisecond)
+
+	appCfg := newTestExposeAppConfig(tempDir, weightsFileName)
+	// Potentially reduce neuron count further if possible, or ensure SimParams match dummy file
+	// For this test, we primarily care that it *overwrites* or *modifies*.
+	// The default SimParams might generate a different structure if neuron counts don't align.
+	// Let's use a small number of neurons consistent with the dummy file structure if needed.
+	// For simplicity, we'll assume the new run with 50 neurons will overwrite it completely.
+
+	orchestrator := cli.NewOrchestrator(appCfg)
+	err := orchestrator.Run()
+	if err != nil {
+		t.Fatalf("Orchestrator.Run() for modifying weights file failed: %v", err)
+	}
+
+	// 2. Check modification
+	finalFileInfo, errStat := os.Stat(tempWeightsFilePath)
+	if os.IsNotExist(errStat) {
+		t.Fatalf("Expected weights file '%s' to still exist, but it was not found.", tempWeightsFilePath)
+	}
+	if errStat != nil {
+		t.Fatalf("Error stating weights file '%s' after run: %v", tempWeightsFilePath, errStat)
+	}
+
+	if !finalFileInfo.ModTime().After(initialModTime) {
+		t.Errorf("Expected weights file '%s' to be modified (modTime after initial), but it was not. Initial: %v, Final: %v",
+			tempWeightsFilePath, initialModTime, finalFileInfo.ModTime())
+	}
+
+	// 3. Check not empty (it should be overwritten with new weights)
+	if finalFileInfo.Size() == 0 {
+		t.Errorf("Expected modified weights file '%s' to be non-empty.", tempWeightsFilePath)
+	}
+
+	// 4. Check valid JSON
+	finalContent, errRead := os.ReadFile(tempWeightsFilePath)
+	if errRead != nil {
+		t.Fatalf("Failed to read modified weights file '%s': %v", tempWeightsFilePath, errRead)
+	}
+	var jsonData interface{}
+	if errJson := json.Unmarshal(finalContent, &jsonData); errJson != nil {
+		t.Errorf("Expected modified weights file '%s' to contain valid JSON, but unmarshal failed: %v", tempWeightsFilePath, errJson)
+	}
+
+	// Optional: Check content different from initial (could be tricky if format changes but values are similar)
+	if string(finalContent) == string(initialContent) && appCfg.Cli.Epochs > 0 { // Only expect change if epochs ran
+		// This check might be flaky if the "training" with 1 epoch/1 cycle doesn't change weights much
+		// or if the number of neurons (50) results in a vastly different structure than the dummy.
+		// A more robust check would be to load both JSONs and compare structures/values if necessary.
+		// For now, ModTime is a strong indicator.
+		t.Logf("Warning: Content of weights file '%s' did not change after running expose. This might be okay for minimal run, but check if intended.", tempWeightsFilePath)
+	}
 }

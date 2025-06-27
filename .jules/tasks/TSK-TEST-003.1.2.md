@@ -3,14 +3,14 @@
 **ID da Tarefa:** TEST-003.1.2
 **Título Breve:** Validação de arquivo de pesos para `expose` mode.
 **Descrição Completa:** Estender os testes de integração do modo `expose` para validar especificamente a criação e modificação de arquivos de pesos sinápticos. O teste deve verificar se um novo arquivo de pesos é criado quando não existe um, e se um arquivo existente é atualizado após a execução do treinamento.
-**Status:** Pendente
+**Status:** Concluído
 **Dependências (IDs):** TEST-003.1, TEST-003.1.1, TEST-002
 **Complexidade (1-5):** 1
 **Prioridade (P0-P4):** P2
 **Responsável:** AgenteJules
 **Data de Criação:** 2024-07-28
-**Data de Conclusão (Estimada/Real):** AAAA-MM-DD
-**Branch Git Proposta:** test/integration-expose-weights
+**Data de Conclusão (Estimada/Real):** 2024-07-28
+**Branch Git Proposta:** test/expose-weights-validation
 **Critérios de Aceitação:**
 - Um teste de integração verifica se o comando `crownet expose` cria um novo arquivo de pesos no caminho especificado se ele não existir.
     - O teste verifica a existência do arquivo e se ele não está vazio.
@@ -20,5 +20,7 @@
 - Os testes utilizam o setup e as funções helper definidas em `TEST-003.1.1`.
 - Os testes limpam os arquivos de pesos temporários criados.
 **Notas/Decisões:**
-- A validação do *conteúdo* dos pesos (i.e., se o aprendizado ocorreu corretamente) é complexa e fora do escopo deste teste de integração de manipulação de arquivo. Focar na existência, formato e modificação do arquivo.
-- Usar arquivos de pesos pequenos e configurações de simulação rápidas para os testes.
+- A validação do *conteúdo* dos pesos (i.e., se o aprendizado ocorreu corretamente) é complexa e fora do escopo deste teste de integração de manipulação de arquivo. Focado na existência, formato e modificação do arquivo.
+- Usado arquivos de pesos pequenos e configurações de simulação rápidas para os testes.
+- Testes `TestExposeCommand_NewWeightsFileCreation` e `TestExposeCommand_ModifyWeightsFile` implementados em `cmd/expose_integration_test.go`.
+- Verificam criação, não-vazio, JSON válido, e modificação de timestamp.
