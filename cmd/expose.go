@@ -9,6 +9,8 @@ import (
 	"crownet/config"
 	"github.com/spf13/cobra"
 	"github.com/BurntSushi/toml" // FEATURE-CONFIG-001
+	"os"                         // For pprof file creation
+	"runtime/pprof"              // For CPU and memory profiling
 )
 
 var (
@@ -21,6 +23,9 @@ var (
 	exposeDbPath           string // Duplicates global 'dbPath'
 	exposeSaveInterval     int    // Duplicates global 'saveInterval'
 	exposeDebugChem        bool   // Duplicates global 'debugChem'
+	// Profiling flags
+	exposeCpuProfileFile string
+	exposeMemProfileFile string
 )
 
 var exposeCmd = &cobra.Command{
@@ -30,6 +35,20 @@ var exposeCmd = &cobra.Command{
 sequências de padrões de entrada (e.g. dígitos) e ajustando os pesos sinápticos
 através de aprendizado Hebbiano modulado por neuroquímicos.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// CPU Profiling
+		if exposeCpuProfileFile != "" {
+			f, err := os.Create(exposeCpuProfileFile)
+			if err != nil {
+				log.Fatal("could not create CPU profile: ", err)
+			}
+			defer f.Close()
+			if err := pprof.StartCPUProfile(f); err != nil {
+				log.Fatal("could not start CPU profile: ", err)
+			}
+			defer pprof.StopCPUProfile()
+			fmt.Printf("CPU profiling enabled, saving to %s\n", exposeCpuProfileFile)
+		}
+
 		fmt.Println("Executando modo expose via Cobra...")
 
 		// 1. Inicializar AppConfig com valores padrão das flags Cobra e SimParams defaults
@@ -75,8 +94,24 @@ através de aprendizado Hebbiano modulado por neuroquímicos.`,
 		}
 
 		orchestrator := cli.NewOrchestrator(appCfg)
-		if err := orchestrator.Run(); err != nil {
-			return fmt.Errorf("erro durante a execução do modo expose: %w", err)
+		runErr := orchestrator.Run() // Store error from Run
+
+		// Memory Profiling (Heap)
+		if exposeMemProfileFile != "" && runErr == nil { // Only write mem profile if run was successful
+			f, err := os.Create(exposeMemProfileFile)
+			if err != nil {
+				log.Fatal("could not create memory profile: ", err)
+			}
+			defer f.Close()
+			// runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				log.Fatal("could not write memory profile: ", err)
+			}
+			fmt.Printf("Memory heap profile saved to %s\n", exposeMemProfileFile)
+		}
+
+		if runErr != nil {
+			return fmt.Errorf("erro durante a execução do modo expose: %w", runErr)
 		}
 		return nil
 	},
@@ -96,4 +131,8 @@ func init() {
 	exposeCmd.Flags().StringVar(&exposeDbPath, "dbPath", "", "Caminho opcional para o arquivo SQLite para logging durante o expose.")
 	exposeCmd.Flags().IntVar(&exposeSaveInterval, "saveInterval", 0, "Intervalo de ciclos para salvar no BD durante expose (0 desabilita).")
 	exposeCmd.Flags().BoolVar(&exposeDebugChem, "debugChem", false, "Habilita logs de depuração para neuroquímicos.")
+
+	// Profiling flags
+	exposeCmd.Flags().StringVar(&exposeCpuProfileFile, "cpuprofile", "", "Escreve perfil de CPU para este arquivo.")
+	exposeCmd.Flags().StringVar(&exposeMemProfileFile, "memprofile", "", "Escreve perfil de memória para este arquivo.")
 }
