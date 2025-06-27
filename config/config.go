@@ -262,28 +262,36 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	cfg := CLIConfig{}
 
 	// General Configuration Flags
-	fSet.StringVar(&cfg.Mode, "mode", ModeSim, fmt.Sprintf("Operation mode: '%s', '%s', or '%s'.", ModeSim, ModeExpose, ModeObserve))
+	fSet.StringVar(&cfg.Mode, "mode", ModeSim,
+		fmt.Sprintf("Operation mode: '%s', '%s', or '%s'.", ModeSim, ModeExpose, ModeObserve))
 	fSet.IntVar(&cfg.TotalNeurons, "neurons", 200, "Total number of neurons in the network.")
-	fSet.Int64Var(&cfg.Seed, "seed", 0, "Seed for random number generator (0 uses current time, other values are used directly).")
+	fSet.Int64Var(&cfg.Seed, "seed", 0,
+		"Seed for random number generator (0 uses current time, other values are used directly).")
 	fSet.StringVar(&cfg.WeightsFile, "weightsFile", "crownet_weights.json", "File to save/load synaptic weights.")
 	fSet.Float64Var((*float64)(&cfg.BaseLearningRate), "lrBase", 0.01, "Base learning rate for Hebbian plasticity.")
 
 	// Mode 'sim' Specific Flags
 	fSet.IntVar(&cfg.Cycles, "cycles", 1000, "Total simulation cycles for 'sim' mode.")
 	fSet.StringVar(&cfg.DbPath, "dbPath", "crownet_sim_run.db", "Path for the SQLite database file for logging.")
-	fSet.IntVar(&cfg.SaveInterval, "saveInterval", 100, "Cycle interval for saving to DB (0 to disable periodic saves, only final if any).")
-	fSet.IntVar(&cfg.StimInputID, "stimInputID", -1, "ID of an input neuron for general continuous stimulus in 'sim' mode (-1 for first available, -2 to disable).")
-	fSet.Float64Var(&cfg.StimInputFreqHz, "stimInputFreqHz", 0.0, "Frequency (Hz) for general stimulus in 'sim' mode (0.0 to disable).")
-	fSet.IntVar(&cfg.MonitorOutputID, "monitorOutputID", -1, "ID of an output neuron to monitor for frequency reporting in 'sim' mode (-1 for first available, -2 to disable).")
+	fSet.IntVar(&cfg.SaveInterval, "saveInterval", 100,
+		"Cycle interval for saving to DB (0 to disable periodic saves, only final if any).")
+	fSet.IntVar(&cfg.StimInputID, "stimInputID", -1,
+		"ID of an input neuron for general continuous stimulus in 'sim' mode (-1 for first available, -2 to disable).")
+	fSet.Float64Var(&cfg.StimInputFreqHz, "stimInputFreqHz", 0.0,
+		"Frequency (Hz) for general stimulus in 'sim' mode (0.0 to disable).")
+	fSet.IntVar(&cfg.MonitorOutputID, "monitorOutputID", -1,
+		"ID of an output neuron to monitor for frequency reporting in 'sim' mode (-1 for first available, -2 to disable).")
 	fSet.BoolVar(&cfg.DebugChem, "debugChem", false, "Enable debug prints for chemical production.")
 
 	// Mode 'expose' Specific Flags
 	fSet.IntVar(&cfg.Epochs, "epochs", 50, "Number of exposure epochs (for 'expose' mode).")
-	fSet.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20, "Number of cycles to run per pattern presentation during 'expose' mode.")
+	fSet.IntVar(&cfg.CyclesPerPattern, "cyclesPerPattern", 20,
+		"Number of cycles to run per pattern presentation during 'expose' mode.")
 
 	// Mode 'observe' Specific Flags
 	fSet.IntVar(&cfg.Digit, "digit", 0, "Digit (0-9) to present (for 'observe' mode).")
-	fSet.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50, "Number of cycles to run for network settling during 'observe' mode.")
+	fSet.IntVar(&cfg.CyclesToSettle, "cyclesToSettle", 50,
+		"Number of cycles to run for network settling during 'observe' mode.")
 
 	// Mode 'logutil' Specific Flags (FEATURE-004)
 	// Note: These flags will only be relevant if -mode=logutil is set.
@@ -291,7 +299,8 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	// For now, simple flags are fine.
 	fSet.StringVar(&cfg.LogUtilSubcommand, "logutil.subcommand", "export", "Log utility subcommand (e.g., 'export').")
 	fSet.StringVar(&cfg.LogUtilDbPath, "logutil.dbPath", "", "Path to SQLite DB for logutil mode.")
-	fSet.StringVar(&cfg.LogUtilTable, "logutil.table", "", "Table to process in logutil mode (e.g., 'NetworkSnapshots', 'NeuronStates').")
+	fSet.StringVar(&cfg.LogUtilTable, "logutil.table", "",
+		"Table to process in logutil mode (e.g., 'NetworkSnapshots', 'NeuronStates').")
 	fSet.StringVar(&cfg.LogUtilFormat, "logutil.format", "csv", "Output format for logutil export (e.g., 'csv').")
 	fSet.StringVar(&cfg.LogUtilOutput, "logutil.output", "", "Output file for logutil export (stdout if empty).")
 
@@ -299,11 +308,10 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	// to prevent "flag provided but not defined" errors when running tests
 	// with `go test ./...` if Ginkgo is indirectly included or its flags are passed.
 	var nonGinkgoArgs []string
-	if args != nil { // args could be nil if called directly without specific test arguments
-		for _, arg := range args {
-			if !strings.HasPrefix(arg, "-ginkgo.") && !strings.HasPrefix(arg, "-test.") {
-				nonGinkgoArgs = append(nonGinkgoArgs, arg)
-			}
+	// args could be nil if called directly without specific test arguments
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-ginkgo.") && !strings.HasPrefix(arg, "-test.") {
+			nonGinkgoArgs = append(nonGinkgoArgs, arg)
 		}
 	}
 
@@ -494,13 +502,16 @@ func (ac *AppConfig) Validate() error {
 		return fmt.Errorf("CyclesPerSecond must be positive, got %f", ac.SimParams.General.CyclesPerSecond)
 	}
 	if ac.SimParams.Distribution.DopaminergicPercent < 0 || ac.SimParams.Distribution.DopaminergicPercent > 1.0 {
-		return fmt.Errorf("DopaminergicPercent must be between 0.0 and 1.0, got %f", ac.SimParams.Distribution.DopaminergicPercent)
+		return fmt.Errorf("DopaminergicPercent must be between 0.0 and 1.0, got %f",
+			ac.SimParams.Distribution.DopaminergicPercent)
 	}
 	if ac.SimParams.Distribution.InhibitoryPercent < 0 || ac.SimParams.Distribution.InhibitoryPercent > 1.0 {
-		return fmt.Errorf("InhibitoryPercent must be between 0.0 and 1.0, got %f", ac.SimParams.Distribution.InhibitoryPercent)
+		return fmt.Errorf("InhibitoryPercent must be between 0.0 and 1.0, got %f",
+			ac.SimParams.Distribution.InhibitoryPercent)
 	}
 	if ac.SimParams.Distribution.DopaminergicPercent+ac.SimParams.Distribution.InhibitoryPercent > 1.0 {
-		return fmt.Errorf("sum of DopaminergicPercent (%f) and InhibitoryPercent (%f) cannot exceed 1.0", ac.SimParams.Distribution.DopaminergicPercent, ac.SimParams.Distribution.InhibitoryPercent)
+		return fmt.Errorf("sum of DopaminergicPercent (%f) and InhibitoryPercent (%f) cannot exceed 1.0",
+			ac.SimParams.Distribution.DopaminergicPercent, ac.SimParams.Distribution.InhibitoryPercent)
 	}
 
 	// Validate non-negative or positive constraints for SimParams
@@ -508,62 +519,88 @@ func (ac *AppConfig) Validate() error {
 		return fmt.Errorf("SpaceMaxDimension must be positive, got %f", ac.SimParams.General.SpaceMaxDimension)
 	}
 	if ac.SimParams.NeuronBehavior.BaseFiringThreshold <= 0 { // Assuming threshold should be positive
-		return fmt.Errorf("BaseFiringThreshold must be positive, got %f", ac.SimParams.NeuronBehavior.BaseFiringThreshold)
+		return fmt.Errorf("BaseFiringThreshold must be positive, got %f",
+			ac.SimParams.NeuronBehavior.BaseFiringThreshold)
 	}
 	if ac.SimParams.NeuronBehavior.AccumulatedPulseDecayRate < 0 {
-		return fmt.Errorf("AccumulatedPulseDecayRate must be non-negative, got %f", ac.SimParams.NeuronBehavior.AccumulatedPulseDecayRate)
+		return fmt.Errorf("AccumulatedPulseDecayRate must be non-negative, got %f",
+			ac.SimParams.NeuronBehavior.AccumulatedPulseDecayRate)
 	}
 	if ac.SimParams.NeuronBehavior.AbsoluteRefractoryCycles < 0 { // Should likely be >= 0
-		return fmt.Errorf("AbsoluteRefractoryCycles must be non-negative, got %d", ac.SimParams.NeuronBehavior.AbsoluteRefractoryCycles)
+		return fmt.Errorf("AbsoluteRefractoryCycles must be non-negative, got %d",
+			ac.SimParams.NeuronBehavior.AbsoluteRefractoryCycles)
 	}
 	if ac.SimParams.NeuronBehavior.RelativeRefractoryCycles < 0 { // Should likely be >= 0
-		return fmt.Errorf("RelativeRefractoryCycles must be non-negative, got %d", ac.SimParams.NeuronBehavior.RelativeRefractoryCycles)
+		return fmt.Errorf("RelativeRefractoryCycles must be non-negative, got %d",
+			ac.SimParams.NeuronBehavior.RelativeRefractoryCycles)
 	}
 	if ac.SimParams.General.PulsePropagationSpeed <= 0 {
 		return fmt.Errorf("PulsePropagationSpeed must be positive, got %f", ac.SimParams.General.PulsePropagationSpeed)
 	}
 	if ac.SimParams.Structure.OutputFrequencyWindowCycles <= 0 {
-		return fmt.Errorf("OutputFrequencyWindowCycles must be positive, got %f", ac.SimParams.Structure.OutputFrequencyWindowCycles)
+		return fmt.Errorf("OutputFrequencyWindowCycles must be positive, got %f",
+			ac.SimParams.Structure.OutputFrequencyWindowCycles)
 	}
 	if ac.SimParams.Learning.InitialSynapticWeightMin < 0 { // Assuming weights can be 0 but not negative
-		return fmt.Errorf("InitialSynapticWeightMin must be non-negative, got %f", ac.SimParams.Learning.InitialSynapticWeightMin)
+		return fmt.Errorf("InitialSynapticWeightMin must be non-negative, got %f",
+			ac.SimParams.Learning.InitialSynapticWeightMin)
 	}
 	if ac.SimParams.Learning.InitialSynapticWeightMax < ac.SimParams.Learning.InitialSynapticWeightMin {
-		return fmt.Errorf("InitialSynapticWeightMax (%f) must be >= InitialSynapticWeightMin (%f)", ac.SimParams.Learning.InitialSynapticWeightMax, ac.SimParams.Learning.InitialSynapticWeightMin)
+		return fmt.Errorf("InitialSynapticWeightMax (%f) must be >= InitialSynapticWeightMin (%f)",
+			ac.SimParams.Learning.InitialSynapticWeightMax, ac.SimParams.Learning.InitialSynapticWeightMin)
 	}
 	if ac.SimParams.Learning.MaxSynapticWeight < ac.SimParams.Learning.InitialSynapticWeightMax {
-		return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)", ac.SimParams.Learning.MaxSynapticWeight, ac.SimParams.Learning.InitialSynapticWeightMax)
+		return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)",
+			ac.SimParams.Learning.MaxSynapticWeight, ac.SimParams.Learning.InitialSynapticWeightMax)
 	}
 	if ac.SimParams.Learning.SynapticWeightDecayRate < 0 {
-		return fmt.Errorf("SynapticWeightDecayRate must be non-negative, got %f", ac.SimParams.Learning.SynapticWeightDecayRate)
+		return fmt.Errorf("SynapticWeightDecayRate must be non-negative, got %f",
+			ac.SimParams.Learning.SynapticWeightDecayRate)
 	}
 	if ac.SimParams.Learning.HebbianCoincidenceWindow <= 0 { // Should be positive for a window to exist
-		return fmt.Errorf("HebbianCoincidenceWindow must be positive, got %d", ac.SimParams.Learning.HebbianCoincidenceWindow)
+		return fmt.Errorf("HebbianCoincidenceWindow must be positive, got %d",
+			ac.SimParams.Learning.HebbianCoincidenceWindow)
 	}
 	if ac.SimParams.Learning.HebbPositiveReinforceFactor < 0 {
-		return fmt.Errorf("HebbPositiveReinforceFactor must be non-negative, got %f", ac.SimParams.Learning.HebbPositiveReinforceFactor)
+		return fmt.Errorf("HebbPositiveReinforceFactor must be non-negative, got %f",
+			ac.SimParams.Learning.HebbPositiveReinforceFactor)
 	}
 	if ac.SimParams.Learning.MinLearningRateFactor < 0 {
-		return fmt.Errorf("MinLearningRateFactor must be non-negative, got %f", ac.SimParams.Learning.MinLearningRateFactor)
+		return fmt.Errorf("MinLearningRateFactor must be non-negative, got %f",
+			ac.SimParams.Learning.MinLearningRateFactor)
 	}
 	if ac.SimParams.Synaptogenesis.SynaptogenesisInfluenceRadius <= 0 {
-		return fmt.Errorf("SynaptogenesisInfluenceRadius must be positive, got %f", ac.SimParams.Synaptogenesis.SynaptogenesisInfluenceRadius)
+		return fmt.Errorf("SynaptogenesisInfluenceRadius must be positive, got %f",
+			ac.SimParams.Synaptogenesis.SynaptogenesisInfluenceRadius)
 	}
 	if ac.SimParams.Synaptogenesis.MaxMovementPerCycle < 0 {
-		return fmt.Errorf("MaxMovementPerCycle must be non-negative, got %f", ac.SimParams.Synaptogenesis.MaxMovementPerCycle)
+		return fmt.Errorf("MaxMovementPerCycle must be non-negative, got %f",
+			ac.SimParams.Synaptogenesis.MaxMovementPerCycle)
 	}
-	if ac.SimParams.Neurochemical.CortisolProductionRate < 0 || ac.SimParams.Neurochemical.CortisolDecayRate < 0 || ac.SimParams.Neurochemical.CortisolProductionPerHit < 0 || ac.SimParams.Neurochemical.CortisolMaxLevel < 0 {
-		return fmt.Errorf("Cortisol parameters (ProductionRate, DecayRate, ProductionPerHit, MaxLevel) must be non-negative")
+	if ac.SimParams.Neurochemical.CortisolProductionRate < 0 ||
+		ac.SimParams.Neurochemical.CortisolDecayRate < 0 ||
+		ac.SimParams.Neurochemical.CortisolProductionPerHit < 0 ||
+		ac.SimParams.Neurochemical.CortisolMaxLevel < 0 {
+		return fmt.Errorf("Cortisol parameters (ProductionRate, DecayRate, ProductionPerHit, MaxLevel) " +
+			"must be non-negative")
 	}
-	if ac.SimParams.Neurochemical.DopamineProductionRate < 0 || ac.SimParams.Neurochemical.DopamineDecayRate < 0 || ac.SimParams.Neurochemical.DopamineProductionPerEvent < 0 || ac.SimParams.Neurochemical.DopamineMaxLevel < 0 {
-		return fmt.Errorf("Dopamine parameters (ProductionRate, DecayRate, ProductionPerEvent, MaxLevel) must be non-negative")
+	if ac.SimParams.Neurochemical.DopamineProductionRate < 0 ||
+		ac.SimParams.Neurochemical.DopamineDecayRate < 0 ||
+		ac.SimParams.Neurochemical.DopamineProductionPerEvent < 0 ||
+		ac.SimParams.Neurochemical.DopamineMaxLevel < 0 {
+		return fmt.Errorf("Dopamine parameters (ProductionRate, DecayRate, ProductionPerEvent, MaxLevel) " +
+			"must be non-negative")
 	}
-	if ac.SimParams.Neurochemical.CortisolMaxLevel < ac.SimParams.Neurochemical.CortisolProductionPerHit {
-		// This is a logical check, a single hit shouldn't exceed max. Could be more complex if rate also contributes significantly before decay.
-	}
-	if ac.SimParams.Neurochemical.DopamineMaxLevel < ac.SimParams.Neurochemical.DopamineProductionPerEvent {
-		// Similar logical check for dopamine
-	}
+	// These are logical checks, not strictly errors for now.
+	/*
+		if ac.SimParams.Neurochemical.CortisolMaxLevel < ac.SimParams.Neurochemical.CortisolProductionPerHit {
+			// This is a logical check, a single hit shouldn't exceed max.
+			// Could be more complex if rate also contributes significantly before decay.
+		}
+		if ac.SimParams.Neurochemical.DopamineMaxLevel < ac.SimParams.Neurochemical.DopamineProductionPerEvent {
+			// Similar logical check for dopamine
+		}
+	*/
 
 	return nil
 }

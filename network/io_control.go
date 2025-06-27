@@ -62,16 +62,19 @@ func (cn *CrowNet) PresentPattern(patternData []float64) error {
 		return fmt.Errorf("PresentPattern: SimParams not initialized in CrowNet")
 	}
 	if len(patternData) != cn.SimParams.Pattern.PatternSize {
-		return fmt.Errorf("pattern data size (%d) does not match configured PatternSize (%d)", len(patternData), cn.SimParams.Pattern.PatternSize)
+		return fmt.Errorf("pattern data size (%d) does not match configured PatternSize (%d)",
+			len(patternData), cn.SimParams.Pattern.PatternSize)
 	}
 	if len(cn.InputNeuronIDs) < cn.SimParams.Pattern.PatternSize {
-		return fmt.Errorf("insufficient input neurons (%d) for PatternSize (%d)", len(cn.InputNeuronIDs), cn.SimParams.Pattern.PatternSize)
+		return fmt.Errorf("insufficient input neurons (%d) for PatternSize (%d)",
+			len(cn.InputNeuronIDs), cn.SimParams.Pattern.PatternSize)
 	}
 
 	for i := 0; i < cn.SimParams.Pattern.PatternSize; i++ {
 		if patternData[i] > 0.5 { // Consider this pixel/feature active
 			if i >= len(cn.InputNeuronIDs) { // Defensive check
-				return fmt.Errorf("pattern index %d out of bounds for InputNeuronIDs (len %d)", i, len(cn.InputNeuronIDs))
+				return fmt.Errorf("pattern index %d out of bounds for InputNeuronIDs (len %d)",
+					i, len(cn.InputNeuronIDs))
 			}
 			inputNeuronID := cn.InputNeuronIDs[i]
 
@@ -125,7 +128,8 @@ func (cn *CrowNet) GetOutputActivation() ([]float64, error) {
 
 	for i := 0; i < numOutputsToReport; i++ {
 		if i >= len(cn.OutputNeuronIDs) { // Defensive check
-			return nil, fmt.Errorf("logic error: index %d out of bounds for OutputNeuronIDs (len %d)", i, len(cn.OutputNeuronIDs))
+			return nil, fmt.Errorf("logic error: index %d out of bounds for OutputNeuronIDs (len %d)",
+				i, len(cn.OutputNeuronIDs))
 		}
 		outputNeuronID := cn.OutputNeuronIDs[i]
 
@@ -174,10 +178,12 @@ func (cn *CrowNet) ConfigureFrequencyInput(neuronID common.NeuronID, hz float64)
 	} else {
 		cn.inputTargetFrequencies[neuronID] = hz
 		if cn.SimParams.General.CyclesPerSecond <= 0 { // Avoid division by zero or negative
-			return fmt.Errorf("CyclesPerSecond must be positive to calculate cyclesPerFiring, got %f", cn.SimParams.General.CyclesPerSecond)
+			return fmt.Errorf("CyclesPerSecond must be positive to calculate cyclesPerFiring, got %f",
+				cn.SimParams.General.CyclesPerSecond)
 		}
 		cyclesPerFiring := cn.SimParams.General.CyclesPerSecond / hz
-		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1.0))
+		cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0,
+			math.Round(cn.rng.Float64()*cyclesPerFiring)+1.0))
 	}
 	return nil
 }
@@ -243,10 +249,12 @@ func (cn *CrowNet) GetOutputFrequency(neuronID common.NeuronID) (float64, error)
 	firingsInWindow := len(history)
 
 	if cn.SimParams.General.CyclesPerSecond <= 0 {
-		return 0, fmt.Errorf("CyclesPerSecond (%f) must be positive to calculate frequency", cn.SimParams.General.CyclesPerSecond)
+		return 0, fmt.Errorf("CyclesPerSecond (%f) must be positive to calculate frequency",
+			cn.SimParams.General.CyclesPerSecond)
 	}
 	if cn.SimParams.Structure.OutputFrequencyWindowCycles <= 0 {
-		return 0, fmt.Errorf("OutputFrequencyWindowCycles (%f) must be positive to calculate frequency", cn.SimParams.Structure.OutputFrequencyWindowCycles)
+		return 0, fmt.Errorf("OutputFrequencyWindowCycles (%f) must be positive to calculate frequency",
+			cn.SimParams.Structure.OutputFrequencyWindowCycles)
 	}
 
 	windowDurationSeconds := cn.SimParams.Structure.OutputFrequencyWindowCycles / cn.SimParams.General.CyclesPerSecond
@@ -299,7 +307,8 @@ func (cn *CrowNet) processFrequencyInputs() {
 					continue
 				}
 				cyclesPerFiring := cn.SimParams.General.CyclesPerSecond / targetHz
-				cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0, math.Round(cn.rng.Float64()*cyclesPerFiring)+1.0))
+				cn.timeToNextInputFire[neuronID] = common.CycleCount(math.Max(1.0,
+					math.Round(cn.rng.Float64()*cyclesPerFiring)+1.0))
 			} else {
 				// If targetHz became <=0 or was deleted (e.g. configured off)
 				delete(cn.inputTargetFrequencies, neuronID)

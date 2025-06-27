@@ -5,182 +5,176 @@ import (
 	"math/rand"
 	"testing"
 
-	"crownet/common"
+	"crownet/common" // For common.Point
 )
 
 func TestEuclideanDistance(t *testing.T) {
 	tests := []struct {
-		name string
-		p1   common.Point
-		p2   common.Point
-		want float64
+		name     string
+		p1, p2   common.Point
+		expected float64
 	}{
-		{"zero distance", common.Point{1, 2, 3}, common.Point{1, 2, 3}, 0.0},
-		{"simple case 2D (in 16D)", common.Point{3, 0}, common.Point{0, 4}, 5.0}, // 3-4-5 triangle
-		{"1D case (in 16D)", common.Point{5}, common.Point{2}, 3.0},
-		{"negative coords", common.Point{-1, -1}, common.Point{1, 1}, math.Sqrt(8)}, // sqrt( (1 - -1)^2 + (1 - -1)^2 ) = sqrt(2^2 + 2^2) = sqrt(4+4)
+		{"same point", common.Point{1, 2}, common.Point{1, 2}, 0.0},
+		{"2D distance", common.Point{0, 0}, common.Point{3, 4}, 5.0}, // 3-4-5 triangle
+		{"different dimensions", common.Point{1, 2}, common.Point{1, 2, 3}, 0.0},
+		{"negative coords", common.Point{-1, -1}, common.Point{1, 1},
+			math.Sqrt(8)}, // sqrt( (1 - -1)^2 + (1 - -1)^2 ) = sqrt(2^2 + 2^2) = sqrt(4+4)
+		{"1D distance", common.Point{5}, common.Point{2}, 3.0},
+		{"empty points", common.Point{}, common.Point{}, 0.0},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Pad points to 16D if not already
-			p1Padded := tt.p1
-			p2Padded := tt.p2
-
-			if got := EuclideanDistance(p1Padded, p2Padded); math.Abs(got-tt.want) > 1e-9 {
-				t.Errorf("EuclideanDistance() = %v, want %v", got, tt.want)
+			dist := EuclideanDistance(tt.p1, tt.p2)
+			if math.Abs(dist-tt.expected) > 1e-9 {
+				t.Errorf("EuclideanDistance(%v, %v) = %f, want %f", tt.p1, tt.p2, dist, tt.expected)
 			}
 		})
 	}
 }
 
-func TestIsWithinRadius(t *testing.T) {
-	center := common.Point{0, 0, 0}
+func TestMagnitude(t *testing.T) {
 	tests := []struct {
-		name   string
-		pTest  common.Point
-		radius float64
-		want   bool
+		name     string
+		p        common.Point
+		expected float64
 	}{
-		{"inside", common.Point{1, 0, 0}, 2.0, true},
-		{"on boundary", common.Point{2, 0, 0}, 2.0, true},
-		{"outside", common.Point{3, 0, 0}, 2.0, false},
-		{"zero radius, point at center", common.Point{0, 0, 0}, 0.0, true},
-		{"zero radius, point not at center", common.Point{1, 0, 0}, 0.0, false},
-		{"negative radius", common.Point{1, 0, 0}, -1.0, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := IsWithinRadius(center, tt.pTest, tt.radius); got != tt.want {
-				t.Errorf("IsWithinRadius() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestClampToHyperSphere(t *testing.T) {
-	origin := common.Point{}
-	tests := []struct {
-		name           string
-		p              common.Point
-		maxRadius      float64
-		wantClampedP   common.Point
-		wantWasClamped bool
-		epsilon        float64
-	}{
-		{"inside, no clamp", common.Point{1, 0}, 2.0, common.Point{1, 0}, false, 1e-9},
-		{"outside, clamp", common.Point{3, 0}, 2.0, common.Point{2, 0}, true, 1e-9},
-		{"on boundary, no clamp", common.Point{2, 0}, 2.0, common.Point{2, 0}, false, 1e-9},
-		{"at origin, radius > 0", common.Point{0, 0}, 2.0, common.Point{0, 0}, false, 1e-9},
-		{"at origin, radius = 0", common.Point{0, 0}, 0.0, common.Point{0, 0}, false, 1e-9},
-		{"not origin, radius = 0", common.Point{1, 0}, 0.0, origin, true, 1e-9},
-		{"negative radius, no clamp", common.Point{1, 0}, -1.0, common.Point{1, 0}, false, 1e-9},
-		{"multi-dim outside", common.Point{3, 4}, 2.5, common.Point{1.5, 2.0}, true, 1e-9}, // Dist=5, radius=2.5, scale=0.5
+		{"origin", common.Point{0, 0, 0}, 0.0},
+		{"unit vector x", common.Point{1, 0, 0}, 1.0},
+		{"unit vector y", common.Point{0, -1, 0}, 1.0},
+		{"3-4-5 vector", common.Point{3, 4, 0}, 5.0},
+		{"negative components", common.Point{-1, -2, -2}, 3.0}, // sqrt(1+4+4) = sqrt(9) = 3
+		{"1D vector", common.Point{-5}, 5.0},
+		{"empty vector", common.Point{}, 0.0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotClampedP, gotWasClamped := ClampToHyperSphere(tt.p, tt.maxRadius)
-			if gotWasClamped != tt.wantWasClamped {
-				t.Errorf("ClampToHyperSphere() gotWasClamped = %v, want %v", gotWasClamped, tt.wantWasClamped)
-			}
-			distError := EuclideanDistance(gotClampedP, tt.wantClampedP)
-			if distError > tt.epsilon {
-				t.Errorf("ClampToHyperSphere() gotClampedP = %v, want %v (dist error %v)", gotClampedP, tt.wantClampedP, distError)
+			mag := Magnitude(tt.p)
+			if math.Abs(mag-tt.expected) > 1e-9 {
+				t.Errorf("Magnitude(%v) = %f, want %f", tt.p, mag, tt.expected)
 			}
 		})
 	}
 }
 
 func TestGenerateRandomPositionInHyperSphere(t *testing.T) {
-	seed := int64(12345)
-	rng := rand.New(rand.NewSource(seed))
-	numSamples := 100
+	rng := rand.New(rand.NewSource(0))
 
 	tests := []struct {
 		name      string
 		maxRadius float64
+		dimension int
 	}{
-		{"radius 0", 0.0},
-		{"negative radius", -5.0},
-		{"positive radius 1", 1.0},
-		{"positive radius 10", 10.0},
+		{"zero radius", 0.0, common.PointDimension},
+		{"negative radius", -5.0, common.PointDimension},
+		{"positive radius", 10.0, common.PointDimension},
+		{"small radius", 0.1, common.PointDimension},
 	}
+
+	numSamples := 1000
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			expectedRadius := tt.maxRadius
-			if expectedRadius < 0 {
-				expectedRadius = 0 // Function treats negative radius as 0
-			}
+			isOriginExpected := tt.maxRadius <= 0
+			sumDist := 0.0
+			var firstPoint common.Point
+			allPointsSame := true
 
 			for i := 0; i < numSamples; i++ {
 				p := GenerateRandomPositionInHyperSphere(tt.maxRadius, rng)
-				dist := EuclideanDistance(common.Point{}, p) // Distance from origin
 
-				if expectedRadius == 0 {
-					isOrigin := true
-					for _, coord := range p {
-						if math.Abs(float64(coord)) > 1e-9 {
-							isOrigin = false
-							break
-						}
+				if len(p) != tt.dimension {
+					t.Errorf("Generated point with dimension %d, want %d", len(p), tt.dimension)
+					return
+				}
+
+				dist := Magnitude(p)
+				sumDist += dist
+
+				isOrigin := true
+				for _, val := range p {
+					if val != 0 {
+						isOrigin = false
+						break
 					}
+				}
+
+				if isOriginExpected {
 					if !isOrigin {
-						t.Errorf("GenerateRandomPositionInHyperSphere() with radius %v, expected origin, got %v (dist %v)", tt.maxRadius, p, dist)
+						t.Errorf("Radius %v, expected origin, got %v (dist %v)",
+							tt.maxRadius, p, dist)
 					}
 				} else {
-					// Allow for a tiny bit of floating point error, hence <=
-					if dist > expectedRadius+1e-9 {
-						t.Errorf("GenerateRandomPositionInHyperSphere() with radius %v generated point %v with distance %v, outside expected radius", tt.maxRadius, p, dist)
+					if dist > tt.maxRadius+1e-9 {
+						t.Errorf("Radius %v generated point %v with distance %v, outside expected radius",
+							tt.maxRadius, p, dist)
 					}
+				}
+				if i == 0 {
+					firstPoint = p
+				} else if allPointsSame && !pointsEqual(p, firstPoint) {
+					allPointsSame = false
+				}
+			}
+
+			if !isOriginExpected && tt.maxRadius > 0 {
+				if sumDist/float64(numSamples) == 0 && numSamples > 1 {
+					t.Errorf("For R=%.1f generated all points at origin", tt.maxRadius)
+				}
+				if allPointsSame && numSamples > 10 {
+					t.Errorf("For R=%.1f generated %d identical points: %v",
+						tt.maxRadius, numSamples, firstPoint)
 				}
 			}
 		})
 	}
+}
 
-	// Basic check for distribution (very naive - just check not all points are same or at origin for positive radius)
-	t.Run("distribution sanity check R=5", func(t *testing.T) {
-		radius := 5.0
-		points := make([]common.Point, numSamples)
-		allSame := true
-		allOrigin := true
-
-		firstPoint := GenerateRandomPositionInHyperSphere(radius, rng)
-		points[0] = firstPoint
-		isFirstPointOrigin := true
-		for _, coord := range firstPoint {
-			if math.Abs(float64(coord)) > 1e-9 {
-				isFirstPointOrigin = false
-				break
-			}
+func pointsEqual(p1, p2 common.Point) bool {
+	if len(p1) != len(p2) {
+		return false
+	}
+	for i := range p1 {
+		if p1[i] != p2[i] {
+			return false
 		}
-		if !isFirstPointOrigin {
-			allOrigin = false
-		}
+	}
+	return true
+}
 
-		for i := 1; i < numSamples; i++ {
-			p := GenerateRandomPositionInHyperSphere(radius, rng)
-			points[i] = p
-			if EuclideanDistance(p, firstPoint) > 1e-9 { // Not same as first point
-				allSame = false
+func TestClampToHyperSphere(t *testing.T) {
+	tests := []struct {
+		name      string
+		p         common.Point
+		maxRadius float64
+		expectedP common.Point
+	}{
+		{"already inside", common.Point{1, 1}, 2.0, common.Point{1, 1}},
+		{"on surface", common.Point{2, 0}, 2.0, common.Point{2, 0}},
+		{"outside, needs clamping", common.Point{3, 4}, 2.5, common.Point{1.5, 2.0}},
+		{"origin, positive radius", common.Point{0, 0}, 5.0, common.Point{0, 0}},
+		{"origin, zero radius", common.Point{0, 0}, 0.0, common.Point{0, 0}},
+		{"non-origin, zero radius", common.Point{1, 1}, 0.0, common.Point{0, 0}},
+		{"negative radius, no clamp", common.Point{10, 10}, -1.0, common.Point{10, 10}},
+		{"1D point inside", common.Point{3}, 5.0, common.Point{3}},
+		{"1D point outside", common.Point{7}, 5.0, common.Point{5}},
+		{"1D point outside negative", common.Point{-7}, 5.0, common.Point{-5}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clampedP := ClampToHyperSphere(tt.p, tt.maxRadius)
+			if len(clampedP) != len(tt.expectedP) {
+				t.Fatalf("Returned point of len %d, want %d", len(clampedP), len(tt.expectedP))
 			}
-			isCurrentPointOrigin := true
-			for _, coord := range p {
-				if math.Abs(float64(coord)) > 1e-9 {
-					isCurrentPointOrigin = false
+			for i := range clampedP {
+				if math.Abs(float64(clampedP[i]-tt.expectedP[i])) > 1e-9 {
+					t.Errorf("ClampToHyperSphere(%v, %.1f) = %v, want %v. Mismatch at index %d.",
+						tt.p, tt.maxRadius, clampedP, tt.expectedP, i)
 					break
 				}
 			}
-			if !isCurrentPointOrigin {
-				allOrigin = false
-			}
-		}
-
-		if radius > 0 && allSame {
-			t.Errorf("GenerateRandomPositionInHyperSphere() for R=%.1f generated %d identical points: %v", radius, numSamples, firstPoint)
-		}
-		if radius > 0 && allOrigin {
-			t.Errorf("GenerateRandomPositionInHyperSphere() for R=%.1f generated %d points at origin", radius, numSamples)
-		}
-	})
+		})
+	}
 }

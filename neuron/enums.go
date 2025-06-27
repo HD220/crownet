@@ -42,9 +42,11 @@ const (
 	Resting State = iota
 	// Firing state indicates the neuron has reached its threshold and is emitting a pulse.
 	Firing
-	// AbsoluteRefractory state is a brief period after firing during which the neuron cannot fire again, regardless of input.
+	// AbsoluteRefractory state is a brief period after firing
+	// during which the neuron cannot fire again, regardless of input.
 	AbsoluteRefractory
-	// RelativeRefractory state follows the absolute refractory period; the neuron can fire, but its threshold is elevated.
+	// RelativeRefractory state follows the absolute refractory period;
+	// the neuron can fire, but its threshold is elevated.
 	RelativeRefractory
 )
 

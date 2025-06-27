@@ -140,13 +140,15 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 	// We still need to check that the actual pattern data matches these validated simParams.
 
 	if len(pattern2D) != simParams.Pattern.PatternHeight {
-		return nil, fmt.Errorf("pattern for digit %d has incorrect height %d, expected %d (from simParams)", digit, len(pattern2D), simParams.Pattern.PatternHeight)
+		return nil, fmt.Errorf("pattern for digit %d has incorrect height %d, expected %d (from simParams)",
+			digit, len(pattern2D), simParams.Pattern.PatternHeight)
 	}
 
 	flattenedPattern := make([]float64, 0, simParams.Pattern.PatternSize)
 	for r, row := range pattern2D {
 		if len(row) != simParams.Pattern.PatternWidth {
-			return nil, fmt.Errorf("pattern for digit %d, row %d has incorrect width %d, expected %d (from simParams)", digit, r, len(row), simParams.Pattern.PatternWidth)
+			return nil, fmt.Errorf("pattern for digit %d, row %d has incorrect width %d, expected %d (from simParams)",
+				digit, r, len(row), simParams.Pattern.PatternWidth)
 		}
 		for _, val := range row {
 			if val == 1 {
@@ -159,7 +161,8 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 
 	if len(flattenedPattern) != simParams.Pattern.PatternSize {
 		// This should ideally not happen if height and width checks pass and PatternSize is consistent.
-		return nil, fmt.Errorf("internal error: flattened pattern size (%d) does not match expected PatternSize (%d)", len(flattenedPattern), simParams.Pattern.PatternSize)
+		return nil, fmt.Errorf("internal error: flattened pattern size (%d) does not match expected PatternSize (%d)",
+			len(flattenedPattern), simParams.Pattern.PatternSize)
 	}
 
 	return flattenedPattern, nil

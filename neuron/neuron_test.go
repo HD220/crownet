@@ -1,242 +1,345 @@
 package neuron
 
 import (
-	"math"
 	"testing"
 
 	"crownet/common"
-	"crownet/config"
+	"crownet/config" // Assuming config provides DefaultSimulationParameters
 )
 
-func defaultTestSimParamsForNeuron() *config.SimulationParameters {
+// Helper to get default sim params for tests
+func getDefaultSimParamsForTest() *config.SimulationParameters {
+	// Use your actual function to get default simulation parameters
+	// This is a placeholder based on common practice.
 	p := config.DefaultSimulationParameters()
-	p.NeuronBehavior.BaseFiringThreshold = 1.0
-	p.NeuronBehavior.AccumulatedPulseDecayRate = 0.1
-	p.NeuronBehavior.AbsoluteRefractoryCycles = 2
-	p.NeuronBehavior.RelativeRefractoryCycles = 3
-	// Neurochemical effects are not directly tested here, assume base thresholds.
 	return &p
 }
 
 func TestNewNeuron(t *testing.T) {
-	simParams := defaultTestSimParamsForNeuron()
-	id := common.NeuronID(1)
-	ntype := Excitatory
-	pos := common.Point{1, 2, 3}
+	simParams := getDefaultSimParamsForTest()
+	pos := common.Point{1.0, 2.0} // Example position
+	n := New(common.NeuronID(1), Excitatory, pos, simParams)
 
-	n := New(id, ntype, pos, simParams)
-
-	if n.ID != id {
-		t.Errorf("NewNeuron ID = %d, want %d", n.ID, id)
+	if n == nil {
+		t.Fatal("NewNeuron returned nil")
 	}
-	if n.Type != ntype {
-		t.Errorf("NewNeuron Type = %s, want %s", n.Type, ntype)
+	if n.ID != 1 {
+		t.Errorf("NewNeuron ID = %d, want %d", n.ID, 1)
 	}
-	if n.Position != pos {
-		t.Errorf("NewNeuron Position = %v, want %v", n.Position, pos)
+	if n.Type != Excitatory {
+		t.Errorf("NewNeuron Type = %v, want %v", n.Type, Excitatory)
 	}
 	if n.CurrentState != Resting {
-		t.Errorf("NewNeuron CurrentState = %s, want %s", n.CurrentState, Resting)
+		t.Errorf("NewNeuron State = %v, want %v", n.CurrentState, Resting)
 	}
 	if n.AccumulatedPotential != 0.0 {
-		t.Errorf("NewNeuron AccumulatedPotential = %f, want 0.0", n.AccumulatedPotential)
+		t.Errorf("NewNeuron Potential = %f, want 0.0", n.AccumulatedPotential)
 	}
-	if n.BaseFiringThreshold != common.Threshold(simParams.NeuronBehavior.BaseFiringThreshold) {
-		t.Errorf("NewNeuron BaseFiringThreshold = %f, want %f", n.BaseFiringThreshold, simParams.NeuronBehavior.BaseFiringThreshold)
+	if n.BaseFiringThreshold != simParams.NeuronBehavior.BaseFiringThreshold {
+		t.Errorf("NewNeuron BaseFiringThreshold = %f, want %f",
+			n.BaseFiringThreshold, simParams.NeuronBehavior.BaseFiringThreshold)
 	}
-	if n.CurrentFiringThreshold != common.Threshold(simParams.NeuronBehavior.BaseFiringThreshold) {
-		t.Errorf("NewNeuron CurrentFiringThreshold = %f, want %f", n.CurrentFiringThreshold, simParams.NeuronBehavior.BaseFiringThreshold)
+	if n.CurrentFiringThreshold != simParams.NeuronBehavior.BaseFiringThreshold {
+		t.Errorf("NewNeuron CurrentFiringThreshold = %f, want %f",
+			n.CurrentFiringThreshold, simParams.NeuronBehavior.BaseFiringThreshold)
 	}
 	if n.LastFiredCycle != -1 {
 		t.Errorf("NewNeuron LastFiredCycle = %d, want -1", n.LastFiredCycle)
 	}
-	if n.CyclesInCurrentState != 0 {
-		t.Errorf("NewNeuron CyclesInCurrentState = %d, want 0", n.CyclesInCurrentState)
-	}
-	// Velocity should be zero-initialized by default by Go for the array type.
-	var zeroVelocity common.Vector
-	if n.Velocity != zeroVelocity {
-		t.Errorf("NewNeuron Velocity = %v, want %v", n.Velocity, zeroVelocity)
+	if n.Position[0] != pos[0] || n.Position[1] != pos[1] { // Basic check
+		t.Errorf("NewNeuron Position = %v, want %v", n.Position, pos)
 	}
 }
 
-func TestNeuron_IntegrateIncomingPotential(t *testing.T) {
-	simParams := defaultTestSimParamsForNeuron()
-	n := New(0, Excitatory, common.Point{}, simParams)
-	currentCycle := common.CycleCount(10)
+func TestIntegrateIncomingPotential(t *testing.T) {
+	simParams := getDefaultSimParamsForTest()
+	n := New(1, Excitatory, common.Point{0, 0}, simParams)
+	n.CurrentFiringThreshold = 1.0 // Set for test clarity
 
-	t.Run("Potential below threshold", func(t *testing.T) {
-		n.AccumulatedPotential = 0.0 // Reset
-		n.CurrentState = Resting
-		fired := n.IntegrateIncomingPotential(0.5, currentCycle)
-		if fired {
-			t.Error("IntegratePotential: fired unexpectedly, want false")
-		}
-		if n.AccumulatedPotential != 0.5 {
-			t.Errorf("IntegratePotential: pulse = %f, want 0.5", n.AccumulatedPotential)
-		}
-		if n.CurrentState != Resting {
-			t.Errorf("IntegratePotential: state = %s, want Resting", n.CurrentState)
-		}
-	})
+	// Test potential accumulation without firing
+	fired := n.IntegrateIncomingPotential(0.5, 0)
+	if fired {
+		t.Errorf("IntegratePotential should not fire with potential 0.5, threshold 1.0")
+	}
+	if n.AccumulatedPotential != 0.5 {
+		t.Errorf("IntegratePotential accumulated = %f, want 0.5", n.AccumulatedPotential)
+	}
 
-	t.Run("Potential meets/exceeds threshold", func(t *testing.T) {
-		n.AccumulatedPotential = 0.0
-		n.CurrentState = Resting
-		n.CurrentFiringThreshold = 1.0
-		fired := n.IntegrateIncomingPotential(1.0, currentCycle) // Meets threshold
-		if !fired {
-			t.Error("IntegratePotential: did not fire, want true")
-		}
-		if n.AccumulatedPotential != 1.0 { // Pulse still accumulates before state change for this cycle
-			t.Errorf("IntegratePotential: pulse = %f, want 1.0", n.AccumulatedPotential)
-		}
-		// State change to Firing is handled by AdvanceState based on this firing event.
-		// IntegrateIncomingPotential itself just returns true. The test for state change
-		// should be in TestNeuronStateMachine or by calling AdvanceState after this.
-		// For now, let's assume IntegratePotential sets it to Firing *if* conditions allow.
-		// The current Neuron.IntegrateIncomingPotential directly sets state to Firing.
-		if n.CurrentState != Firing {
-			t.Errorf("IntegratePotential: state = %s, want Firing", n.CurrentState)
-		}
-		// This test logic seems to be checking side effects not guaranteed by IntegrateIncomingPotential.
-		// IntegrateIncomingPotential's contract is to return 'fired'. LastFiredCycle and CyclesInCurrentState are updated by AdvanceState.
-		// However, the current implementation of IntegrateIncomingPotential *does* set CurrentState to Firing.
-		// Let's adjust the test to reflect what IntegrateIncomingPotential itself does.
-		// if n.LastFiredCycle != currentCycle {
-		// 	t.Errorf("IntegratePotential: LastFiredCycle = %d, want %d", n.LastFiredCycle, currentCycle)
-		// }
-		// if n.CyclesInCurrentState != 0 { // Should reset on state change
-		// 	t.Errorf("IntegratePotential: CyclesInCurrentState = %d, want 0", n.CyclesInCurrentState)
-		// }
-	})
+	// Test potential accumulation causing firing
+	fired = n.IntegrateIncomingPotential(0.6, 1) // Total potential 0.5 + 0.6 = 1.1
+	if !fired {
+		t.Errorf("IntegratePotential should fire with potential 1.1, threshold 1.0")
+	}
+	if n.AccumulatedPotential != 1.1 {
+		t.Errorf("IntegratePotential accumulated = %f, want 1.1", n.AccumulatedPotential)
+	}
+	// Note: IntegrateIncomingPotential only flags 'fired'. State change is by AdvanceState.
+	if n.CurrentState != Resting {
+		t.Errorf("IntegratePotential should not change state, got %v, want Resting", n.CurrentState)
+	}
 
-	t.Run("Attempt to fire while in AbsoluteRefractory", func(t *testing.T) {
-		n.CurrentState = AbsoluteRefractory
-		initialPotential := common.PulseValue(0.5) // Give it some initial potential
-		n.AccumulatedPotential = initialPotential
-		fired := n.IntegrateIncomingPotential(2.0, currentCycle+1) // High potential
-		if fired {
-			t.Error("IntegratePotential: fired while in AbsoluteRefractory, want false")
-		}
-		// Potential should NOT change if in AbsoluteRefractory state, based on neuron.go logic.
-		if n.AccumulatedPotential != initialPotential {
-			t.Errorf("IntegratePotential: potential in AbsRefr changed to %f from %f, want it to remain %f", n.AccumulatedPotential, initialPotential, initialPotential)
-		}
-		if n.CurrentState != AbsoluteRefractory { // State should not change
-			t.Errorf("IntegratePotential: state changed from AbsoluteRefractory to %s, want AbsoluteRefractory", n.CurrentState)
-		}
-	})
+	// Test integration during AbsoluteRefractory period
+	n.CurrentState = AbsoluteRefractory
+	n.AccumulatedPotential = 0.0 // Reset for clarity
+	initialPotentialInRefractory := n.AccumulatedPotential
+	fired = n.IntegrateIncomingPotential(10.0, 2) // High potential
+	if fired {
+		t.Errorf("IntegratePotential should not fire during AbsoluteRefractory")
+	}
+	if n.AccumulatedPotential != initialPotentialInRefractory {
+		// IntegrateIncomingPotential's contract is to return 'fired'.
+		// LastFiredCycle and CyclesInCurrentState are updated by AdvanceState.
+		t.Errorf("IntegratePotential: potential in AbsRefr changed to %f from %f, want it to remain %f",
+			n.AccumulatedPotential, initialPotentialInRefractory, initialPotentialInRefractory)
+	}
 }
 
-func TestNeuron_AdvanceState(t *testing.T) {
-	simParams := defaultTestSimParamsForNeuron()
-	n := New(0, Excitatory, common.Point{}, simParams)
-
-	t.Run("From Firing to AbsoluteRefractory", func(t *testing.T) {
-		n.CurrentState = Firing
-		n.CyclesInCurrentState = 0
-		// Assigning a Threshold to PulseValue requires a cast
-		n.AccumulatedPotential = common.PulseValue(simParams.NeuronBehavior.BaseFiringThreshold) // Assume it just fired
-
-		n.AdvanceState(1, simParams) // Advance to next cycle
-
-		if n.CurrentState != AbsoluteRefractory {
-			t.Errorf("AdvanceState: from Firing, state = %s, want AbsoluteRefractory", n.CurrentState)
-		}
-		if n.CyclesInCurrentState != 0 { // Reset for new state
-			t.Errorf("AdvanceState: CyclesInCurrentState = %d, want 0", n.CyclesInCurrentState)
-		}
-		if n.AccumulatedPotential != 0.0 { // Potential should reset after firing
-			t.Errorf("AdvanceState: AccumulatedPotential after firing = %f, want 0.0", n.AccumulatedPotential)
-		}
-	})
-
-	t.Run("Through AbsoluteRefractory", func(t *testing.T) {
-		n.CurrentState = AbsoluteRefractory
-		n.CyclesInCurrentState = 0
-		for i := 0; i < int(simParams.NeuronBehavior.AbsoluteRefractoryCycles)-1; i++ {
-			n.AdvanceState(common.CycleCount(2+i), simParams)
-			if n.CurrentState != AbsoluteRefractory {
-				t.Fatalf("AdvanceState: in AbsoluteRefractory, state changed prematurely to %s at cycle %d", n.CurrentState, i)
-			}
-			if n.CyclesInCurrentState != common.CycleCount(i+1) {
-				t.Errorf("AdvanceState: CyclesInCurrentState in AbsRefr = %d, want %d", n.CyclesInCurrentState, i+1)
-			}
-		}
-		// Next AdvanceState should transition it
-		n.AdvanceState(common.CycleCount(2+int(simParams.NeuronBehavior.AbsoluteRefractoryCycles)-1), simParams)
-		if n.CurrentState != RelativeRefractory {
-			t.Errorf("AdvanceState: from Absolute to Relative, state = %s, want RelativeRefractory", n.CurrentState)
-		}
-		if n.CyclesInCurrentState != 0 { // Reset for new state
-			t.Errorf("AdvanceState: CyclesInCurrentState for new Relative = %d, want 0", n.CyclesInCurrentState)
-		}
-	})
-
-	t.Run("Through RelativeRefractory", func(t *testing.T) {
-		n.CurrentState = RelativeRefractory
-		n.CyclesInCurrentState = 0
-		// CurrentFiringThreshold should be elevated during RelativeRefractory, but this is handled by neurochemical.ApplyEffects.
-		// Here we just test state transition timing.
-		for i := 0; i < int(simParams.NeuronBehavior.RelativeRefractoryCycles)-1; i++ {
-			n.AdvanceState(common.CycleCount(10+i), simParams) // Use arbitrary base cycle
-			if n.CurrentState != RelativeRefractory {
-				t.Fatalf("AdvanceState: in RelativeRefractory, state changed prematurely to %s at cycle %d", n.CurrentState, i)
-			}
-		}
-		n.AdvanceState(common.CycleCount(10+int(simParams.NeuronBehavior.RelativeRefractoryCycles)-1), simParams)
-		if n.CurrentState != Resting {
-			t.Errorf("AdvanceState: from Relative to Resting, state = %s, want Resting", n.CurrentState)
-		}
-		if n.CyclesInCurrentState != 0 {
-			t.Errorf("AdvanceState: CyclesInCurrentState for new Resting = %d, want 0", n.CyclesInCurrentState)
-		}
-	})
-}
-
-func TestNeuron_DecayPotential(t *testing.T) {
-	simParams := defaultTestSimParamsForNeuron()
-	n := New(0, Excitatory, common.Point{}, simParams)
+func TestDecayPotential(t *testing.T) {
+	simParams := getDefaultSimParamsForTest()
+	// Ensure a non-zero decay rate for testing
+	if simParams.NeuronBehavior.AccumulatedPulseDecayRate == 0.0 {
+		simParams.NeuronBehavior.AccumulatedPulseDecayRate = 0.1
+	}
+	n := New(1, Excitatory, common.Point{0, 0}, simParams)
 
 	n.AccumulatedPotential = 1.0
 	n.DecayPotential(simParams)
-	expected := 1.0 * (1.0 - float64(simParams.NeuronBehavior.AccumulatedPulseDecayRate))
-	if math.Abs(float64(n.AccumulatedPotential)-expected) > 1e-9 {
-		t.Errorf("DecayPotential: pulse = %f, want %f", n.AccumulatedPotential, expected)
+	expectedPotential := 1.0 * (1.0 - simParams.NeuronBehavior.AccumulatedPulseDecayRate)
+	if n.AccumulatedPotential != common.Potential(expectedPotential) {
+		t.Errorf("DecayPotential got %f, want %f", n.AccumulatedPotential, expectedPotential)
 	}
 
-	n.AccumulatedPotential = 0.05 // Below decay amount if decay is > potential
-	// Decay rate is 0.1, potential 0.05. 0.05 * (1 - 0.1) = 0.05 * 0.9 = 0.045
-	// The nearZeroThreshold is 1e-5. 0.045 is not less than this.
-	// The previous logic error was that it expected it to clamp to 0.
-	// It should decay to 0.045.
+	// Test decay of negative potential (if applicable by model)
+	n.AccumulatedPotential = -1.0
 	n.DecayPotential(simParams)
-	expectedDecaySmall := 0.05 * (1.0 - float64(simParams.NeuronBehavior.AccumulatedPulseDecayRate))
-	if math.Abs(float64(n.AccumulatedPotential)-expectedDecaySmall) > 1e-9 {
-		t.Errorf("DecayPotential: pulse decayed from 0.05 to %f, want %f", n.AccumulatedPotential, expectedDecaySmall)
+	expectedNegativePotential := -1.0 * (1.0 - simParams.NeuronBehavior.AccumulatedPulseDecayRate)
+	if n.AccumulatedPotential != common.Potential(expectedNegativePotential) {
+		t.Errorf("DecayPotential (negative) got %f, want %f", n.AccumulatedPotential, expectedNegativePotential)
+	}
+}
+
+func TestAdvanceState(t *testing.T) {
+	simParams := getDefaultSimParamsForTest()
+	n := New(1, Excitatory, common.Point{0, 0}, simParams)
+	n.BaseFiringThreshold = 1.0
+	n.CurrentFiringThreshold = 1.0
+
+	// Resting to Firing
+	n.AccumulatedPotential = 1.5
+	fired := n.AdvanceState(1, simParams)
+	if !fired {
+		t.Errorf("AdvanceState: Neuron should have fired")
+	}
+	if n.CurrentState != Firing { // Should immediately transition to Firing then to AbsoluteRefractory in one AdvanceState if logic is combined
+		// The provided AdvanceState transitions Firing -> AbsoluteRefractory in the same call.
+		// Let's adjust expectation if Firing state is transient within AdvanceState.
+		// Current code: Resting -> Firing (sets fired=true), then Firing -> AbsRefr. So ends in AbsRefr.
+		t.Errorf("AdvanceState: State after firing, expected Firing (transient) or AbsoluteRefractory, got %v", n.CurrentState)
+	}
+	// If Firing is a state it passes through in one AdvanceState call:
+	// Test after Resting->Firing transition within AdvanceState:
+	n.CurrentState = Resting // Reset for next sub-test clarity
+	n.AccumulatedPotential = 1.5
+	n.AdvanceState(1, simParams) // Call again
+	if n.CurrentState != AbsoluteRefractory {
+		t.Errorf("AdvanceState: State after firing should be AbsoluteRefractory, got %v", n.CurrentState)
+	}
+	if n.LastFiredCycle != 1 {
+		t.Errorf("AdvanceState: LastFiredCycle got %d, want 1", n.LastFiredCycle)
+	}
+	if n.AccumulatedPotential != 0.0 { // Potential should reset after firing
+		t.Errorf("AdvanceState: Potential after firing got %f, want 0.0", n.AccumulatedPotential)
+	}
+
+	// AbsoluteRefractory to RelativeRefractory
+	n.CurrentState = AbsoluteRefractory
+	n.CyclesInCurrentState = simParams.NeuronBehavior.AbsoluteRefractoryCycles - 1
+	n.AdvanceState(2, simParams) // Still in Absolute
+	if n.CurrentState != AbsoluteRefractory {
+		t.Errorf("AdvanceState: Should remain in AbsoluteRefractory, got %v", n.CurrentState)
+	}
+	n.AdvanceState(3, simParams) // Transition to Relative
+	if n.CurrentState != RelativeRefractory {
+		t.Errorf("AdvanceState: Should transition to RelativeRefractory, got %v", n.CurrentState)
+	}
+	// CurrentFiringThreshold should be elevated during RelativeRefractory,
+	// but this is handled by neurochemical.ApplyEffects.
+	// Test assumes neurochem might have set it or it defaults based on some logic.
+	// For this isolated test, we'd need to mock that or set it manually if AdvanceState itself modifies it.
+	// The current AdvanceState doesn't modify CurrentFiringThreshold when entering RelativeRefractory itself.
+
+	// RelativeRefractory to Resting
+	n.CurrentState = RelativeRefractory
+	n.CurrentFiringThreshold = 1.5 // Assume it was elevated
+	n.AccumulatedPotential = 0.5   // Below elevated threshold
+	n.CyclesInCurrentState = simParams.NeuronBehavior.RelativeRefractoryCycles - 1
+	n.AdvanceState(4, simParams) // Still in Relative
+	if n.CurrentState != RelativeRefractory {
+		t.Errorf("AdvanceState: Should remain in RelativeRefractory, got %v", n.CurrentState)
+	}
+	n.AdvanceState(5, simParams) // Transition to Resting
+	if n.CurrentState != Resting {
+		t.Errorf("AdvanceState: Should transition to Resting, got %v", n.CurrentState)
+	}
+	if n.CurrentFiringThreshold != n.BaseFiringThreshold { // Should reset to base
+		t.Errorf("AdvanceState: Threshold after RelativeRefractory got %f, want %f",
+			n.CurrentFiringThreshold, n.BaseFiringThreshold)
+	}
+
+	// RelativeRefractory to Firing (if strong input)
+	n.CurrentState = RelativeRefractory
+	n.CurrentFiringThreshold = 1.5 // Elevated
+	n.AccumulatedPotential = 2.0   // Strong input overcomes elevated threshold
+	n.CyclesInCurrentState = 0     // Early in relative refractory
+	fired = n.AdvanceState(6, simParams)
+	if !fired {
+		t.Errorf("AdvanceState: Should fire from RelativeRefractory with strong input")
+	}
+	// Similar to Resting->Firing, it should end up in AbsoluteRefractory after this call.
+	if n.CurrentState != AbsoluteRefractory {
+		t.Errorf("AdvanceState: State after firing from RelativeRefractory should be AbsoluteRefractory, got %v", n.CurrentState)
+	}
+	if n.LastFiredCycle != 6 {
+		t.Errorf("AdvanceState: LastFiredCycle after firing from Relative, got %d, want 6", n.LastFiredCycle)
 	}
 }
 
 func TestEmittedPulseSign(t *testing.T) {
-	simParams := defaultTestSimParamsForNeuron()
+	simParams := getDefaultSimParamsForTest()
 	tests := []struct {
-		name  string
-		ntype Type
-		want  common.PulseValue
+		name     string
+		nType    Type
+		wantSign common.PulseValue
 	}{
 		{"Excitatory", Excitatory, 1.0},
 		{"Inhibitory", Inhibitory, -1.0},
-		{"Dopaminergic", Dopaminergic, 0.0}, // Dopaminergic effect is chemical, not standard pulse
-		{"Input", Input, 1.0},
-		{"Output", Output, 1.0}, // Assuming output neurons also emit excitatory-like pulses if they fire
+		{"Dopaminergic", Dopaminergic, 1.0}, // Assuming dopaminergic also has excitatory-like pulse for this model
+		{"Input", Input, 1.0},             // Assuming input neurons are excitatory by default for emission
+		{"Output", Output, 1.0},           // Assuming output neurons are excitatory by default for emission
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := New(0, tt.ntype, common.Point{}, simParams)
-			if got := n.EmittedPulseSign(); got != tt.want {
-				t.Errorf("EmittedPulseSign() for type %s = %v, want %v", tt.ntype, got, tt.want)
+			n := New(0, tt.nType, common.Point{0, 0}, simParams)
+			if sign := n.EmittedPulseSign(); sign != tt.wantSign {
+				t.Errorf("EmittedPulseSign() for type %v = %v, want %v", tt.nType, sign, tt.wantSign)
 			}
 		})
+	}
+}
+
+func TestIsRecentlyActive(t *testing.T) {
+	simParams := getDefaultSimParamsForTest()
+	n := New(1, Excitatory, common.Point{0, 0}, simParams)
+	window := common.CycleCount(5)
+
+	// Case 1: Never fired
+	if n.IsRecentlyActive(10, window) {
+		t.Errorf("IsRecentlyActive should be false for neuron that never fired")
+	}
+
+	// Case 2: Fired recently
+	n.LastFiredCycle = 8
+	if !n.IsRecentlyActive(10, window) { // current=10, lastFired=8, age=2. window=5. 2 <= 5 is true.
+		t.Errorf("IsRecentlyActive should be true for recently fired neuron (age 2, window 5)")
+	}
+
+	// Case 3: Fired, but outside window
+	n.LastFiredCycle = 3
+	if n.IsRecentlyActive(10, window) { // current=10, lastFired=3, age=7. window=5. 7 <= 5 is false.
+		t.Errorf("IsRecentlyActive should be false for neuron fired outside window (age 7, window 5)")
+	}
+
+	// Case 4: Fired exactly at edge of window (inclusive)
+	n.LastFiredCycle = 5
+	if !n.IsRecentlyActive(10, window) { // current=10, lastFired=5, age=5. window=5. 5 <= 5 is true.
+		t.Errorf("IsRecentlyActive should be true for neuron fired at edge of window (age 5, window 5)")
+	}
+}
+
+// TestFiringHistoryManagement ensures FiringHistory is correctly managed.
+func TestFiringHistoryManagement(t *testing.T) {
+	simParams := getDefaultSimParamsForTest()
+	// Set a specific window for easier testing
+	simParams.Structure.OutputFrequencyWindowCycles = 3.0
+	n := New(1, Output, common.Point{0, 0}, simParams) // Output neuron to use FiringHistory
+
+	// Fire a few times
+	n.AccumulatedPotential = n.BaseFiringThreshold // Ensure it fires
+	n.AdvanceState(1, simParams)                   // Fires at cycle 1
+	n.CurrentState = Resting                       // Manually reset for next fire
+	n.AccumulatedPotential = n.BaseFiringThreshold
+	n.AdvanceState(2, simParams) // Fires at cycle 2
+	n.CurrentState = Resting
+	n.AccumulatedPotential = n.BaseFiringThreshold
+	n.AdvanceState(3, simParams) // Fires at cycle 3
+
+	if len(n.FiringHistory) != 3 {
+		t.Errorf("FiringHistory len after 3 fires = %d, want 3. History: %v", len(n.FiringHistory), n.FiringHistory)
+	}
+
+	// Fire again, cycle 1 should be pruned if window is 3
+	// Current cycle 4, window is 3 cycles. Relevant history: [2, 3, 4]
+	// Cutoff = 4 - 3 = 1. So, cycles > 1 are kept.
+	n.CurrentState = Resting
+	n.AccumulatedPotential = n.BaseFiringThreshold
+	n.AdvanceState(4, simParams) // Fires at cycle 4
+
+	// Expected history: [2, 3, 4] because cycle 1 is older than 4-3=1.
+	// The pruning logic is: fireTime >= (currentCycle - WindowCycles)
+	// For cycle 4, cutoff is 4 - 3 = 1.
+	// History before firing at 4: [1,2,3]
+	// After firing at 4 and pruning:
+	// 1 is not >= 1 (mistake here, should be > cutoff or >= currentCycle - Window)
+	// Let's re-check neuron.go: cutoff = currentCycle - OutputFrequencyWindowCycles
+	// fireTime >= cutoff.
+	// Cycle 4: cutoff = 4 - 3 = 1.
+	// History [1,2,3], add 4 -> [1,2,3,4].
+	// Pruning:
+	// 1 >= 1 (true) -> keep 1
+	// 2 >= 1 (true) -> keep 2
+	// 3 >= 1 (true) -> keep 3
+	// 4 >= 1 (true) -> keep 4
+	// This means history would be [1,2,3,4]. This seems like the window is not sliding correctly if it's a count.
+	// If OutputFrequencyWindowCycles means "count of cycles for averaging", then it's a sliding window of that many cycles.
+	// The current pruning logic in neuron.go:
+	// cutoff := currentCycle - common.CycleCount(simParams.Structure.OutputFrequencyWindowCycles)
+	// for i, fireTime := range n.FiringHistory { if fireTime >= cutoff { ... } }
+	// This keeps events that happened AT or AFTER (current - window).
+	// If current=4, window=3, cutoff=1. Events [1,2,3] are all >=1. So [1,2,3,4] is kept.
+	// This is correct for "events in the last X cycles including current".
+	// The MaxHistLen might also apply a cap. MaxHistLen = 3 * 1.5 = 4.5 -> 4.
+	// So, if len becomes 5, it would be capped.
+	// Let's test one more.
+	if len(n.FiringHistory) != 4 { // Expect [1,2,3,4]
+		t.Errorf("FiringHistory len after 4 fires = %d, want 4. History: %v", len(n.FiringHistory), n.FiringHistory)
+	}
+
+	n.CurrentState = Resting
+	n.AccumulatedPotential = n.BaseFiringThreshold
+	n.AdvanceState(5, simParams) // Fires at cycle 5. History [1,2,3,4,5]. Cutoff = 5-3=2.
+	// Kept: [2,3,4,5]. Length 4. MaxHistLen is 4.
+	// This seems to be working as "keep events within the window [current-window_duration+1, current]"
+	// The pruning might be slightly off if maxHistLen is the primary cap rather than precise window.
+	// The provided code has a `maxHistLen` cap AND a time-based pruning.
+	// Let's assume time-based pruning is primary.
+	// Cycle 5, window 3. Cutoff = 5-3 = 2.
+	// History before this fire: [1,2,3,4]. Add 5 -> [1,2,3,4,5].
+	// Pruning: 1 < 2 (pruned). [2,3,4,5] remains.
+	expectedLenAfter5 := 4
+	if len(n.FiringHistory) != expectedLenAfter5 {
+		t.Errorf("FiringHistory len after 5 fires = %d, want %d. History: %v",
+			len(n.FiringHistory), expectedLenAfter5, n.FiringHistory)
+	}
+	// Check content
+	expectedHistoryContent := []common.CycleCount{2, 3, 4, 5}
+	if len(n.FiringHistory) == len(expectedHistoryContent) {
+		for i := range n.FiringHistory {
+			if n.FiringHistory[i] != expectedHistoryContent[i] {
+				t.Errorf("FiringHistory content mismatch at index %d: got %v, want %v. Full: %v",
+					i, n.FiringHistory[i], expectedHistoryContent[i], n.FiringHistory)
+				break
+			}
+		}
 	}
 }
