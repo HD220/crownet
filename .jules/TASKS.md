@@ -33,6 +33,10 @@
 | PERF-004.1   | Profiling do modo `expose`                 | Pendente  | PERF-004,TEST-002  | P2         | AgenteJules | [TSK-PERF-004.1.md](./tasks/TSK-PERF-004.1.md)| Setup e coleta de perfis de CPU/memória. |
 | PERF-004.2   | Profiling do modo `sim`                    | Pendente  | PERF-004,TEST-002  | P2         | AgenteJules | [TSK-PERF-004.2.md](./tasks/TSK-PERF-004.2.md)| Setup e coleta de perfis de CPU/memória. |
 | PERF-004.3   | Análise de perfis e documentação           | Pendente  | PERF-004,PERF-004.1,PERF-004.2,TEST-002 | P2         | AgenteJules | [TSK-PERF-004.3.md](./tasks/TSK-PERF-004.3.md)| Identificar gargalos e documentar achados. |
+| TEST-PKG-SPACE-001| Testes unitários para space/geometry.go| Subdividido  | TEST-002           | P2         | AgenteJules | ./tasks/TEST-PKG-SPACE-001.md                 | Desmembrada em .1, .2, .3. |
+| TEST-PKG-SPACE-001.1| Testes para `EuclideanDistance` e `IsWithinRadius` | Pendente | TEST-PKG-SPACE-001,TEST-002 | P2         | AgenteJules | ./tasks/TSK-TEST-PKG-SPACE-001.1.md | Testar funções de distância e checagem de raio. |
+| TEST-PKG-SPACE-001.2| Testes para `ClampToHyperSphere`         | Pendente | TEST-PKG-SPACE-001,TEST-002 | P2         | AgenteJules | ./tasks/TSK-TEST-PKG-SPACE-001.2.md | Testar função de clamping. |
+| TEST-PKG-SPACE-001.3| Testes para `GenerateRandomPositionInHyperSphere` | Pendente | TEST-PKG-SPACE-001,TEST-002 | P2         | AgenteJules | ./tasks/TSK-TEST-PKG-SPACE-001.3.md | Testar geração de posição aleatória. |
 | DOC-004      | Criar CONTRIBUTING.md                      | Concluído | -                  | P3         | AgenteJules | [TSK-DOC-004.md](./tasks/TSK-DOC-004.md)      | Diretrizes para contribuição.               |
 | CHORE-005    | Adicionar arquivo LICENSE                  | Concluído | -                  | P1         | AgenteJules | [TSK-CHORE-005.md](./tasks/TSK-CHORE-005.md)  | Ex: MIT ou Apache 2.0.                      |
 | CHORE-006    | Configurar GitHub Issue Templates          | Concluído | -                  | P3         | AgenteJules | [TSK-CHORE-006.md](./tasks/TSK-CHORE-006.md)  | Para bugs e feature requests.               |
