@@ -5,18 +5,19 @@
 package cli
 
 import (
-	"crownet/common"
-	"crownet/config"
-	"crownet/datagen"
-	"crownet/network"
-	"crownet/storage" // For JSON persistence and SQLite logging
-	"crownet/synaptic" // For synaptic.NetworkWeights type in function signatures
 	"fmt"
 	"log"
 	"os"
 	"path/filepath" // Added for path validation
 	"strings"       // Added for path validation messages
 	"time"
+
+	"crownet/common"
+	"crownet/config"
+	"crownet/datagen"
+	"crownet/network"
+	"crownet/storage"  // For JSON persistence and SQLite logging
+	"crownet/synaptic" // For synaptic.NetworkWeights type in function signatures
 )
 
 // Orchestrator manages the simulation execution based on CLI configuration.
@@ -28,7 +29,8 @@ type Orchestrator struct {
 	// loadWeightsFn and saveWeightsFn allow for mocking persistence operations in tests.
 	// BUG-STORAGE-001: Changed signature of loadWeightsFn to reflect change in storage.LoadNetworkWeightsFromJSON
 	loadWeightsFn func(filepath string) (map[common.NeuronID]synaptic.WeightMap, error)
-	saveWeightsFn func(weights *synaptic.NetworkWeights, filepath string) error // Assuming saveWeightsFn takes *NetworkWeights
+	// Assuming saveWeightsFn takes *NetworkWeights
+	saveWeightsFn func(weights *synaptic.NetworkWeights, filepath string) error
 }
 
 // NewOrchestrator creates a new orchestrator with the given application configuration.
@@ -37,7 +39,7 @@ func NewOrchestrator(appCfg *config.AppConfig) *Orchestrator {
 	return &Orchestrator{
 		AppCfg:        appCfg,
 		loadWeightsFn: storage.LoadNetworkWeightsFromJSON, // BUG-STORAGE-001: This now returns map, handled by o.loadWeights
-		saveWeightsFn: storage.SaveNetworkWeightsToJSON, // BUG-STORAGE-001: This will be updated to take *NetworkWeights
+		saveWeightsFn: storage.SaveNetworkWeightsToJSON,   // BUG-STORAGE-001: This will be updated to take *NetworkWeights
 	}
 }
 
@@ -176,13 +178,13 @@ func (o *Orchestrator) validatePath(rawPath string, forRead bool) (string, error
 			// For now, let's assume if it exists and is a dir, it's problematic for a file write.
 			// This logic might need refinement based on how DbPath is handled if it points to a dir.
 			// The current SQLite logger seems to expect a file path.
-			return "", fmt.Errorf("path '%s' (resolved to '%s') exists and is a directory, expected a file path for writing", rawPath, absPath)
+			return "", fmt.Errorf("path '%s' (resolved to '%s') exists and is a directory, "+
+				"expected a file path for writing", rawPath, absPath)
 		}
 	}
 
 	return absPath, nil
 }
-
 
 // createNetwork initializes the main CrowNet neural network instance (o.Net)
 // using the application configuration. It passes the necessary parameters
@@ -214,8 +216,8 @@ func (o *Orchestrator) createNetwork() {
 
 	fmt.Printf("Network created: %d neurons. Input IDs: %v..., Output IDs: %v...\n",
 		len(o.Net.Neurons),
-		o.Net.InputNeuronIDs[:min(maxInputToShow, numInputs)],
-		o.Net.OutputNeuronIDs[:min(maxOutputToShow, numOutputs)],
+		o.Net.InputNeuronIDs[:minInt(maxInputToShow, numInputs)],
+		o.Net.OutputNeuronIDs[:minInt(maxOutputToShow, numOutputs)],
 	)
 	fmt.Printf("Initial State: Cortisol=%.3f, Dopamine=%.3f\n",
 		o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
@@ -315,7 +317,8 @@ func (o *Orchestrator) setupContinuousInputStimulus() error {
 	}
 
 	if err := o.Net.ConfigureFrequencyInput(common.NeuronID(stimID), cliCfg.StimInputFreqHz); err != nil {
-		return fmt.Errorf("failed to configure frequency input for neuron %d at %.1f Hz: %w", stimID, cliCfg.StimInputFreqHz, err)
+		return fmt.Errorf("failed to configure frequency input for neuron %d at %.1f Hz: %w",
+			stimID, cliCfg.StimInputFreqHz, err)
 	}
 	fmt.Printf("Continuous stimulus: Input Neuron %d at %.1f Hz.\n", stimID, cliCfg.StimInputFreqHz)
 	return nil
@@ -404,7 +407,8 @@ func (o *Orchestrator) runSimMode() error {
 		return fmt.Errorf("error reporting monitored output frequency: %w", err)
 	}
 
-	fmt.Printf("Final State: Cortisol=%.3f, Dopamine=%.3f\n", o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
+	fmt.Printf("Final State: Cortisol=%.3f, Dopamine=%.3f\n",
+		o.Net.ChemicalEnv.CortisolLevel, o.Net.ChemicalEnv.DopamineLevel)
 	return nil
 }
 
@@ -435,9 +439,11 @@ func (o *Orchestrator) runExposureEpochs() error {
 			for cycleInPattern := 0; cycleInPattern < cliCfg.CyclesPerPattern; cycleInPattern++ {
 				o.Net.RunCycle()
 				// Log to DB if enabled and interval is met
-				if o.Logger != nil && cliCfg.SaveInterval > 0 && o.Net.CycleCount > 0 && int(o.Net.CycleCount)%cliCfg.SaveInterval == 0 {
+				if o.Logger != nil && cliCfg.SaveInterval > 0 && o.Net.CycleCount > 0 &&
+					int(o.Net.CycleCount)%cliCfg.SaveInterval == 0 {
 					if errLog := o.Logger.LogNetworkState(o.Net); errLog != nil {
-						return fmt.Errorf("failed to log network state (epoch %d, digit %d, cycle %d): %w", epoch+1, digit, o.Net.CycleCount, errLog)
+						return fmt.Errorf("failed to log network state (epoch %d, digit %d, cycle %d): %w",
+							epoch+1, digit, o.Net.CycleCount, errLog)
 					}
 				}
 			}
@@ -561,7 +567,8 @@ func (o *Orchestrator) runObserveMode() error {
 
 	// Loading weights is critical for observe mode.
 	if err := o.loadWeights(cliCfg.WeightsFile); err != nil {
-		return fmt.Errorf("failed to load weights for observe mode from %s: %w. Expose/train the network first", cliCfg.WeightsFile, err)
+		return fmt.Errorf("failed to load weights for observe mode from %s: %w. Expose/train the network first",
+			cliCfg.WeightsFile, err)
 	}
 
 	// Disable dynamics that would alter the network state during observation.
@@ -577,8 +584,10 @@ func (o *Orchestrator) runObserveMode() error {
 	return nil
 }
 
-// min is a simple helper to find the minimum of two integers.
-func min(a, b int) int {
+// minInt is a simple helper to find the minimum of two integers.
+// Renamed from 'min' to avoid conflict with potential built-in 'min' in Go 1.21+
+// and to avoid redefinition errors if other packages also define a generic 'min'.
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

@@ -4,10 +4,11 @@ import (
 	"crownet/common"
 	"crownet/config"
 	"crownet/neuron"
+
 	// "fmt"     // No longer needed as debug prints are removed from passing tests
 	"reflect" // Needed for DeepEqual
 	// "math" is not directly used in this test file. It's used in spatial_grid.go (main code).
-	"sort"    // Needed for TestSpatialGrid_BuildAndQuery helpers
+	"sort" // Needed for TestSpatialGrid_BuildAndQuery helpers
 	"testing"
 )
 
@@ -53,10 +54,11 @@ func TestNewSpatialGrid(t *testing.T) {
 	}
 }
 
-
 func TestGetCellID(t *testing.T) {
 	minBound := common.Point{} // Grid origin at (0,0,...)
-	for i := range minBound { minBound[i] = -100.0 } // Grid covers space from -100 in each dim
+	for i := range minBound {
+		minBound[i] = -100.0
+	} // Grid covers space from -100 in each dim
 
 	sg, _ := NewSpatialGrid(10.0, pointDimension, minBound)
 
@@ -94,17 +96,16 @@ func TestGetCellID(t *testing.T) {
 	}
 }
 
-
 func TestSpatialGrid_BuildAndQuery(t *testing.T) {
 	minBound := common.Point{}
 	sg, _ := NewSpatialGrid(10.0, pointDimension, minBound) // Cell size 10, origin 0,0...
 
 	neurons := []*neuron.Neuron{
-		newTestNeuron(0, common.Point{5, 5}),    // Cell (0,0)
-		newTestNeuron(1, common.Point{15, 5}),   // Cell (1,0)
-		newTestNeuron(2, common.Point{5, 15}),   // Cell (0,1)
-		newTestNeuron(3, common.Point{25, 25}),  // Cell (2,2)
-		newTestNeuron(4, common.Point{-5, -5}),  // Cell (-1,-1)
+		newTestNeuron(0, common.Point{5, 5}),   // Cell (0,0)
+		newTestNeuron(1, common.Point{15, 5}),  // Cell (1,0)
+		newTestNeuron(2, common.Point{5, 15}),  // Cell (0,1)
+		newTestNeuron(3, common.Point{25, 25}), // Cell (2,2)
+		newTestNeuron(4, common.Point{-5, -5}), // Cell (-1,-1)
 		newTestNeuron(5, common.Point{50, 50}), // Cell (5,5) - further away
 	}
 	sg.Build(neurons)
@@ -152,7 +153,7 @@ func TestSpatialGrid_BuildAndQuery(t *testing.T) {
 	})
 
 	t.Run("Query with negative radius", func(t *testing.T) {
-		candidates := sg.QuerySphereForCandidates(common.Point{5,5}, -1.0)
+		candidates := sg.QuerySphereForCandidates(common.Point{5, 5}, -1.0)
 		if len(candidates) != 0 {
 			t.Errorf("Query with negative radius: got %d candidates, want 0", len(candidates))
 		}
@@ -161,12 +162,12 @@ func TestSpatialGrid_BuildAndQuery(t *testing.T) {
 	t.Run("Query hitting cell with multiple neurons", func(t *testing.T) {
 		sgLocal, _ := NewSpatialGrid(20.0, pointDimension, minBound)
 		neuronsLocal := []*neuron.Neuron{
-			newTestNeuron(10, common.Point{5,5}),   // Cell (0,0)
-			newTestNeuron(11, common.Point{6,6}),   // Cell (0,0)
-			newTestNeuron(12, common.Point{25,5}), // Cell (1,0)
+			newTestNeuron(10, common.Point{5, 5}),  // Cell (0,0)
+			newTestNeuron(11, common.Point{6, 6}),  // Cell (0,0)
+			newTestNeuron(12, common.Point{25, 5}), // Cell (1,0)
 		}
 		sgLocal.Build(neuronsLocal)
-		candidates := sgLocal.QuerySphereForCandidates(common.Point{10,10}, 10.0)
+		candidates := sgLocal.QuerySphereForCandidates(common.Point{10, 10}, 10.0)
 		// Query sphere center 10,10, R 10. Extent [0,20] x [0,20]. Cell size 20.
 		// Min/Max cells: (0,0) to (0,0). So only cell (0,0) is checked.
 		// Neurons in cell (0,0): 10, 11. N12 is in cell (1,0) which is also a candidate cell.
@@ -191,35 +192,36 @@ func sortNeuronIDs(ids []common.NeuronID) {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 }
 
-
 // TestGetCellID_WithOffset tests GetCellID when gridOriginOffset is not zero.
 func TestGetCellID_WithOffset(t *testing.T) {
-    var offset common.Point
-    for i := range offset { offset[i] = -50.0 } // Grid effectively starts at (-50, -50, ...)
+	var offset common.Point
+	for i := range offset {
+		offset[i] = -50.0
+	} // Grid effectively starts at (-50, -50, ...)
 
-    sg, _ := NewSpatialGrid(10.0, pointDimension, offset)
+	sg, _ := NewSpatialGrid(10.0, pointDimension, offset)
 
-    tests := []struct {
-        name  string
-        point common.Point
-        want  CellID // Only first few dims relevant for test case clarity
-    }{
-		{"point at grid origin", common.Point{-50, -50}, CellID{0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5}},
-		{"point in first cell from grid origin", common.Point{-45, -45}, CellID{0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5}},
-		{"point crossing to next cell from grid origin", common.Point{-40, -40}, CellID{1,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5}},
-		{"point at true origin", common.Point{0,0}, CellID{5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5}},
-    }
+	tests := []struct {
+		name  string
+		point common.Point
+		want  CellID // Only first few dims relevant for test case clarity
+	}{
+		{"point at grid origin", common.Point{-50, -50}, CellID{0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}},
+		{"point in first cell from grid origin", common.Point{-45, -45}, CellID{0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}},
+		{"point crossing to next cell from grid origin", common.Point{-40, -40}, CellID{1, 1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}},
+		{"point at true origin", common.Point{0, 0}, CellID{5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // tt.want is now fully specified.
-            fullWant := tt.want
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// tt.want is now fully specified.
+			fullWant := tt.want
 
-            got := sg.GetCellID(tt.point)
-            // Debug prints removed as test is passing.
-            if !reflect.DeepEqual(got, fullWant) {
-                t.Errorf("GetCellID() with offset: point %v, got %v, want %v (DeepEqual failed)", tt.point, got, fullWant)
-            }
-        })
-    }
+			got := sg.GetCellID(tt.point)
+			// Debug prints removed as test is passing.
+			if !reflect.DeepEqual(got, fullWant) {
+				t.Errorf("GetCellID() with offset: point %v, got %v, want %v (DeepEqual failed)", tt.point, got, fullWant)
+			}
+		})
+	}
 }

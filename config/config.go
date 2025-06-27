@@ -43,10 +43,10 @@ type GeneralParams struct {
 
 // NeuronBehaviorParams defines parameters related to individual neuron behavior.
 type NeuronBehaviorParams struct {
-	BaseFiringThreshold       common.Threshold // Base threshold for a neuron to fire.
-	AccumulatedPulseDecayRate common.Rate      // Rate at which accumulated pulse potential decays.
-	AbsoluteRefractoryCycles  common.CycleCount  // Cycles a neuron cannot fire after firing.
-	RelativeRefractoryCycles  common.CycleCount  // Cycles a neuron has increased threshold after firing.
+	BaseFiringThreshold       common.Threshold  // Base threshold for a neuron to fire.
+	AccumulatedPulseDecayRate common.Rate       // Rate at which accumulated pulse potential decays.
+	AbsoluteRefractoryCycles  common.CycleCount // Cycles a neuron cannot fire after firing.
+	RelativeRefractoryCycles  common.CycleCount // Cycles a neuron has increased threshold after firing.
 }
 
 // NeuronDistributionParams defines parameters for neuron type distribution and influence radii.
@@ -99,12 +99,12 @@ type SynaptogenesisParams struct {
 type NeurochemicalParams struct {
 	CortisolProductionRate        common.Rate   // Base rate of cortisol production.
 	CortisolDecayRate             common.Rate   // Rate at which cortisol decays.
-	CortisolProductionPerHit    common.Level  // Amount of cortisol produced per 'stress' event.
+	CortisolProductionPerHit      common.Level  // Amount of cortisol produced per 'stress' event.
 	CortisolMaxLevel              common.Level  // Maximum possible cortisol level.
 	CortisolGlandPosition         common.Point  // Fixed N-dimensional coordinates of the cortisol gland.
 	DopamineProductionRate        common.Rate   // Base rate of dopamine production.
 	DopamineDecayRate             common.Rate   // Rate at which dopamine decays.
-	DopamineProductionPerEvent  common.Level  // Amount of dopamine produced per 'reward' event.
+	DopamineProductionPerEvent    common.Level  // Amount of dopamine produced per 'reward' event.
 	DopamineMaxLevel              common.Level  // Maximum possible dopamine level.
 	CortisolInfluenceOnLR         common.Factor // How cortisol influences the learning rate.
 	DopamineInfluenceOnLR         common.Factor // How dopamine influences the learning rate.
@@ -129,45 +129,34 @@ type SimulationParameters struct {
 // CLIConfig holds configuration parameters that are typically set or overridden
 // via command-line flags. It includes general settings as well as mode-specific options.
 type CLIConfig struct {
-	// General Configuration
-
-	// Mode specifies the operation mode for the application (e.g., "sim", "expose", "observe").
-	Mode             string      `json:"mode"`
-	TotalNeurons     int         `json:"total_neurons"`     // Total number of neurons in the network.
-	Seed             int64       `json:"seed"`              // Seed for random number generator (0 for time-based).
-	WeightsFile      string      `json:"weights_file"`      // File to save/load synaptic weights.
-	BaseLearningRate common.Rate `json:"base_learning_rate"` // Base learning rate for Hebbian plasticity.
-
-	// Mode 'sim' Specific Configuration
-	Cycles          int     `json:"cycles"`            // Total simulation cycles for 'sim' mode.
-	DbPath          string  `json:"db_path"`           // Path for the SQLite database file for logging in 'sim' mode.
-	SaveInterval    int     `json:"save_interval"`     // Cycle interval for saving to DB in 'sim' mode (0 to disable periodic).
-	StimInputID     int     `json:"stim_input_id"`     // ID of input neuron for continuous stimulus in 'sim' mode (-1 for first, -2 to disable).
-	StimInputFreqHz float64 `json:"stim_input_freq_hz"` // Frequency (Hz) for stimulus in 'sim' mode (0.0 to disable).
-	MonitorOutputID int     `json:"monitor_output_id"` // ID of output neuron to monitor frequency in 'sim' mode (-1 for first, -2 to disable).
-	DebugChem       bool    `json:"debug_chem"`        // Enable debug prints for chemical production in 'sim' mode.
-
-	// Mode 'expose' Specific Configuration
-	Epochs           int `json:"epochs"`             // Number of exposure epochs for 'expose' mode.
-	CyclesPerPattern int `json:"cycles_per_pattern"` // Number of cycles to run per pattern presentation in 'expose' mode.
-
-	// Mode 'observe' Specific Configuration
-	Digit          int `json:"digit"`            // Digit (0-9) to present for 'observe' mode.
-	CyclesToSettle int `json:"cycles_to_settle"` // Number of cycles for network settling in 'observe' mode.
-
-	// Mode 'logutil' Specific Configuration (FEATURE-004)
-	LogUtilSubcommand string `json:"logutil_subcommand"` // e.g., "export"
-	LogUtilDbPath     string `json:"logutil_dbpath"`     // Path to the SQLite DB file
-	LogUtilTable      string `json:"logutil_table"`      // Table to export (e.g., "NetworkSnapshots", "NeuronStates")
-	LogUtilFormat     string `json:"logutil_format"`     // Output format (e.g., "csv")
-	LogUtilOutput     string `json:"logutil_output"`     // Output file path (stdout if empty)
+	Mode              string      `json:"mode"`
+	LogUtilOutput     string      `json:"logutil_output"`
+	LogUtilFormat     string      `json:"logutil_format"`
+	WeightsFile       string      `json:"weights_file"`
+	LogUtilTable      string      `json:"logutil_table"`
+	LogUtilDbPath     string      `json:"logutil_dbpath"`
+	DbPath            string      `json:"db_path"`
+	LogUtilSubcommand string      `json:"logutil_subcommand"`
+	MonitorOutputID   int         `json:"monitor_output_id"`
+	StimInputFreqHz   float64     `json:"stim_input_freq_hz"`
+	StimInputID       int         `json:"stim_input_id"`
+	Epochs            int         `json:"epochs"`
+	CyclesPerPattern  int         `json:"cycles_per_pattern"`
+	Digit             int         `json:"digit"`
+	CyclesToSettle    int         `json:"cycles_to_settle"`
+	SaveInterval      int         `json:"save_interval"`
+	Cycles            int         `json:"cycles"`
+	BaseLearningRate  common.Rate `json:"base_learning_rate"`
+	Seed              int64       `json:"seed"`
+	TotalNeurons      int         `json:"total_neurons"`
+	DebugChem         bool        `json:"debug_chem"`
 }
 
 // AppConfig is the top-level configuration structure, aggregating both
 // SimulationParameters and CLIConfig.
 type AppConfig struct {
-	SimParams SimulationParameters `json:"sim_params" toml:"sim_params"` // Detailed parameters for the simulation behavior.
-	Cli       CLIConfig            `json:"cli" toml:"cli"`               // Parameters typically set via command-line flags.
+	Cli       CLIConfig            `json:"cli" toml:"cli"`
+	SimParams SimulationParameters `json:"sim_params" toml:"sim_params"`
 }
 
 // DefaultSimulationParameters returns a SimulationParameters struct populated with
@@ -225,12 +214,12 @@ func DefaultSimulationParameters() SimulationParameters {
 		Neurochemical: NeurochemicalParams{
 			CortisolProductionRate:        common.Rate(0.01),
 			CortisolDecayRate:             common.Rate(0.005),
-			CortisolProductionPerHit:    common.Level(0.05),
+			CortisolProductionPerHit:      common.Level(0.05),
 			CortisolMaxLevel:              common.Level(1.0),
 			CortisolGlandPosition:         common.Point{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // Default to origin
 			DopamineProductionRate:        common.Rate(0.02),
 			DopamineDecayRate:             common.Rate(0.01),
-			DopamineProductionPerEvent:  common.Level(0.1),
+			DopamineProductionPerEvent:    common.Level(0.1),
 			DopamineMaxLevel:              common.Level(1.0),
 			CortisolInfluenceOnLR:         common.Factor(-0.5),
 			DopamineInfluenceOnLR:         common.Factor(0.8),
@@ -251,9 +240,9 @@ func DefaultSimulationParameters() SimulationParameters {
 // and parse their own flags.
 //
 // This function remains useful for:
-// 1. Testing: To parse a controlled set of arguments into a CLIConfig struct.
-// 2. Programmatic Configuration: If there's a need to build CLIConfig from a
-//    string slice outside the Cobra execution flow.
+//  1. Testing: To parse a controlled set of arguments into a CLIConfig struct.
+//  2. Programmatic Configuration: If there's a need to build CLIConfig from a
+//     string slice outside the Cobra execution flow.
 //
 // The `args` slice should not include the program name. If `args` is nil,
 // and fSet is a named FlagSet (not flag.CommandLine), no arguments will be parsed,
@@ -261,12 +250,14 @@ func DefaultSimulationParameters() SimulationParameters {
 // flags are filtered out from the provided `args`.
 //
 // Parameters:
-//   fSet: The flag.FlagSet instance to define and parse flags.
-//   args: A slice of strings representing the command-line arguments (excluding the program name).
+//
+//	fSet: The flag.FlagSet instance to define and parse flags.
+//	args: A slice of strings representing the command-line arguments (excluding the program name).
 //
 // Returns:
-//   A CLIConfig struct populated from the parsed flags and an error if parsing fails.
-//   If the "seed" flag is 0 after parsing, it's updated to the current time's nanoseconds.
+//
+//	A CLIConfig struct populated from the parsed flags and an error if parsing fails.
+//	If the "seed" flag is 0 after parsing, it's updated to the current time's nanoseconds.
 func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 	cfg := CLIConfig{}
 
@@ -316,7 +307,6 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 		}
 	}
 
-
 	// Only parse if not already parsed. In tests, fSet might be parsed multiple times
 	// if not careful, but Parse is idempotent for defined flags.
 	// However, calling Parse on an already parsed FlagSet with new arguments can lead to issues.
@@ -352,19 +342,21 @@ func LoadCLIConfig(fSet *flag.FlagSet, args []string) (CLIConfig, error) {
 // and parsed CLI flags.
 //
 // This function can still be useful for:
-// 1. Testing: To create an AppConfig from a controlled set of string arguments
-//    as if they were passed on the command line (without Cobra's involvement).
-// 2. Programmatic Setup: If an AppConfig needs to be built from arguments
-//    outside the main Cobra CLI flow.
+//  1. Testing: To create an AppConfig from a controlled set of string arguments
+//     as if they were passed on the command line (without Cobra's involvement).
+//  2. Programmatic Setup: If an AppConfig needs to be built from arguments
+//     outside the main Cobra CLI flow.
 //
 // It does NOT handle TOML file loading; that logic is now within the Cobra command handlers.
 //
 // Parameters:
-//   args: A slice of strings representing the command-line arguments (excluding the program name).
+//
+//	args: A slice of strings representing the command-line arguments (excluding the program name).
 //
 // Returns:
-//  An *AppConfig struct containing the fully resolved and validated configuration,
-//  or an error if loading or validation fails.
+//
+//	An *AppConfig struct containing the fully resolved and validated configuration,
+//	or an error if loading or validation fails.
 func NewAppConfig(args []string) (*AppConfig, error) {
 	// Create a new FlagSet for command-line parsing.
 	// os.Args[0] is the program name, actual flags start from os.Args[1:].
@@ -394,7 +386,8 @@ func NewAppConfig(args []string) (*AppConfig, error) {
 // ranges, interdependencies).
 //
 // Returns:
-//  An error if any validation rule is violated, nil otherwise.
+//
+//	An error if any validation rule is violated, nil otherwise.
 func (ac *AppConfig) Validate() error {
 	// General CLI parameter validation
 	if ac.Cli.TotalNeurons <= 0 { // Basic positivity check
@@ -538,9 +531,9 @@ func (ac *AppConfig) Validate() error {
 	if ac.SimParams.Learning.InitialSynapticWeightMax < ac.SimParams.Learning.InitialSynapticWeightMin {
 		return fmt.Errorf("InitialSynapticWeightMax (%f) must be >= InitialSynapticWeightMin (%f)", ac.SimParams.Learning.InitialSynapticWeightMax, ac.SimParams.Learning.InitialSynapticWeightMin)
 	}
-    if ac.SimParams.Learning.MaxSynapticWeight < ac.SimParams.Learning.InitialSynapticWeightMax {
-        return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)", ac.SimParams.Learning.MaxSynapticWeight, ac.SimParams.Learning.InitialSynapticWeightMax)
-    }
+	if ac.SimParams.Learning.MaxSynapticWeight < ac.SimParams.Learning.InitialSynapticWeightMax {
+		return fmt.Errorf("MaxSynapticWeight (%f) must be >= InitialSynapticWeightMax (%f)", ac.SimParams.Learning.MaxSynapticWeight, ac.SimParams.Learning.InitialSynapticWeightMax)
+	}
 	if ac.SimParams.Learning.SynapticWeightDecayRate < 0 {
 		return fmt.Errorf("SynapticWeightDecayRate must be non-negative, got %f", ac.SimParams.Learning.SynapticWeightDecayRate)
 	}

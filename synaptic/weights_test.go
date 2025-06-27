@@ -1,11 +1,12 @@
 package synaptic
 
 import (
-	"crownet/common"
-	"crownet/config"
 	"math" // Added to fix "undefined: math" errors
 	"math/rand"
 	"testing"
+
+	"crownet/common"
+	"crownet/config"
 	// "fmt" // Removed as it was imported but not used
 )
 
@@ -161,7 +162,6 @@ func TestGetSetWeight(t *testing.T) {
 		}
 	})
 
-
 	t.Run("SetWeight self-connection", func(t *testing.T) {
 		nw.SetWeight(fromID, fromID, 0.5)
 		if got := nw.GetWeight(fromID, fromID); got != 0.0 {
@@ -202,7 +202,6 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		if finalExpected > common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
 			finalExpected = common.SynapticWeight(simParams.Learning.MaxSynapticWeight)
 		}
-
 
 		if math.Abs(float64(currentWeight-finalExpected)) > 1e-9 {
 			t.Errorf("ApplyHebbianUpdate LTP: got %f, want approx %f (delta %f, afterLTP %f, afterDecay %f)",
@@ -276,13 +275,13 @@ func TestApplyHebbianUpdate(t *testing.T) {
 		// A more precise test would mock SetWeight or check intermediate value.
 		// For now, checking it doesn't exceed the *effective* cap is a good start.
 		if currentWeight > common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
-             t.Errorf("ApplyHebbianUpdate resulted in weight %f, exceeding MaxSynapticWeight %f", currentWeight, simParams.Learning.MaxSynapticWeight)
-        }
-        if currentWeight > common.SynapticWeight(simParams.Learning.HebbianWeightMax) && simParams.Learning.HebbianWeightMax <= simParams.Learning.MaxSynapticWeight {
-             // This case might happen if decay brings it down just below MaxSynapticWeight but still above a lower HebbianWeightMax
-             // The logic is: newW = HWM; nw.SetWeight(newW) -> if newW > MSW, newW=MSW.
-             // So currentWeight should be min(HWM_after_decay, MSW)
-        }
+			t.Errorf("ApplyHebbianUpdate resulted in weight %f, exceeding MaxSynapticWeight %f", currentWeight, simParams.Learning.MaxSynapticWeight)
+		}
+		if currentWeight > common.SynapticWeight(simParams.Learning.HebbianWeightMax) && simParams.Learning.HebbianWeightMax <= simParams.Learning.MaxSynapticWeight {
+			// This case might happen if decay brings it down just below MaxSynapticWeight but still above a lower HebbianWeightMax
+			// The logic is: newW = HWM; nw.SetWeight(newW) -> if newW > MSW, newW=MSW.
+			// So currentWeight should be min(HWM_after_decay, MSW)
+		}
 	})
 }
 
@@ -292,7 +291,7 @@ func TestGetAllLoadWeights(t *testing.T) {
 	nw, _ := NewNetworkWeights(simParams, rng)
 	neuronIDs := []common.NeuronID{0, 1}
 	nw.InitializeAllToAllWeights(neuronIDs)
-	nw.SetWeight(0,1, 0.77)
+	nw.SetWeight(0, 1, 0.77)
 
 	retrievedWeights := nw.GetAllWeights()
 
@@ -301,13 +300,12 @@ func TestGetAllLoadWeights(t *testing.T) {
 		t.Fatalf("GetAllWeights didn't retrieve fromID 0")
 	}
 	retrievedWeights[0][1] = 0.99 // Modify copy
-	if nw.GetWeight(0,1) == 0.99 {
+	if nw.GetWeight(0, 1) == 0.99 {
 		t.Errorf("GetAllWeights did not return a deep copy (modification affected original)")
 	}
-	if nw.GetWeight(0,1) != 0.77 { // Check original is untouched
-		t.Errorf("Original weight changed after modifying copy from GetAllWeights, expected 0.77 got %f", nw.GetWeight(0,1))
+	if nw.GetWeight(0, 1) != 0.77 { // Check original is untouched
+		t.Errorf("Original weight changed after modifying copy from GetAllWeights, expected 0.77 got %f", nw.GetWeight(0, 1))
 	}
-
 
 	// Test LoadWeights
 	nw2, _ := NewNetworkWeights(simParams, rng)
@@ -317,11 +315,17 @@ func TestGetAllLoadWeights(t *testing.T) {
 	}
 	nw2.LoadWeights(weightsToLoad)
 
-	if nw2.GetWeight(0,1) != 0.11 { t.Errorf("LoadWeights failed for 0->1, got %f want 0.11", nw2.GetWeight(0,1)) }
-	if nw2.GetWeight(0,2) != 0.22 { t.Errorf("LoadWeights failed for 0->2, got %f want 0.22", nw2.GetWeight(0,2)) }
-	if nw2.GetWeight(1,0) != 0.33 { t.Errorf("LoadWeights failed for 1->0, got %f want 0.33", nw2.GetWeight(1,0)) }
+	if nw2.GetWeight(0, 1) != 0.11 {
+		t.Errorf("LoadWeights failed for 0->1, got %f want 0.11", nw2.GetWeight(0, 1))
+	}
+	if nw2.GetWeight(0, 2) != 0.22 {
+		t.Errorf("LoadWeights failed for 0->2, got %f want 0.22", nw2.GetWeight(0, 2))
+	}
+	if nw2.GetWeight(1, 0) != 0.33 {
+		t.Errorf("LoadWeights failed for 1->0, got %f want 0.33", nw2.GetWeight(1, 0))
+	}
 	if nw2.GetWeight(common.NeuronID(99), common.NeuronID(98)) != 0.0 {
-		t.Errorf("LoadWeights: non-existent weight should be 0 after load, got %f", nw2.GetWeight(99,98))
+		t.Errorf("LoadWeights: non-existent weight should be 0 after load, got %f", nw2.GetWeight(99, 98))
 	}
 
 	// Test LoadWeights with clamping (e.g. loading a weight > MaxSynapticWeight)
@@ -329,7 +333,7 @@ func TestGetAllLoadWeights(t *testing.T) {
 		0: {1: common.SynapticWeight(simParams.Learning.MaxSynapticWeight + 0.5)},
 	}
 	nw2.LoadWeights(weightsToLoadOverMax)
-	if nw2.GetWeight(0,1) != common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
-		t.Errorf("LoadWeights should clamp overweight values, got %f want %f", nw2.GetWeight(0,1), simParams.Learning.MaxSynapticWeight)
+	if nw2.GetWeight(0, 1) != common.SynapticWeight(simParams.Learning.MaxSynapticWeight) {
+		t.Errorf("LoadWeights should clamp overweight values, got %f want %f", nw2.GetWeight(0, 1), simParams.Learning.MaxSynapticWeight)
 	}
 }

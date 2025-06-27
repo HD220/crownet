@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time" // For unique temp dir names, though t.TempDir() handles this
 
+	"encoding/json" // For JSON validation
+
 	"crownet/cli"
 	"crownet/common"
 	"crownet/config"
-	"encoding/json" // For JSON validation
 )
 
 // Helper function to create a minimal AppConfig for expose tests
@@ -42,12 +43,12 @@ func TestExposeCommand_BasicRun(t *testing.T) {
 		SimParams: config.DefaultSimulationParameters(), // Use default simulation parameters
 		Cli: config.CLIConfig{
 			Mode:             config.ModeExpose,
-			TotalNeurons:     50,    // Increased from 10 to be >= MinInput (35) + MinOutput (10)
+			TotalNeurons:     50,                    // Increased from 10 to be >= MinInput (35) + MinOutput (10)
 			Seed:             time.Now().UnixNano(), // Use a unique seed
 			WeightsFile:      tempWeightsFilePath,
 			BaseLearningRate: common.Rate(0.01),
-			Epochs:           1,     // Minimal epochs
-			CyclesPerPattern: 1,     // Minimal cycles per pattern
+			Epochs:           1, // Minimal epochs
+			CyclesPerPattern: 1, // Minimal cycles per pattern
 			// DbPath, SaveInterval, DebugChem can be left as default (empty/0/false)
 			// as they are not critical for this basic execution test.
 		},
@@ -115,8 +116,8 @@ func TestExposeCommand_NewWeightsFileCreation(t *testing.T) {
 		t.Fatalf("Failed to read created weights file '%s': %v", tempWeightsFilePath, errRead)
 	}
 	var jsonData interface{} // Use interface{} for generic JSON validation
-	if errJson := json.Unmarshal(content, &jsonData); errJson != nil {
-		t.Errorf("Expected weights file '%s' to contain valid JSON, but unmarshal failed: %v", tempWeightsFilePath, errJson)
+	if errJSON := json.Unmarshal(content, &jsonData); errJSON != nil {
+		t.Errorf("Expected weights file '%s' to contain valid JSON, but unmarshal failed: %v", tempWeightsFilePath, errJSON)
 	}
 }
 
@@ -131,7 +132,10 @@ func TestExposeCommand_ModifyWeightsFile(t *testing.T) {
 	if errWrite != nil {
 		t.Fatalf("Failed to create initial dummy weights file '%s': %v", tempWeightsFilePath, errWrite)
 	}
-	initialFileInfo, _ := os.Stat(tempWeightsFilePath)
+	initialFileInfo, statErr := os.Stat(tempWeightsFilePath)
+	if statErr != nil {
+		t.Fatalf("Failed to stat initial dummy weights file '%s': %v", tempWeightsFilePath, statErr)
+	}
 	initialModTime := initialFileInfo.ModTime()
 
 	// Ensure there's a slight delay for ModTime to change reliably
@@ -175,8 +179,9 @@ func TestExposeCommand_ModifyWeightsFile(t *testing.T) {
 		t.Fatalf("Failed to read modified weights file '%s': %v", tempWeightsFilePath, errRead)
 	}
 	var jsonData interface{}
-	if errJson := json.Unmarshal(finalContent, &jsonData); errJson != nil {
-		t.Errorf("Expected modified weights file '%s' to contain valid JSON, but unmarshal failed: %v", tempWeightsFilePath, errJson)
+	if errJSON := json.Unmarshal(finalContent, &jsonData); errJSON != nil {
+		t.Errorf("Expected modified weights file '%s' to contain valid JSON, but unmarshal failed: %v",
+			tempWeightsFilePath, errJSON)
 	}
 
 	// Optional: Check content different from initial (could be tricky if format changes but values are similar)
@@ -185,6 +190,7 @@ func TestExposeCommand_ModifyWeightsFile(t *testing.T) {
 		// or if the number of neurons (50) results in a vastly different structure than the dummy.
 		// A more robust check would be to load both JSONs and compare structures/values if necessary.
 		// For now, ModTime is a strong indicator.
-		t.Logf("Warning: Content of weights file '%s' did not change after running expose. This might be okay for minimal run, but check if intended.", tempWeightsFilePath)
+		t.Logf("Warning: Content of weights file '%s' did not change after running expose. "+
+			"This might be okay for minimal run, but check if intended.", tempWeightsFilePath)
 	}
 }

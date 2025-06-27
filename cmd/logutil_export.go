@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/spf13/cobra"
+
 	"crownet/config" // Para validar e usar as flags de logutil
 	"crownet/storage"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -22,7 +23,7 @@ var logutilExportCmd = &cobra.Command{
 	Short: "Exporta dados de uma tabela do log SQLite para um formato especificado (ex: CSV).",
 	Long: `Lê um arquivo de banco de dados SQLite gerado pelo CrowNet e exporta
 os dados da tabela especificada. Atualmente, suporta exportação para CSV.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error { // cmd and args renamed to _
 		fmt.Println("Executando logutil export via Cobra...")
 
 		// Usar as flags globais e as locais para popular uma CLIConfig temporária para validação
@@ -32,7 +33,7 @@ os dados da tabela especificada. Atualmente, suporta exportação para CSV.`,
 		// Primeiro, validamos as flags usando uma AppConfig temporária.
 		tempCliCfg := config.CLIConfig{
 			Mode:              config.ModeLogUtil, // Necessário para acionar a validação correta
-			LogUtilSubcommand: "export",          // Hardcoded pois este é o comando de exportação
+			LogUtilSubcommand: "export",           // Hardcoded pois este é o commando de exportação
 			LogUtilDbPath:     logutilExportDbPath,
 			LogUtilTable:      logutilExportTable,
 			LogUtilFormat:     logutilExportFormat,
@@ -78,12 +79,20 @@ os dados da tabela especificada. Atualmente, suporta exportação para CSV.`,
 func init() {
 	logutilCmd.AddCommand(logutilExportCmd)
 
-	logutilExportCmd.Flags().StringVarP(&logutilExportDbPath, "dbPath", "d", "", "Caminho para o arquivo SQLite DB (obrigatório).")
-	_ = logutilExportCmd.MarkFlagRequired("dbPath")
+	logutilExportCmd.Flags().StringVarP(&logutilExportDbPath, "dbPath", "d", "",
+		"Caminho para o arquivo SQLite DB (obrigatório).")
+	if err := logutilExportCmd.MarkFlagRequired("dbPath"); err != nil {
+		log.Printf("Warning: could not mark 'dbPath' as required for logutilExportCmd: %v", err)
+	}
 
-	logutilExportCmd.Flags().StringVarP(&logutilExportTable, "table", "t", "", "Tabela a ser exportada (ex: 'NetworkSnapshots', 'NeuronStates') (obrigatório).")
-	_ = logutilExportCmd.MarkFlagRequired("table")
+	logutilExportCmd.Flags().StringVarP(&logutilExportTable, "table", "t", "",
+		"Tabela a ser exportada (ex: 'NetworkSnapshots', 'NeuronStates') (obrigatório).")
+	if err := logutilExportCmd.MarkFlagRequired("table"); err != nil {
+		log.Printf("Warning: could not mark 'table' as required for logutilExportCmd: %v", err)
+	}
 
-	logutilExportCmd.Flags().StringVarP(&logutilExportFormat, "format", "f", "csv", "Formato de saída (atualmente apenas 'csv').")
-	logutilExportCmd.Flags().StringVarP(&logutilExportOutput, "output", "o", "", "Arquivo de saída (stdout se não especificado).")
+	logutilExportCmd.Flags().StringVarP(&logutilExportFormat, "format", "f", "csv",
+		"Formato de saída (atualmente apenas 'csv').")
+	logutilExportCmd.Flags().StringVarP(&logutilExportOutput, "output", "o", "",
+		"Arquivo de saída (stdout se não especificado).")
 }

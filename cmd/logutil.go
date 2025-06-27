@@ -10,9 +10,9 @@ import (
 var logutilCmd = &cobra.Command{
 	Use:   "logutil",
 	Short: "Utilitários para interagir com logs SQLite gerados pelo CrowNet.",
-	Long: `O comando logutil fornece subcomandos para processar e exportar dados
+	Long: `O commando logutil fornece subcomandos para processar e exportar dados
 dos arquivos de log SQLite criados durante as simulações de CrowNet.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error { // cmd and args renamed to _
 		// Validar aqui se o subcomando é conhecido, se necessário, embora Cobra faça isso.
 		// Pode ser usado para carregar configurações globais para todos os subcomandos de logutil.
 		return nil

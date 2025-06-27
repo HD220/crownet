@@ -4,6 +4,7 @@ import (
 	"crownet/common"
 	"crownet/config"
 	"crownet/neuron"
+
 	// "crownet/pulse" // May not be directly needed for environment tests if events are mocked
 	"math"
 	"testing"
@@ -106,26 +107,24 @@ func TestEnvironment_UpdateLevels_Simplified(t *testing.T) {
 	// It seems like there was a previous version of the code these tests were written for.
 	// I will comment out the GetModulationFactor tests.
 	/*
-	lrMod := env.GetModulationFactor(simParams.Neurochemical.CortisolInfluenceOnLR, simParams.Neurochemical.DopamineInfluenceOnLR, simParams.Learning.MinLearningRateFactor)
-	if math.Abs(float64(lrMod)-0.87) > 1e-9 {
-		t.Errorf("GetModulationFactor (LR): got %f, want 0.87", lrMod)
-	}
+		lrMod := env.GetModulationFactor(simParams.Neurochemical.CortisolInfluenceOnLR, simParams.Neurochemical.DopamineInfluenceOnLR, simParams.Learning.MinLearningRateFactor)
+		if math.Abs(float64(lrMod)-0.87) > 1e-9 {
+			t.Errorf("GetModulationFactor (LR): got %f, want 0.87", lrMod)
+		}
 
-	simParams.Neurochemical.CortisolInfluenceOnLR = -2.0
-	lrModClamped := env.GetModulationFactor(simParams.Neurochemical.CortisolInfluenceOnLR, simParams.Neurochemical.DopamineInfluenceOnLR, simParams.Learning.MinLearningRateFactor)
-	if math.Abs(float64(lrModClamped)-simParams.Learning.MinLearningRateFactor) > 1e-9 {
-		t.Errorf("GetModulationFactor (LR) clamped: got %f, want %f", lrModClamped, simParams.Learning.MinLearningRateFactor)
-	}
-	simParams.Neurochemical.CortisolInfluenceOnLR = -0.5
+		simParams.Neurochemical.CortisolInfluenceOnLR = -2.0
+		lrModClamped := env.GetModulationFactor(simParams.Neurochemical.CortisolInfluenceOnLR, simParams.Neurochemical.DopamineInfluenceOnLR, simParams.Learning.MinLearningRateFactor)
+		if math.Abs(float64(lrModClamped)-simParams.Learning.MinLearningRateFactor) > 1e-9 {
+			t.Errorf("GetModulationFactor (LR) clamped: got %f, want %f", lrModClamped, simParams.Learning.MinLearningRateFactor)
+		}
+		simParams.Neurochemical.CortisolInfluenceOnLR = -0.5
 	*/
 }
-
 
 func TestEnvironment_ApplyEffectsToNeurons(t *testing.T) {
 	simParams := defaultTestSimParamsForChem()
 	// env := NewEnvironment(simParams) // NewEnvironment() takes no args
 	env := NewEnvironment()
-
 
 	n1 := neuron.New(0, neuron.Excitatory, common.Point{}, simParams) // BaseThreshold = 1.0
 
@@ -178,6 +177,6 @@ func TestEnvironment_ApplyEffectsToNeurons(t *testing.T) {
 	// Expected: 1.0 * (1 + 1.0 * -5.0) = 1.0 * -4.0 = -4.0. Should be clamped.
 	// The ApplyEffectsToNeurons clamps to minFiringThresholdValue (0.01).
 	if math.Abs(float64(n1.CurrentFiringThreshold)-minFiringThresholdValue) > 1e-9 {
-		 t.Errorf("ApplyEffects (threshold clamping): Threshold got %f, want %f", n1.CurrentFiringThreshold, minFiringThresholdValue)
+		t.Errorf("ApplyEffects (threshold clamping): Threshold got %f, want %f", n1.CurrentFiringThreshold, minFiringThresholdValue)
 	}
 }

@@ -3,17 +3,20 @@ package cmd
 import (
 	"testing"
 	"time"
+
 	// "path/filepath" // Not needed if not creating temp files for this basic test
 	// "os" // Not needed for this basic test
 
-	"crownet/cli"
-	"crownet/config"
-	"crownet/common" // For common.Rate if setting BaseLearningRate explicitly
 	"database/sql"
 	"fmt" // For Sprintf in SQLite row count query
 	"os"
 	"path/filepath"
+
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
+
+	"crownet/cli"
+	"crownet/common" // For common.Rate if setting BaseLearningRate explicitly
+	"crownet/config"
 )
 
 // Helper function to create a minimal AppConfig for sim tests
@@ -30,7 +33,7 @@ func newTestSimAppConfig(cycles int, totalNeurons int, dbPath string, saveInterv
 			DbPath:           dbPath,
 			SaveInterval:     saveInterval,
 			BaseLearningRate: common.Rate(0.01), // Default, but explicit
-			MonitorOutputID:  -2, // Explicitly disable output monitoring for basic test
+			MonitorOutputID:  -2,                // Explicitly disable output monitoring for basic test
 			// Other sim-specific flags like StimInputID, DebugChem
 			// can be left as default (0 or false).
 		},

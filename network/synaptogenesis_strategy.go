@@ -3,11 +3,12 @@
 package network
 
 import (
+	"math" // Added for Sqrt for DefaultMovementUpdater
+
 	"crownet/common"
 	"crownet/config"
 	"crownet/neuron"
 	"crownet/space" // Added for EuclideanDistance and ClampToHyperSphere
-	"math"          // Added for Sqrt for DefaultMovementUpdater
 )
 
 // ForceCalculator defines the interface for components responsible for calculating

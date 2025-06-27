@@ -4,12 +4,13 @@
 package neurochemical
 
 import (
+	"math"
+
 	"crownet/common"
 	"crownet/config"
 	"crownet/neuron"
 	"crownet/pulse"
 	"crownet/space"
-	"math"
 )
 
 const (
@@ -52,7 +53,7 @@ type Environment struct {
 	// SynaptogenesisModulationFactor is influenced by chemical levels and affects neuron movement.
 	SynaptogenesisModulationFactor common.Factor
 	// LearningRateModulationFactor is influenced by chemical levels and affects Hebbian learning.
-	LearningRateModulationFactor   common.Factor
+	LearningRateModulationFactor common.Factor
 }
 
 // calculateCortisolStimulation determines the amount of cortisol to be produced in the current cycle.
@@ -134,10 +135,10 @@ func updateChemicalLevel(currentLevel common.Level, decayRate common.Rate, produ
 	if maxLevel > 0 && level > float64(maxLevel) { // Only clamp by maxLevel if it's positive.
 		level = float64(maxLevel)
 	} else if level > 0 && maxLevel <= 0 { // If maxLevel is invalid (e.g. 0 or negative), but level is positive, this is an issue.
-                                          // For robustness, perhaps cap at a very large number or log warning.
-                                          // Here, we just ensure it doesn't exceed a positive maxLevel.
-                                          // If maxLevel is 0, level will be clamped to 0 if it was positive.
-    }
+		// For robustness, perhaps cap at a very large number or log warning.
+		// Here, we just ensure it doesn't exceed a positive maxLevel.
+		// If maxLevel is 0, level will be clamped to 0 if it was positive.
+	}
 	return common.Level(level)
 }
 

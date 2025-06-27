@@ -4,12 +4,13 @@
 package storage
 
 import (
-	"crownet/common"
-	"crownet/synaptic"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
+
+	"crownet/common"
+	"crownet/synaptic"
 )
 
 // SaveNetworkWeightsToJSON serializes the given network synaptic weights into a JSON file

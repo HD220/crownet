@@ -6,16 +6,18 @@ package network
 import (
 	"crownet/common"
 	"crownet/config"
-	"crownet/neuron"
 	"crownet/neurochemical"
+	"crownet/neuron"
 	"crownet/pulse"
 	"crownet/space"
+
 	// "crownet/space/grid" // If grid becomes its own sub-package. For now, space.SpatialGrid
-	"crownet/synaptic"
 	"fmt"
 	"math"
 	"math/rand"
 	"sort"
+
+	"crownet/synaptic"
 )
 
 // minEffectiveLearningRateThreshold defines the minimum threshold below which the
@@ -42,57 +44,29 @@ func (cn *CrowNet) isNeuronRecentlyActive(n *neuron.Neuron, coincidenceWindow co
 // active pulses, the neurochemical environment, spatial indexing,
 // simulation parameters, and the overall simulation state.
 type CrowNet struct {
-	// SimParams holds the shared simulation parameters for the network.
-	SimParams *config.SimulationParameters
-	// baseLearningRate is the initial learning rate, which can be modulated by the chemical environment.
-	baseLearningRate common.Rate
-	// rng is a local random number generator for this network instance, ensuring deterministic behavior if seeded.
-	rng *rand.Rand
-
-	// Neurons is a slice containing all neuron instances in the network.
-	Neurons []*neuron.Neuron
-	// InputNeuronIDs caches the IDs of input neurons, sorted for consistent access.
-	InputNeuronIDs []common.NeuronID
-	// OutputNeuronIDs caches the IDs of output neurons, sorted for consistent access.
-	OutputNeuronIDs []common.NeuronID
-	// OutputNeuronIDSet provides efficient O(1) lookup for output neuron IDs.
-	OutputNeuronIDSet map[common.NeuronID]struct{}
-	// InputNeuronIDSet provides efficient O(1) lookup for input neuron IDs.
-	InputNeuronIDSet map[common.NeuronID]struct{}
-	// neuronMap allows for O(1) retrieval of a neuron instance by its ID.
-	neuronMap map[common.NeuronID]*neuron.Neuron
-	// neuronIDCounter is used to generate unique IDs for new neurons.
-	neuronIDCounter common.NeuronID
-
-	// ActivePulses manages all pulses currently propagating through the network.
-	ActivePulses *pulse.PulseList
-	// SynapticWeights manages the matrix of synaptic weights between neurons.
-	SynapticWeights *synaptic.NetworkWeights
-	// ChemicalEnv manages the neurochemical environment (e.g., cortisol, dopamine) and their effects.
-	ChemicalEnv *neurochemical.Environment
-	// SpatialGrid provides a spatial index for neurons, optimizing proximity queries.
-	SpatialGrid *space.SpatialGrid
-
-	// CycleCount tracks the current simulation cycle number.
-	CycleCount common.CycleCount
-
-	// inputTargetFrequencies stores target firing frequencies for input neurons under continuous stimulus.
-	inputTargetFrequencies map[common.NeuronID]float64
-	// timeToNextInputFire tracks remaining cycles until the next scheduled firing for frequency-stimulated inputs.
-	timeToNextInputFire map[common.NeuronID]common.CycleCount
-	// outputFiringHistory records recent firing times for output neurons, used for frequency calculation.
-	outputFiringHistory map[common.NeuronID][]common.CycleCount
-
-	// isLearningEnabled, if true, allows Hebbian learning rules to be applied.
-	isLearningEnabled bool
-	// isSynaptogenesisEnabled, if true, allows neuron movement and structural plasticity.
-	isSynaptogenesisEnabled bool
-	// isChemicalModulationEnabled, if true, allows neurochemicals to modulate network behavior.
-	isChemicalModulationEnabled bool
-
-	// SynaptogenesisStrategy components
-	SynaptogenesisForceCalculator ForceCalculator // REFACTOR-006
-	SynaptogenesisMovementUpdater MovementUpdater // REFACTOR-006
+	SynaptogenesisForceCalculator ForceCalculator
+	SynaptogenesisMovementUpdater MovementUpdater
+	inputTargetFrequencies        map[common.NeuronID]float64
+	SpatialGrid                   *space.SpatialGrid
+	rng                           *rand.Rand
+	outputFiringHistory           map[common.NeuronID][]common.CycleCount
+	OutputNeuronIDSet             map[common.NeuronID]struct{}
+	InputNeuronIDSet              map[common.NeuronID]struct{}
+	neuronMap                     map[common.NeuronID]*neuron.Neuron
+	timeToNextInputFire           map[common.NeuronID]common.CycleCount
+	ActivePulses                  *pulse.PulseList
+	SynapticWeights               *synaptic.NetworkWeights
+	ChemicalEnv                   *neurochemical.Environment
+	SimParams                     *config.SimulationParameters
+	Neurons                       []*neuron.Neuron
+	OutputNeuronIDs               []common.NeuronID
+	InputNeuronIDs                []common.NeuronID
+	CycleCount                    common.CycleCount
+	neuronIDCounter               common.NeuronID
+	baseLearningRate              common.Rate
+	isLearningEnabled             bool
+	isSynaptogenesisEnabled       bool
+	isChemicalModulationEnabled   bool
 }
 
 // NewCrowNet creates and initializes a new CrowNet simulation environment.
@@ -100,12 +74,14 @@ type CrowNet struct {
 // the chemical environment, and spatial indexing, based on the provided AppConfig.
 //
 // Parameters:
-//   appCfg: An *config.AppConfig containing all necessary configuration parameters
-//           (simulation settings and CLI options).
+//
+//	appCfg: An *config.AppConfig containing all necessary configuration parameters
+//	        (simulation settings and CLI options).
 //
 // Returns:
-//   A pointer to the newly created CrowNet instance, or an error if initialization
-//   of any core component (e.g., spatial grid, synaptic weights, neurons) fails.
+//
+//	A pointer to the newly created CrowNet instance, or an error if initialization
+//	of any core component (e.g., spatial grid, synaptic weights, neurons) fails.
 func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 	if appCfg == nil {
 		return nil, fmt.Errorf("NewCrowNet: appConfig cannot be nil")
@@ -153,13 +129,13 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		neuronIDCounter:   0,
 
 		// Dynamic sub-systems
-		ActivePulses:    pulse.NewPulseList(),
+		ActivePulses: pulse.NewPulseList(),
 		// SynapticWeights will be initialized properly below
-		ChemicalEnv:     neurochemical.NewEnvironment(),
-		SpatialGrid:     spatialGridInstance,
+		ChemicalEnv: neurochemical.NewEnvironment(),
+		SpatialGrid: spatialGridInstance,
 
 		// Simulation state
-		CycleCount:      0,
+		CycleCount: 0,
 
 		// Feature-specific state
 		inputTargetFrequencies: make(map[common.NeuronID]float64),
@@ -167,13 +143,13 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		outputFiringHistory:    make(map[common.NeuronID][]common.CycleCount),
 
 		// Dynamic process toggles (default to true)
-		isLearningEnabled:      true,
-		isSynaptogenesisEnabled: true,
+		isLearningEnabled:           true,
+		isSynaptogenesisEnabled:     true,
 		isChemicalModulationEnabled: true,
 
 		// REFACTOR-006: Initialize synaptogenesis strategy components
 		// Placeholder for actual default implementation structs/constructors
-		SynaptogenesisForceCalculator:   &DefaultForceCalculator{},
+		SynaptogenesisForceCalculator: &DefaultForceCalculator{},
 		SynaptogenesisMovementUpdater: &DefaultMovementUpdater{},
 	}
 	// Ensure SynapticWeights is properly initialized (it was missing its params before)
@@ -183,7 +159,6 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 		return nil, fmt.Errorf("failed to create synaptic weights: %w", err)
 	}
 	net.SynapticWeights = synapticWeightsInstance
-
 
 	// Initialize neurons - this might return an error
 	if err := net.initializeNeurons(appCfg.Cli.TotalNeurons); err != nil {
@@ -200,7 +175,6 @@ func NewCrowNet(appCfg *config.AppConfig) (*CrowNet, error) {
 
 	// Initial build of the spatial grid after neurons are positioned
 	net.SpatialGrid.Build(net.Neurons)
-
 
 	return net, nil
 }
@@ -262,7 +236,7 @@ func calculateInternalNeuronCounts(remainingForDistribution int, dopaP, inhibP f
 // Assumes totalNeuronsInput has been validated by config.Validate() to be >= MinInputNeurons and MinOutputNeurons.
 // It returns an error if the final neuron count does not match the expected count, indicating an internal logic issue.
 func (cn *CrowNet) initializeNeurons(totalNeuronsInput int) error {
-	simParams := cn.SimParams // This is *config.SimulationParameters
+	simParams := cn.SimParams               // This is *config.SimulationParameters
 	actualTotalNeurons := totalNeuronsInput // totalNeuronsInput is pre-validated by config.Validate()
 	numInput := simParams.Structure.MinInputNeurons
 	numOutput := simParams.Structure.MinOutputNeurons
@@ -355,32 +329,33 @@ func (cn *CrowNet) _applyChemicalModulationEffects() {
 // 6. Applying synaptogenesis (neuron movement), which also triggers a rebuild of the spatial grid if enabled.
 // 7. Incrementing the simulation cycle count.
 func (cn *CrowNet) RunCycle() {
-	cn.processFrequencyInputs()         // Step 1: Process any continuous/frequency-based inputs
-	cn._updateAllNeuronStates()         // Step 2: Update base states of all neurons
+	cn.processFrequencyInputs() // Step 1: Process any continuous/frequency-based inputs
+	cn._updateAllNeuronStates() // Step 2: Update base states of all neurons
 
-	cn.processActivePulses()            // Step 3: Process pulse propagation and effects (uses SpatialGrid)
+	cn.processActivePulses() // Step 3: Process pulse propagation and effects (uses SpatialGrid)
 
 	cn._applyChemicalModulationEffects() // Step 4: Apply or reset neurochemical effects
 
-	if cn.isLearningEnabled {           // Step 5: Apply Hebbian learning if enabled
+	if cn.isLearningEnabled { // Step 5: Apply Hebbian learning if enabled
 		cn.applyHebbianLearning()
 	}
-	if cn.isSynaptogenesisEnabled {     // Step 6: Apply Synaptogenesis (neuron movement) if enabled
+	if cn.isSynaptogenesisEnabled { // Step 6: Apply Synaptogenesis (neuron movement) if enabled
 		cn.applySynaptogenesis()
 		// Rebuild spatial grid if neurons moved
 		cn.SpatialGrid.Build(cn.Neurons)
 	}
-	cn.CycleCount++                     // Step 7: Increment cycle count
+	cn.CycleCount++ // Step 7: Increment cycle count
 }
 
 // processActivePulses orchestrates the processing of existing pulses and handles newly generated ones.
 // 1. It delegates to PulseList to process the current cycle for existing pulses, which includes:
-//    - Moving pulses.
-//    - Applying pulse effects to neurons they hit (updating neuron potentials).
-//    - Generating new pulses from neurons that fire as a result.
+//   - Moving pulses.
+//   - Applying pulse effects to neurons they hit (updating neuron potentials).
+//   - Generating new pulses from neurons that fire as a result.
+//
 // 2. It then handles these newly generated pulses by:
-//    - Checking if any originated from output neurons and recording those firings.
-//    - Adding all new pulses to the active list for processing in subsequent cycles.
+//   - Checking if any originated from output neurons and recording those firings.
+//   - Adding all new pulses to the active list for processing in subsequent cycles.
 func (cn *CrowNet) processActivePulses() {
 	// Step 1: Process existing pulses and get newly generated ones from firing neurons.
 	// Pass the spatialGrid and the pointer to SynapticWeights.

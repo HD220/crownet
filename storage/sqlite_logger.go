@@ -1,14 +1,15 @@
 package storage
 
 import (
-	"crownet/network"
 	"database/sql"
 	"encoding/json" // Added for LogNetworkState
 	"fmt"
+
+	"crownet/network"
+
 	// "os"      // Unused
 	// "strings" // Unused
 	"time"
-
 	// "github.com/mattn/go-sqlite3" // Unused as sqlite3 is imported via blank import in log_exporter.go or by driver registration
 	// "crownet/common" // Unused, neuron types are handled via int casting
 )
@@ -92,6 +93,7 @@ func (sl *SQLiteLogger) createTables() error {
 // This method is intended ONLY for use in test suites, for purposes such as:
 //   - Inspecting the database state after operations.
 //   - Performing setup or cleanup tasks on the test database.
+//
 // Caution: Directly manipulating the database via this accessor during normal operation
 // can interfere with the logger's consistency and is strongly discouraged.
 func (sl *SQLiteLogger) DBForTest() *sql.DB {
@@ -101,9 +103,10 @@ func (sl *SQLiteLogger) DBForTest() *sql.DB {
 // LogNetworkState logs a complete snapshot of the current state of the provided 'net' (CrowNet instance)
 // into the SQLite database.
 // This involves:
-// 1. Inserting a summary record into the 'NetworkSnapshots' table (cycle count, timestamp, chemical levels, modulation factors).
-// 2. For each neuron in the network, inserting its detailed state into the 'NeuronStates' table,
-//    linking it to the snapshot ID. Position and Velocity are stored as JSON strings.
+//  1. Inserting a summary record into the 'NetworkSnapshots' table (cycle count, timestamp, chemical levels, modulation factors).
+//  2. For each neuron in the network, inserting its detailed state into the 'NeuronStates' table,
+//     linking it to the snapshot ID. Position and Velocity are stored as JSON strings.
+//
 // All database operations are performed within a single transaction. If any part fails,
 // the transaction is rolled back.
 //

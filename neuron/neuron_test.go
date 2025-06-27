@@ -1,10 +1,11 @@
 package neuron
 
 import (
-	"crownet/common"
-	"crownet/config"
 	"math"
 	"testing"
+
+	"crownet/common"
+	"crownet/config"
 )
 
 func defaultTestSimParamsForNeuron() *config.SimulationParameters {
@@ -220,9 +221,9 @@ func TestNeuron_DecayPotential(t *testing.T) {
 func TestEmittedPulseSign(t *testing.T) {
 	simParams := defaultTestSimParamsForNeuron()
 	tests := []struct {
-		name string
+		name  string
 		ntype Type
-		want common.PulseValue
+		want  common.PulseValue
 	}{
 		{"Excitatory", Excitatory, 1.0},
 		{"Inhibitory", Inhibitory, -1.0},

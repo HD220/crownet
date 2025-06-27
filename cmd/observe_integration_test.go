@@ -1,13 +1,13 @@
 package cmd
 
 import (
+	"bytes" // Needed for buffer
+	"io"    // Needed for MultiWriter and pipe reading
+	"os"    // Needed for stdout capture
 	"path/filepath"
+	"strings" // Needed for output assertions
 	"testing"
 	"time"
-	"os" // Needed for stdout capture
-	"io" // Needed for MultiWriter and pipe reading
-	"bytes" // Needed for buffer
-	"strings" // Needed for output assertions
 
 	"crownet/cli"
 	"crownet/config"
@@ -28,12 +28,12 @@ func newTestObserveAppConfig(weightsFilePath string) *config.AppConfig {
 	return &config.AppConfig{
 		SimParams: simParams,
 		Cli: config.CLIConfig{
-			Mode:                config.ModeObserve,
-			TotalNeurons:        50, // Should be consistent with the network that would use/generate the fixture.
-			Seed:                time.Now().UnixNano(),
-			WeightsFile:         weightsFilePath,
-			Digit:               1, // Observe digit '1'
-			CyclesToSettle:      1, // Minimal settling cycles
+			Mode:           config.ModeObserve,
+			TotalNeurons:   50, // Should be consistent with the network that would use/generate the fixture.
+			Seed:           time.Now().UnixNano(),
+			WeightsFile:    weightsFilePath,
+			Digit:          1, // Observe digit '1'
+			CyclesToSettle: 1, // Minimal settling cycles
 			// DebugChem can be default false
 		},
 	}
@@ -88,13 +88,22 @@ func TestObserveCommand_BasicRun(t *testing.T) {
 	// Capture output for validation.
 	// Store original stdout.
 	originalStdout := os.Stdout
-	rPipe, wPipe, _ := os.Pipe()
+	rPipe, wPipe, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("Failed to create pipe for stdout capture: %v", pipeErr)
+	}
 	os.Stdout = wPipe
 
 	captureOut := make(chan string)
 	go func() {
 		var buf bytes.Buffer
-		io.Copy(&buf, rPipe)
+		_, errCopy := io.Copy(&buf, rPipe) // Capture error from io.Copy
+		if errCopy != nil {
+			// Not t.Fatalf as this is in a goroutine. Log or send error through channel.
+			// For simplicity in this test, we'll log and proceed.
+			// A more robust solution might involve passing errors via the channel.
+			t.Logf("Error copying from pipe to buffer: %v", errCopy)
+		}
 		captureOut <- buf.String()
 	}()
 
@@ -109,14 +118,16 @@ func TestObserveCommand_BasicRun(t *testing.T) {
 	capturedStr := <-captureOut
 
 	if runErrForCapture != nil {
-		t.Fatalf("Orchestrator.Run() for observe mode (capture run) failed: %v. Captured output:\n%s", runErrForCapture, capturedStr)
+		t.Fatalf("Orchestrator.Run() for observe mode (capture run) failed: %v. Captured output:\n%s",
+			runErrForCapture, capturedStr)
 	}
 
 	// Perform assertions on capturedStr
 	// a. Check for header
 	expectedHeader := "Output Neuron Activation Pattern"
 	if !strings.Contains(capturedStr, expectedHeader) {
-		t.Errorf("Expected output to contain header '%s', but it was not found.\nCaptured output:\n%s", expectedHeader, capturedStr)
+		t.Errorf("Expected output to contain header '%s', but it was not found.\nCaptured output:\n%s",
+			expectedHeader, capturedStr)
 	}
 
 	// b. Check for number of output neuron lines
@@ -131,13 +142,15 @@ func TestObserveCommand_BasicRun(t *testing.T) {
 		}
 	}
 	if outputNeuronLineCount != expectedOutputLines {
-		t.Errorf("Expected %d output neuron lines, got %d.\nCaptured output:\n%s", expectedOutputLines, outputNeuronLineCount, capturedStr)
+		t.Errorf("Expected %d output neuron lines, got %d.\nCaptured output:\n%s",
+			expectedOutputLines, outputNeuronLineCount, capturedStr)
 	}
 
 	// c. Check for ASCII bar format (basic check for presence of key chars)
 	hasBarFormat := false
 	for _, line := range lines {
-		if strings.Contains(line, "OutputNeuron[") && strings.Contains(line, "[") && strings.Contains(line, "]") && strings.Contains(line, "|") {
+		if strings.Contains(line, "OutputNeuron[") && strings.Contains(line, "[") &&
+			strings.Contains(line, "]") && strings.Contains(line, "|") {
 			hasBarFormat = true
 			break
 		}

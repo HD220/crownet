@@ -1,10 +1,11 @@
 package space
 
 import (
-	"crownet/common"
 	"math"
 	"math/rand"
 	"testing"
+
+	"crownet/common"
 )
 
 func TestEuclideanDistance(t *testing.T) {
@@ -59,21 +60,21 @@ func TestIsWithinRadius(t *testing.T) {
 func TestClampToHyperSphere(t *testing.T) {
 	origin := common.Point{}
 	tests := []struct {
-		name            string
-		p               common.Point
-		maxRadius       float64
-		wantClampedP    common.Point
-		wantWasClamped  bool
-		epsilon         float64
+		name           string
+		p              common.Point
+		maxRadius      float64
+		wantClampedP   common.Point
+		wantWasClamped bool
+		epsilon        float64
 	}{
-		{"inside, no clamp", common.Point{1,0}, 2.0, common.Point{1,0}, false, 1e-9},
-		{"outside, clamp", common.Point{3,0}, 2.0, common.Point{2,0}, true, 1e-9},
-		{"on boundary, no clamp", common.Point{2,0}, 2.0, common.Point{2,0}, false, 1e-9},
-		{"at origin, radius > 0", common.Point{0,0}, 2.0, common.Point{0,0}, false, 1e-9},
-		{"at origin, radius = 0", common.Point{0,0}, 0.0, common.Point{0,0}, false, 1e-9},
-		{"not origin, radius = 0", common.Point{1,0}, 0.0, origin, true, 1e-9},
-		{"negative radius, no clamp", common.Point{1,0}, -1.0, common.Point{1,0}, false, 1e-9},
-		{"multi-dim outside", common.Point{3,4}, 2.5, common.Point{1.5, 2.0}, true, 1e-9}, // Dist=5, radius=2.5, scale=0.5
+		{"inside, no clamp", common.Point{1, 0}, 2.0, common.Point{1, 0}, false, 1e-9},
+		{"outside, clamp", common.Point{3, 0}, 2.0, common.Point{2, 0}, true, 1e-9},
+		{"on boundary, no clamp", common.Point{2, 0}, 2.0, common.Point{2, 0}, false, 1e-9},
+		{"at origin, radius > 0", common.Point{0, 0}, 2.0, common.Point{0, 0}, false, 1e-9},
+		{"at origin, radius = 0", common.Point{0, 0}, 0.0, common.Point{0, 0}, false, 1e-9},
+		{"not origin, radius = 0", common.Point{1, 0}, 0.0, origin, true, 1e-9},
+		{"negative radius, no clamp", common.Point{1, 0}, -1.0, common.Point{1, 0}, false, 1e-9},
+		{"multi-dim outside", common.Point{3, 4}, 2.5, common.Point{1.5, 2.0}, true, 1e-9}, // Dist=5, radius=2.5, scale=0.5
 	}
 
 	for _, tt := range tests {

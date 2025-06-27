@@ -4,10 +4,11 @@
 package synaptic
 
 import (
-	"crownet/common"
-	"crownet/config"
 	"fmt"
 	"math/rand"
+
+	"crownet/common"
+	"crownet/config"
 )
 
 // WeightMap defines a map from a target NeuronID to a synaptic weight.

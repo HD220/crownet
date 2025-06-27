@@ -3,10 +3,11 @@
 package neuron
 
 import (
-	"crownet/common"
-	"crownet/config"
 	"fmt"  // Added for panic message in New
 	"math" // Added for math.Abs in DecayPotential, was missing from original import list if nearZeroThreshold was used.
+
+	"crownet/common"
+	"crownet/config"
 )
 
 // Constants for emitted pulse signals define the base value of a pulse
@@ -26,7 +27,7 @@ const (
 // helping to manage floating-point inaccuracies.
 const nearZeroThreshold = 1e-5
 
-// Neuron representa uma unidade computacional individual na rede neural.
+// Neuron representa uma unidade computational individual na rede neural.
 // Contém o estado e propriedades de um neurônio, incluindo sua posição, tipo, estado de disparo,
 // electrical potential, thresholds, and recent activity information.
 type Neuron struct {
@@ -119,9 +120,11 @@ func (n *Neuron) IntegrateIncomingPotential(potential common.PulseValue, current
 // and simulation parameters (e.g., refractory period durations).
 //
 // State transitions are:
-//   Firing             -> AbsoluteRefractory
-//   AbsoluteRefractory -> RelativeRefractory (after simParams.AbsoluteRefractoryCycles)
-//   RelativeRefractory -> Resting          (after simParams.RelativeRefractoryCycles)
+//
+//	Firing             -> AbsoluteRefractory
+//	AbsoluteRefractory -> RelativeRefractory (after simParams.AbsoluteRefractoryCycles)
+//	RelativeRefractory -> Resting          (after simParams.RelativeRefractoryCycles)
+//
 // Accumulated potential is reset when entering AbsoluteRefractory state.
 func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.SimulationParameters) {
 	n.CyclesInCurrentState++ // Increment cycles spent in the current state.
@@ -130,7 +133,7 @@ func (n *Neuron) AdvanceState(currentCycle common.CycleCount, simParams *config.
 	case Firing:
 		// After firing, neuron enters absolute refractory period.
 		n.CurrentState = AbsoluteRefractory
-		n.CyclesInCurrentState = 0 // Reset counter for the new state.
+		n.CyclesInCurrentState = 0      // Reset counter for the new state.
 		n.LastFiredCycle = currentCycle // Record the cycle of this firing event.
 		n.AccumulatedPotential = 0.0    // Reset potential after firing.
 	case AbsoluteRefractory:

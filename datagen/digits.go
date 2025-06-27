@@ -4,8 +4,9 @@
 package datagen
 
 import (
-	"crownet/config" // To access PatternSize, PatternHeight, PatternWidth from SimParams
 	"fmt"
+
+	"crownet/config" // To access PatternSize, PatternHeight, PatternWidth from SimParams
 )
 
 // digitPatternData stores the raw 2D patterns for digits 0-9.
@@ -115,12 +116,14 @@ var GetDigitPatternFn = getDigitPatternInternal
 // of float64 values (1.0 for active, 0.0 for inactive).
 //
 // Parameters:
-//   digit: The integer digit (0-9) for which the pattern is requested.
-//   simParams: Simulation parameters used for validating pattern dimensions.
+//
+//	digit: The integer digit (0-9) for which the pattern is requested.
+//	simParams: Simulation parameters used for validating pattern dimensions.
 //
 // Returns:
-//   A 1D slice of float64 representing the flattened digit pattern, or an error
-//   if the digit is not found or if the pattern dimensions mismatch SimParams.
+//
+//	A 1D slice of float64 representing the flattened digit pattern, or an error
+//	if the digit is not found or if the pattern dimensions mismatch SimParams.
 func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) ([]float64, error) {
 	// REFACTOR-007: Add nil check for simParams
 	if simParams == nil {
@@ -169,10 +172,12 @@ func getDigitPatternInternal(digit int, simParams *config.SimulationParameters) 
 // for each digit.
 //
 // Parameters:
-//   simParams: Simulation parameters, passed to GetDigitPatternFn for dimension validation.
+//
+//	simParams: Simulation parameters, passed to GetDigitPatternFn for dimension validation.
 //
 // Returns:
-//   A map of digit to its pattern, or an error if any digit pattern cannot be retrieved.
+//
+//	A map of digit to its pattern, or an error if any digit pattern cannot be retrieved.
 func GetAllDigitPatterns(simParams *config.SimulationParameters) (map[int][]float64, error) {
 	// REFACTOR-007: Add nil check for simParams
 	// This check is somewhat redundant if GetDigitPatternFn (which is getDigitPatternInternal by default)

@@ -6,9 +6,10 @@
 package space
 
 import (
-	"crownet/common"
 	"math"
 	"math/rand"
+
+	"crownet/common"
 )
 
 // pointDimension defines the dimensionality of points and vectors processed by this package.
@@ -94,12 +95,11 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 	// as an origin point (distFromOrigin < epsilon) with maxRadius > epsilon
 	// should be classified as 'inside'. This is a safeguard.
 	if distFromOrigin < epsilon { // Should effectively mean point p is the origin.
-	    // If p is origin and maxRadius > 0, it's inside. This path indicates an unexpected state
-	    // or extremely small maxRadius that wasn't caught by maxRadius < epsilon.
-	    // Safest is to return p as it is effectively the origin and should be inside if maxRadius > 0.
+		// If p is origin and maxRadius > 0, it's inside. This path indicates an unexpected state
+		// or extremely small maxRadius that wasn't caught by maxRadius < epsilon.
+		// Safest is to return p as it is effectively the origin and should be inside if maxRadius > 0.
 		return p, false
 	}
-
 
 	scaleFactor := maxRadius / distFromOrigin
 	clampedP := common.Point{}
@@ -112,10 +112,11 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 // GenerateRandomPositionInHyperSphere creates a random position uniformly distributed
 // within an N-dimensional hypersphere (N-ball) of radius `maxRadius`, centered at the origin.
 // This implementation uses a method suitable for high dimensions:
-// 1. Generate N standard normal deviates (Gaussian distribution).
-// 2. Normalize the resulting N-dimensional vector to get a point on the surface of the unit N-sphere.
-// 3. Scale this point by a radius R' = R * u^(1/N), where R is maxRadius and u is a uniform random
-//    number in [0,1). This scaling ensures uniform distribution by volume within the N-ball.
+//  1. Generate N standard normal deviates (Gaussian distribution).
+//  2. Normalize the resulting N-dimensional vector to get a point on the surface of the unit N-sphere.
+//  3. Scale this point by a radius R' = R * u^(1/N), where R is maxRadius and u is a uniform random
+//     number in [0,1). This scaling ensures uniform distribution by volume within the N-ball.
+//
 // This approach is significantly more efficient for high dimensions (like the 16D space
 // used in CrowNet, as defined by `pointDimension`) than methods like rejection sampling.
 //
@@ -124,7 +125,8 @@ func ClampToHyperSphere(p common.Point, maxRadius float64) (clampedPoint common.
 //   - rng: A source of randomness (*rand.Rand) for generating normal and uniform random numbers.
 //
 // Returns:
-//   A common.Point representing a randomly generated point within the specified N-dimensional hypersphere.
+//
+//	A common.Point representing a randomly generated point within the specified N-dimensional hypersphere.
 func GenerateRandomPositionInHyperSphere(maxRadius float64, rng *rand.Rand) common.Point {
 	var p common.Point // common.Point is [16]float64, initialized to all zeros.
 

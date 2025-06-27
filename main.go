@@ -5,8 +5,8 @@ package main
 
 import (
 	"crownet/cmd"
-	// "crownet/cli" // A lógica do orchestrator será chamada pelos comandos do Cobra
-	// "crownet/config" // A configuração será gerenciada dentro dos comandos Cobra
+	// "crownet/cli" // A lógica do orchestrator será chamada pelos commandos do Cobra
+	// "crownet/config" // A configuração será gerenciada dentro dos commandos Cobra
 	// "fmt"
 	// "log"
 	// "os"

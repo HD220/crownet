@@ -30,11 +30,12 @@ type Pulse struct {
 
 // New creates and returns a new Pulse instance, initialized with the provided parameters.
 // Parameters:
-//   emitterID: ID of the neuron emitting the pulse.
-//   origin: The spatial position where the pulse starts.
-//   signal: The base signal value of the pulse.
-//   creationCycle: The simulation cycle when the pulse is generated.
-//   maxRadius: The maximum distance the pulse can travel before becoming inactive.
+//
+//	emitterID: ID of the neuron emitting the pulse.
+//	origin: The spatial position where the pulse starts.
+//	signal: The base signal value of the pulse.
+//	creationCycle: The simulation cycle when the pulse is generated.
+//	maxRadius: The maximum distance the pulse can travel before becoming inactive.
 func New(emitterID common.NeuronID, origin common.Point, signal common.PulseValue, creationCycle common.CycleCount, maxRadius float64) *Pulse {
 	return &Pulse{
 		EmittingNeuronID: emitterID,
@@ -83,11 +84,11 @@ func (p *Pulse) GetEffectShellForCycle(simParams *config.SimulationParameters) (
 // Its main responsibility is to orchestrate the processing of all pulses during a simulation cycle,
 // using configurable strategies for propagation, target selection, and impact calculation.
 type PulseList struct {
-	pulses         []*Pulse // Internal slice holding the active pulses.
 	propagator     PulsePropagator
 	zoneProvider   PulseEffectZoneProvider
 	targetSelector PulseTargetSelector
 	impactCalc     PulseImpactCalculator
+	pulses         []*Pulse
 }
 
 // NewPulseList creates and returns an empty PulseList, ready to store pulses.
@@ -151,12 +152,12 @@ func (pl *PulseList) Clear() {
 // Note: This returns a reference to the internal slice; modifications to the returned slice
 // will affect the PulseList's internal state. Consider returning a copy if immutability is required.
 func (pl *PulseList) GetAll() []*Pulse {
-    return pl.pulses
+	return pl.pulses
 }
 
 // Count returns the current number of active pulses in the list.
 func (pl *PulseList) Count() int {
-    return len(pl.pulses)
+	return len(pl.pulses)
 }
 
 // processSinglePulseOnTargetNeuron processes the effect of a given pulse 'p' on a 'targetNeuron'.
@@ -183,8 +184,9 @@ func (pl *PulseList) Count() int {
 // 1. Propagate each pulse: Update its CurrentDistance. Inactive pulses (exceeding MaxTravelRadius) are removed.
 // 2. For each remaining active pulse, determine its spherical shell of effect for the current cycle.
 // 3. For each active pulse, iterate through all neurons in the network:
-//    - If a neuron falls within the pulse's effect shell, process the interaction using
-//      `processSinglePulseOnTargetNeuron`. This may result in the neuron firing.
+//   - If a neuron falls within the pulse's effect shell, process the interaction using
+//     `processSinglePulseOnTargetNeuron`. This may result in the neuron firing.
+//
 // 4. Collect all newly generated pulses (from neurons that fired in step 3).
 // 5. Update the PulseList to contain only pulses that are still active after propagation.
 //
