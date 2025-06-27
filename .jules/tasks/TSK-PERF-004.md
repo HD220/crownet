@@ -22,3 +22,23 @@
 - Cenários de teste para profiling devem ser longos o suficiente para capturar comportamento representativo.
 - Esta tarefa é investigativa e pode levar à criação de novas tarefas de otimização mais específicas.
 - As otimizações de PERF-002 e PERF-003 já foram implementadas; este profiling ajudará a verificar seu impacto e encontrar novos alvos.
+- **Resultados da Análise de Profiling Simulado (PERF-004.3 - 2024-07-28):**
+    - **Nota:** A análise a seguir é conceitual, baseada no conhecimento do sistema e sem execução interativa de `go tool pprof`.
+    - **Potenciais Hotspots de CPU (Comuns a `expose` e `sim`):**
+        - Lógica de atualização de neurônios (`neuron.AdvanceState`, `neuron.DecayPotential`, `neuron.IntegrateIncomingPotential`) devido à execução por neurônio/ciclo.
+        - Processamento de pulsos (`pulse.PulseList.ProcessCycle`), incluindo propagação, seleção de alvos (especialmente `spatialGrid.QuerySphereForCandidates`), e cálculo de impacto (`space.EuclideanDistance`, `SynapticWeights.GetWeight`).
+        - Lógica de sinaptogênese (`ForceCalculator.CalculateForce`, `MovementUpdater.UpdateMovement`), se habilitada, devido a cálculos de distância e iterações entre pares de neurônios.
+        - Geração de números aleatórios, se usada extensivamente em loops críticos.
+    - **Potenciais Hotspots de CPU (Específicos do Modo):**
+        - `expose`: `Network.PresentPattern` (manipulação de dados), `Network.applyHebbianLearning` (iterações entre pares de neurônios).
+        - `sim`: `SQLiteLogger.LogNetworkState` (serialização JSON, transações DB), se o `SaveInterval` for frequente.
+    - **Potenciais Fontes de Alocação de Memória:**
+        - Criação/destruição de objetos `pulse.Pulse`.
+        - Slices/mapas temporários em loops de simulação (e.g., listas de candidatos, vetores de força).
+        - Serialização de estados de neurônios para logging SQLite.
+    - **Recomendações Gerais para Otimização Futura (baseado na análise simulada):**
+        - Revisar algoritmos em `spatialGrid` e cálculos de distância.
+        - Investigar pooling de objetos para `pulse.Pulse` se o churn for alto.
+        - Minimizar alocações em loops críticos.
+        - Avaliar a frequência e eficiência do logging SQLite.
+    - **Próximos Passos Sugeridos:** Se os perfis reais (quando analisados visualmente) confirmarem estes hotspots, criar tarefas PERF específicas para otimizar as áreas identificadas. Por exemplo, PERF-005: Otimizar cálculos de distância; PERF-006: Investigar pooling de objetos Pulse.
