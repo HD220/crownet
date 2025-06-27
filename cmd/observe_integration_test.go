@@ -4,7 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-	// "os" // Not strictly needed for this basic test if not checking console output deeply
+	"os" // Needed for stdout capture
+	"io" // Needed for MultiWriter and pipe reading
+	"bytes" // Needed for buffer
+	"strings" // Needed for output assertions
 
 	"crownet/cli"
 	"crownet/config"
@@ -79,4 +82,68 @@ func TestObserveCommand_BasicRun(t *testing.T) {
 	// This is harder to do reliably without redirecting stdout.
 	// For TSK-TEST-003.2.1, just ensuring it runs is the primary goal.
 	// t.Log("Observe mode ran successfully. Console output validation is for TSK-TEST-003.2.2")
+
+	// --- Start of TSK-TEST-003.2.2 additions ---
+
+	// Capture output for validation.
+	// Store original stdout.
+	originalStdout := os.Stdout
+	rPipe, wPipe, _ := os.Pipe()
+	os.Stdout = wPipe
+
+	captureOut := make(chan string)
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, rPipe)
+		captureOut <- buf.String()
+	}()
+
+	// Create a new orchestrator instance for the capture run,
+	// as the state of the previous 'orchestrator' might have been affected
+	// or might not be suitable for a re-run if it holds state across Run() calls.
+	orchestratorForCapture := cli.NewOrchestrator(appCfg)
+	runErrForCapture := orchestratorForCapture.Run()
+
+	wPipe.Close()
+	os.Stdout = originalStdout // Restore stdout
+	capturedStr := <-captureOut
+
+	if runErrForCapture != nil {
+		t.Fatalf("Orchestrator.Run() for observe mode (capture run) failed: %v. Captured output:\n%s", runErrForCapture, capturedStr)
+	}
+
+	// Perform assertions on capturedStr
+	// a. Check for header
+	expectedHeader := "Output Neuron Activation Pattern"
+	if !strings.Contains(capturedStr, expectedHeader) {
+		t.Errorf("Expected output to contain header '%s', but it was not found.\nCaptured output:\n%s", expectedHeader, capturedStr)
+	}
+
+	// b. Check for number of output neuron lines
+	// Default SimParams: MinOutputNeurons = 10
+	// The actual number of output neurons created is MinOutputNeurons.
+	expectedOutputLines := appCfg.SimParams.Structure.MinOutputNeurons
+	outputNeuronLineCount := 0
+	lines := strings.Split(capturedStr, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "OutputNeuron[") {
+			outputNeuronLineCount++
+		}
+	}
+	if outputNeuronLineCount != expectedOutputLines {
+		t.Errorf("Expected %d output neuron lines, got %d.\nCaptured output:\n%s", expectedOutputLines, outputNeuronLineCount, capturedStr)
+	}
+
+	// c. Check for ASCII bar format (basic check for presence of key chars)
+	hasBarFormat := false
+	for _, line := range lines {
+		if strings.Contains(line, "OutputNeuron[") && strings.Contains(line, "[") && strings.Contains(line, "]") && strings.Contains(line, "|") {
+			hasBarFormat = true
+			break
+		}
+	}
+	if !hasBarFormat && expectedOutputLines > 0 { // Only expect bar format if there are output lines
+		t.Errorf("Expected ASCII bar format in output neuron lines, but it was not found.\nCaptured output:\n%s", capturedStr)
+	}
+	// --- End of TSK-TEST-003.2.2 additions ---
 }
