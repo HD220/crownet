@@ -9,6 +9,8 @@ import (
 	"crownet/config"
 	"github.com/spf13/cobra"
 	"github.com/BurntSushi/toml" // Added for TOML decoding
+	"os"                         // For pprof file creation
+	"runtime/pprof"              // For CPU and memory profiling
 )
 
 var (
@@ -25,6 +27,10 @@ var (
 	simTotalNeurons     int
 	simWeightsFile      string
 	simBaseLearningRate float64
+
+	// Profiling flags
+	simCpuProfileFile string
+	simMemProfileFile string
 )
 
 // simCmd represents the sim command
@@ -37,6 +43,20 @@ ou logging detalhado para análise posterior.`,
 	// "github.com/BurntSushi/toml" // This was a misplaced import comment
 
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// CPU Profiling
+		if simCpuProfileFile != "" {
+			f, err := os.Create(simCpuProfileFile)
+			if err != nil {
+				log.Fatal("could not create CPU profile: ", err)
+			}
+			defer f.Close()
+			if err := pprof.StartCPUProfile(f); err != nil {
+				log.Fatal("could not start CPU profile: ", err)
+			}
+			defer pprof.StopCPUProfile()
+			fmt.Printf("CPU profiling enabled, saving to %s\n", simCpuProfileFile)
+		}
+
 		fmt.Println("Executando modo sim via Cobra...")
 
 		// 1. Inicializar AppConfig com valores padrão das flags Cobra e SimParams defaults
@@ -101,10 +121,25 @@ ou logging detalhado para análise posterior.`,
 		// para potencialmente sobrescrever SimParams ou Cli antes da validação.
 
 		orchestrator := cli.NewOrchestrator(appCfg)
-		if err := orchestrator.Run(); err != nil { // Run agora vai internamente chamar runSimMode
+		runErr := orchestrator.Run() // Run agora vai internamente chamar runSimMode
+
+		// Memory Profiling (Heap)
+		if simMemProfileFile != "" && runErr == nil { // Only write mem profile if run was successful
+			f, err := os.Create(simMemProfileFile)
+			if err != nil {
+				log.Fatal("could not create memory profile: ", err)
+			}
+			defer f.Close()
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				log.Fatal("could not write memory profile: ", err)
+			}
+			fmt.Printf("Memory heap profile saved to %s\n", simMemProfileFile)
+		}
+
+		if runErr != nil {
 			// log.Fatalf já lida com a saída e exit em Orchestrator.Run se houver erro crítico.
 			// Se Run retornar erro, é um erro de execução do modo.
-			return fmt.Errorf("erro durante a execução do modo sim: %w", err)
+			return fmt.Errorf("erro durante a execução do modo sim: %w", runErr)
 		}
 		return nil
 	},
@@ -127,4 +162,8 @@ func init() {
 	simCmd.Flags().StringVarP(&simWeightsFile, "weightsFile", "w", "crownet_weights.json", "Arquivo para salvar/carregar pesos sinápticos.")
 	simCmd.Flags().Float64Var(&simBaseLearningRate, "lrBase", 0.01, "Taxa de aprendizado base para plasticidade Hebbiana.")
 	// A flag 'seed' é persistente no rootCmd
+
+	// Profiling flags
+	simCmd.Flags().StringVar(&simCpuProfileFile, "cpuprofile", "", "Escreve perfil de CPU para este arquivo.")
+	simCmd.Flags().StringVar(&simMemProfileFile, "memprofile", "", "Escreve perfil de memória para este arquivo.")
 }
